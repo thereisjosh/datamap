@@ -110,8 +110,21 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // Insert the SVG with proper DOM check
       if (renderResult && (renderResult as any).svg) {
         if (targetElement) {
-          targetElement.innerHTML = (renderResult as any).svg;
-          console.log('Successfully rendered Mermaid diagram');
+          const svgContent = (renderResult as any).svg;
+          targetElement.innerHTML = svgContent;
+          
+          // Apply proper styling to the SVG element
+          const svgElement = targetElement.querySelector('svg');
+          if (svgElement) {
+            svgElement.style.width = '100%';
+            svgElement.style.height = 'auto';
+            svgElement.style.maxWidth = '100%';
+            svgElement.style.display = 'block';
+            console.log('Successfully rendered Mermaid diagram with styling');
+            console.log('SVG dimensions:', svgElement.getAttribute('viewBox'));
+          } else {
+            console.error('SVG element not found after insertion');
+          }
         } else {
           throw new Error('DOM element not available for SVG insertion');
         }
@@ -251,11 +264,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       </div>
 
       {/* Diagram container */}
-      <div className="border rounded-lg p-4 bg-white dark:bg-gray-900 overflow-auto">
+      <div className="border rounded-lg p-4 bg-white dark:bg-gray-900 overflow-auto max-h-screen">
         <div
           id="mermaid-container"
           ref={mermaidRef}
-          className="flex justify-center items-center min-h-64"
+          className="w-full min-h-96"
+          style={{ minHeight: '400px' }}
         />
       </div>
     </div>
