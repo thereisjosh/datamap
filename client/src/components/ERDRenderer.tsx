@@ -47,36 +47,92 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   }, [mermaidCode, isDarkMode]);
 
   const createSimplifiedERD = (fullCode: string): string => {
-    // Extract first 10 tables and their relationships for a manageable ERD
+    // Analyze relationships to find key tables by domain
     const lines = fullCode.split('\n');
-    const erdLines = ['erDiagram'];
-    let tableCount = 0;
+    const tables: Record<string, string[]> = {};
+    const relationships: string[] = [];
+    const relationshipCounts: Record<string, number> = {};
+    
+    // Parse tables and count relationships
+    let currentTable = '';
     let inTable = false;
     
     for (const line of lines) {
       if (line.trim().includes('{') && !inTable) {
-        // Start of a new table
-        if (tableCount >= 10) break; // Limit to 10 tables
-        erdLines.push(line);
+        currentTable = line.trim().split(' ')[0];
+        tables[currentTable] = [line];
         inTable = true;
-        tableCount++;
+        relationshipCounts[currentTable] = 0;
       } else if (line.trim() === '}' && inTable) {
-        // End of table
-        erdLines.push(line);
+        tables[currentTable].push(line);
         inTable = false;
       } else if (inTable) {
-        // Table content
-        erdLines.push(line);
-      } else if (line.trim().includes('||') || line.trim().includes('}|') || line.trim().includes('||--')) {
-        // Relationship line - only include if both tables are in our subset
-        const tableName1 = line.split(/\s+/)[0]?.trim();
-        const tableName2 = line.split(/\s+/)[2]?.trim();
-        if (tableName1 && tableName2) {
-          erdLines.push(line);
+        tables[currentTable].push(line);
+      } else if (line.trim().includes('||') || line.trim().includes('}|')) {
+        relationships.push(line);
+        // Count relationships for each table
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 3) {
+          const table1 = parts[0];
+          const table2 = parts[2];
+          relationshipCounts[table1] = (relationshipCounts[table1] || 0) + 1;
+          relationshipCounts[table2] = (relationshipCounts[table2] || 0) + 1;
         }
       }
     }
     
+    // Identify key domains and their central tables
+    const keyTables = new Set<string>();
+    
+    // Domain 1: User Management (OSSYS_USER, OSSYS_ROLE, etc.)
+    const userTables = Object.keys(tables).filter(name => 
+      name.includes('OSSYS_USER') || name.includes('OSSYS_ROLE') || name.includes('OSSYS_GROUP')
+    );
+    userTables.forEach(table => keyTables.add(table));
+    
+    // Domain 2: Opportunities (OSUSR_3ts_Opportunity*)
+    const opportunityTables = Object.keys(tables).filter(name => 
+      name.includes('Opportunity') && relationshipCounts[name] > 2
+    ).slice(0, 4); // Top 4 opportunity tables
+    opportunityTables.forEach(table => keyTables.add(table));
+    
+    // Domain 3: Active Campaign (OSUSR_n0a_*)
+    const campaignTables = Object.keys(tables).filter(name => 
+      name.includes('OSUSR_n0a_') && relationshipCounts[name] > 1
+    ).slice(0, 3); // Top 3 campaign tables
+    campaignTables.forEach(table => keyTables.add(table));
+    
+    // Add any high-relationship tables we might have missed
+    const topRelatedTables = Object.entries(relationshipCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 15)
+      .map(([name]) => name);
+    
+    topRelatedTables.forEach(table => keyTables.add(table));
+    
+    // Build simplified ERD
+    const erdLines = ['erDiagram'];
+    
+    // Add selected tables
+    keyTables.forEach(tableName => {
+      if (tables[tableName]) {
+        erdLines.push(...tables[tableName]);
+      }
+    });
+    
+    // Add relationships between selected tables
+    relationships.forEach(rel => {
+      const parts = rel.trim().split(/\s+/);
+      if (parts.length >= 3) {
+        const table1 = parts[0];
+        const table2 = parts[2];
+        if (keyTables.has(table1) && keyTables.has(table2)) {
+          erdLines.push(rel);
+        }
+      }
+    });
+    
+    console.log(`Created simplified ERD with ${keyTables.size} key tables from domains: Users, Opportunities, Campaigns`);
     return erdLines.join('\n');
   };
 
@@ -158,8 +214,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             const container = mermaidRef.current;
             container.innerHTML = `
               <div style="width: 100%; height: 100%; background: white; border: 1px solid #ddd; overflow: auto; position: relative;">
-                <div style="padding: 10px; background: #fff3cd; border-bottom: 1px solid #ffeeba; font-size: 14px;">
-                  📊 Simplified ERD View - Showing key tables from your 196-table database schema
+                <div style="padding: 15px; background: #d4edda; border-bottom: 1px solid #c3e6cb; font-size: 14px;">
+                  🎯 <strong>Domain-Focused ERD</strong> - Showing key tables by domain from your 196-table database:
+                  <br/>
+                  <span style="font-size: 12px; color: #155724;">
+                    👥 User Management • 🎯 Opportunities • 📧 Active Campaign • 🔗 High-Relationship Tables
+                  </span>
                 </div>
                 <div style="padding: 20px;">
                   ${result.svg}
