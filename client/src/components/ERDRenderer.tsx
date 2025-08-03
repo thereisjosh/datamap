@@ -130,6 +130,20 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               scrollHeight: targetElement.scrollHeight
             });
             
+            // Debug parent containers
+            console.log('Parent container dimensions:', {
+              parent: targetElement.parentElement ? {
+                width: targetElement.parentElement.offsetWidth,
+                height: targetElement.parentElement.offsetHeight,
+                className: targetElement.parentElement.className
+              } : 'No parent',
+              grandparent: targetElement.parentElement?.parentElement ? {
+                width: targetElement.parentElement.parentElement.offsetWidth,
+                height: targetElement.parentElement.parentElement.offsetHeight,
+                className: targetElement.parentElement.parentElement.className
+              } : 'No grandparent'
+            });
+            
             // Force visible styling
             svgElement.style.width = '100%';
             svgElement.style.height = 'auto';
@@ -292,23 +306,41 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       {/* Diagram container */}
       <div 
         className="border rounded-lg p-4 bg-white dark:bg-gray-900 overflow-auto flex-1"
-        style={{ minHeight: '500px' }}
+        style={{ 
+          minHeight: '500px',
+          width: '100%',
+          height: '100%'
+        }}
       >
         <div
           id="mermaid-container"
           ref={mermaidRef}
-          className="w-full h-full"
           style={{ 
-            width: '100%',
-            height: '100%',
-            minWidth: '800px',
-            minHeight: '400px',
-            backgroundColor: '#fafafa',
-            border: '1px dashed #ccc',
+            width: '800px',
+            height: '600px',
+            backgroundColor: 'red',
+            border: '5px solid black',
             position: 'relative',
-            display: 'block'
+            display: 'block',
+            overflow: 'auto'
           }}
-        />
+        >
+          <div style={{
+            background: 'yellow',
+            width: '400px',
+            height: '300px',
+            color: 'black',
+            padding: '20px',
+            fontSize: '18px',
+            fontWeight: 'bold'
+          }}>
+            CONTAINER TEST - IS THIS VISIBLE?
+            <br />
+            ERD should render here
+            <br />
+            {mermaidCode ? `Code length: ${mermaidCode.length}` : 'No mermaid code'}
+          </div>
+        </div>
       </div>
     </div>
   );
