@@ -102,20 +102,13 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     ).slice(0, 3); // Top 3 campaign tables
     campaignTables.forEach(table => keyTables.add(table));
     
-    // Limit to only the most essential tables to ensure rendering works
-    const coreEssentialTables = Object.entries(relationshipCounts)
+    // Add any high-relationship tables we might have missed
+    const topRelatedTables = Object.entries(relationshipCounts)
       .sort(([,a], [,b]) => b - a)
-      .slice(0, 6) // Only top 6 most connected tables
+      .slice(0, 15)
       .map(([name]) => name);
     
-    // Clear keyTables and add only these core tables
-    keyTables.clear();
-    coreEssentialTables.forEach(table => keyTables.add(table));
-    
-    // Ensure we have the key user table
-    if (Object.keys(tables).find(name => name.includes('OSSYS_USER'))) {
-      keyTables.add(Object.keys(tables).find(name => name.includes('OSSYS_USER'))!);
-    }
+    topRelatedTables.forEach(table => keyTables.add(table));
     
     // Build simplified ERD
     const erdLines = ['erDiagram'];
@@ -139,7 +132,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       }
     });
     
-    console.log(`Created minimal ERD with ${keyTables.size} core tables (highest relationship counts)`);
+    console.log(`Created simplified ERD with ${keyTables.size} key tables from domains: Users, Opportunities, Campaigns`);
     return erdLines.join('\n');
   };
 
@@ -222,10 +215,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             container.innerHTML = `
               <div style="width: 100%; height: 100%; background: white; border: 1px solid #ddd; overflow: auto; position: relative;">
                 <div style="padding: 15px; background: #d4edda; border-bottom: 1px solid #c3e6cb; font-size: 14px;">
-                  🎯 <strong>Core Schema ERD</strong> - Most critical tables from your 196-table database:
+                  🎯 <strong>Domain-Focused ERD</strong> - Showing key tables by domain from your 196-table database:
                   <br/>
                   <span style="font-size: 12px; color: #155724;">
-                    Showing only the tables with the highest number of relationships to other tables
+                    👥 User Management • 🎯 Opportunities • 📧 Active Campaign • 🔗 High-Relationship Tables
                   </span>
                 </div>
                 <div style="padding: 20px;">
