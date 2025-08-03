@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import mermaid from 'mermaid';
+
+// Test if mermaid is properly imported
+console.log('Mermaid version:', mermaid.version || 'unknown');
+console.log('Mermaid object:', mermaid);
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Download, Copy, AlertCircle } from 'lucide-react';
@@ -20,22 +24,20 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const [isRendering, setIsRendering] = useState(false);
 
   useEffect(() => {
-    // Initialize Mermaid
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: isDarkMode ? 'dark' : 'default',
-      securityLevel: 'loose',
-      er: {
-        diagramPadding: 20,
-        layoutDirection: 'TB',
-        minEntityWidth: 100,
-        minEntityHeight: 75,
-        entityPadding: 15,
-        stroke: '#333333',
-        fill: '#ECECFF',
-        fontSize: 12,
-      },
-    });
+    // Initialize Mermaid with basic configuration
+    try {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: isDarkMode ? 'dark' : 'default',
+        securityLevel: 'loose',
+        fontFamily: 'Arial, sans-serif',
+        er: {
+          layoutDirection: 'TB',
+        },
+      });
+    } catch (err) {
+      console.error('Mermaid initialization error:', err);
+    }
   }, [isDarkMode]);
 
   useEffect(() => {
@@ -56,6 +58,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       // Validate and clean the Mermaid code
       const cleanedCode = mermaidCode.trim();
+      console.log('Attempting to render Mermaid code:', cleanedCode);
+      
       if (!cleanedCode.startsWith('erDiagram')) {
         throw new Error('Invalid ERD diagram format');
       }
@@ -63,27 +67,38 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // Create a unique ID for this diagram
       const diagramId = `mermaid-${Date.now()}`;
       
-      // Render the diagram with error handling
-      const renderResult = await mermaid.render(diagramId, cleanedCode);
+      // Test with simplified Mermaid config
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose',
+      });
+      
+      // Render the diagram with timeout
+      const renderPromise = mermaid.render(diagramId, cleanedCode);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Mermaid render timeout')), 10000)
+      );
+      
+      const renderResult = await Promise.race([renderPromise, timeoutPromise]);
+      console.log('Mermaid render result:', renderResult);
       
       // Insert the SVG
       if (renderResult && renderResult.svg) {
         mermaidRef.current.innerHTML = renderResult.svg;
+        console.log('Successfully rendered Mermaid diagram');
       } else {
         throw new Error('No SVG generated from Mermaid');
       }
       
     } catch (err) {
       console.error('Mermaid rendering error:', err);
+      console.error('Failed Mermaid code:', mermaidCode);
       
       // Try to show a more helpful error message
       let errorMessage = 'Failed to render ERD diagram.';
       if (err instanceof Error) {
-        if (err.message.includes('Parse error')) {
-          errorMessage = 'ERD syntax error detected. Please check the data format.';
-        } else if (err.message.includes('Invalid')) {
-          errorMessage = 'Invalid diagram format. Expected ERD syntax.';
-        }
+        errorMessage += ` Error: ${err.message}`;
       }
       
       setError(errorMessage);
@@ -92,8 +107,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       if (mermaidRef.current) {
         mermaidRef.current.innerHTML = `
           <div class="p-4 bg-gray-100 dark:bg-gray-800 rounded border">
-            <h4 class="font-medium mb-2">Generated Mermaid Code:</h4>
-            <pre class="text-sm overflow-auto max-h-64 whitespace-pre-wrap">${mermaidCode}</pre>
+            <h4 class="font-medium mb-2 text-red-600">Rendering Failed - Raw Mermaid Code:</h4>
+            <pre class="text-sm overflow-auto max-h-64 whitespace-pre-wrap bg-white p-2 rounded border font-mono">${mermaidCode}</pre>
+            <p class="text-sm text-gray-600 mt-2">Error: ${err instanceof Error ? err.message : 'Unknown error'}</p>
           </div>
         `;
       }

@@ -187,6 +187,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         options
       );
 
+      // Log the generated diagram for debugging
+      console.log('Generated Mermaid diagram:', result.diagram);
+      console.log('Tables count:', tables.length);
+      console.log('Relationships count:', formattedRelationships.length);
+
       // Validate the generated syntax
       const validation = mermaidGeneratorService.validateMermaidSyntax(result.diagram);
       
@@ -246,6 +251,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         code: 500
       });
     }
+  });
+
+  // Test endpoint for simple Mermaid diagram
+  app.get("/api/test-mermaid", (req, res) => {
+    const testDiagram = `erDiagram
+  Customer {
+    int id PK
+    string name
+    string email
+  }
+  Order {
+    int id PK
+    int customer_id FK
+    date order_date
+  }
+  Customer ||--o{ Order : places`;
+
+    res.json({ 
+      diagram: testDiagram,
+      metadata: { tables_count: 2, relationships_count: 1 }
+    });
   });
 
   const httpServer = createServer(app);
