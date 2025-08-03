@@ -1,0 +1,165 @@
+🔧 Product Requirement: ERD Generator – Backend Services
+🧭 Purpose
+To process uploaded Excel data dictionaries, extract structured metadata (tables, attributes, and foreign key mappings), and return valid Mermaid syntax representing an ERD. The backend handles parsing logic, FK relationship inference, and prepares JSON/Mermaid outputs that power the frontend renderer and code viewer.
+
+In MVP, the backend may be optional (fully frontend-parsed), but this backend will be useful for:
+
+Uploading large Excel files (>2MB)
+
+Decoupling logic from UI
+
+Preparing for SaaS deployment (auth, audit logs, history)
+
+🔌 Core API Endpoints
+Endpoint	Method	Purpose
+/api/parse-excel	POST	Accepts uploaded .xlsx file; returns normalized JSON of tables, attributes, and FK relationships
+/api/generate-mermaid	POST	Accepts parsed JSON; returns Mermaid erDiagram block
+/api/health	GET	Returns server health status (for CI/CD + deploy checks)
+
+📦 Modules and Services
+1. Excel Parser Service
+| Input | Raw .xlsx file |
+| Library | xlsx (SheetJS) |
+| Logic |
+
+Parse TableMetadata and AttributeMetadata sheets
+
+Normalize column names (case-insensitive matching)
+
+Validate required fields: Physical Table Name, Attribute Name, Type
+
+Mark PKs: if Is Autonumber = true AND Attribute Name = "Id"
+
+Mark FKs using Reference Table + Column Table
+
+Output consistent structure:
+
+json
+Copy
+Edit
+{
+  "tables": [
+    {
+      "name": "User",
+      "attributes": [
+        { "name": "Id", "type": "int", "is_pk": true },
+        { "name": "Email", "type": "string" }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source_table": "Order",
+      "source_column": "UserId",
+      "target_table": "User",
+      "target_column": "Id"
+    }
+  ]
+}
+2. Mermaid Generator Service
+| Input | Parsed table metadata (JSON) |
+| Output | Mermaid erDiagram block |
+| Logic |
+
+Convert each table to a Mermaid entity block
+
+Format columns with datatype and FK/PK annotations
+
+Add FK edges like:
+Order }o--|| User : "FK UserId"
+
+Ensure Mermaid syntax is deterministic and readable
+
+Wrap output as:
+
+json
+Copy
+Edit
+{ "diagram": "erDiagram\n  User {...}\n  Order {...}" }
+3. Error Handler
+| Trigger | Missing sheets, invalid formats, size limit, parsing error |
+| Output | 400 or 422 JSON error with reason |
+| Format |
+
+json
+Copy
+Edit
+{
+  "error": "Missing required sheet: AttributeMetadata",
+  "code": 422
+}
+⚙️ Runtime Configuration
+Setting	Default
+Max upload size	5MB
+Excel MIME types	.xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+CORS policy	Allow only frontend origin during MVP
+Environment	Local Node.js dev, future serverless (Vercel, AWS Lambda)
+
+🔐 (Optional) Auth & Permissions – for Future SaaS Version
+Feature	Description
+Auth token	JWT-based auth if stored diagrams become a feature
+Upload limit	Tiered limits by auth token
+Logging	Save upload history and parsing success/failure
+Rate limiting	Protect endpoints with token/IP limits
+
+Not required in MVP, but backend is designed to be scalable to auth in future.
+
+🧱 Folder Structure (Suggested)
+pgsql
+Copy
+Edit
+backend/
+├── controllers/
+│   └── parseController.js
+│   └── mermaidController.js
+├── services/
+│   └── excelParser.js
+│   └── mermaidBuilder.js
+├── routes/
+│   └── api.js
+├── utils/
+│   └── normalizeKeys.js
+│   └── errorHandler.js
+├── index.js
+├── package.json
+🧪 Testing & Validation
+Area	Tool
+Endpoint tests	Postman or Thunder Client
+Unit tests	Jest (for excelParser and mermaidBuilder)
+Sample files	Add /samples/valid.xlsx, /samples/missing-FK.xlsx for regression testing
+
+📐 Design & Code Practices
+Area	Guideline
+Input validation	Strict typing + detailed error messages
+Security	Use multer or busboy with file type check
+Performance	Memory-only processing; no disk write required
+Logging	Console log with status codes + summary (basic winston log if needed)
+Mermaid style	One table per block, one FK per line, avoid line breaks in labels
+
+🗓️ Backend Dev Timeline (Local MVP)
+Day	Task
+Day 1	Scaffold Express app + routes
+Day 2	Implement Excel parser (SheetJS) with field validation
+Day 3	Add Mermaid generator module
+Day 4	Connect /parse-excel → /generate-mermaid pipeline
+Day 5	Add error handling, file type checks
+Day 6	Write unit tests for parsing and Mermaid logic
+Day 7	Final local test with frontend → deploy preview
+
+🧠 MVP Logic Assumptions
+Assumption	Behavior
+Missing Reference Table or Column Table	FK skipped with warning; diagram still builds
+Multiple FKs to same table	All relationships rendered
+Table with no attributes	Skipped or flagged (depends on config)
+Non-entity Data Kind in TableMetadata	Ignored (only entity used)
+
+✅ Summary
+Area	Decision
+Stack	Node.js + Express + xlsx + CORS
+Auth	❌ Not required in MVP
+Storage	❌ Stateless (in-memory only)
+External APIs	❌ No OpenAI/LLM in MVP
+Exports	✅ Mermaid code via REST
+Test coverage	✅ Basic unit + manual Postman test
+Future ready	✅ Easily extendable to serverless or SaaS
+
