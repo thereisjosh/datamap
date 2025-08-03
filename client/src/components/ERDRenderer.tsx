@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import mermaid from 'mermaid';
 
 // Test if mermaid is properly imported
-console.log('Mermaid version:', mermaid.version || 'unknown');
+console.log('Mermaid version:', (mermaid as any).version || 'unknown');
 console.log('Mermaid object:', mermaid);
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -47,7 +47,16 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   }, [mermaidCode, isDarkMode]);
 
   const renderDiagram = async () => {
-    if (!mermaidRef.current || !mermaidCode) return;
+    if (!mermaidCode) {
+      console.log('No Mermaid code provided');
+      return;
+    }
+    
+    if (!mermaidRef.current) {
+      console.log('DOM element not ready, retrying in 100ms');
+      setTimeout(renderDiagram, 100);
+      return;
+    }
 
     setIsRendering(true);
     setError(null);
@@ -83,10 +92,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const renderResult = await Promise.race([renderPromise, timeoutPromise]);
       console.log('Mermaid render result:', renderResult);
       
-      // Insert the SVG
-      if (renderResult && renderResult.svg) {
-        mermaidRef.current.innerHTML = renderResult.svg;
-        console.log('Successfully rendered Mermaid diagram');
+      // Insert the SVG with proper DOM check
+      if (renderResult && (renderResult as any).svg) {
+        if (mermaidRef.current) {
+          mermaidRef.current.innerHTML = (renderResult as any).svg;
+          console.log('Successfully rendered Mermaid diagram');
+        } else {
+          throw new Error('DOM element not available for SVG insertion');
+        }
       } else {
         throw new Error('No SVG generated from Mermaid');
       }
