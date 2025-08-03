@@ -14,12 +14,19 @@ interface MermaidResponse {
 }
 
 export class MermaidGeneratorService {
+  // Sanitize identifiers for Mermaid syntax
+  private sanitizeIdentifier(name: string): string {
+    // Replace spaces and special characters with underscores
+    return name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^(\d)/, '_$1');
+  }
+
   generateMermaidDiagram(tables: TableData[], relationships: Relationship[] = [], options: MermaidOptions = {}): MermaidResponse {
     let diagram = 'erDiagram\n';
 
     // Generate entity definitions
     for (const table of tables) {
-      diagram += `  ${table.name} {\n`;
+      const sanitizedTableName = this.sanitizeIdentifier(table.name);
+      diagram += `  ${sanitizedTableName} {\n`;
       
       for (const attribute of table.attributes) {
         let keyIndicator = '';
@@ -29,7 +36,9 @@ export class MermaidGeneratorService {
           keyIndicator = ' FK';
         }
         
-        diagram += `    ${attribute.type} ${attribute.name}${keyIndicator}\n`;
+        const sanitizedAttrName = this.sanitizeIdentifier(attribute.name);
+        const sanitizedType = this.sanitizeIdentifier(attribute.type);
+        diagram += `    ${sanitizedType} ${sanitizedAttrName}${keyIndicator}\n`;
       }
       
       diagram += '  }\n';
@@ -53,9 +62,14 @@ export class MermaidGeneratorService {
         const targetTableExists = tables.some(t => t.name === rel.targetTable);
         
         if (sourceTableExists && targetTableExists) {
+          // Sanitize table names for relationships
+          const sanitizedSourceTable = this.sanitizeIdentifier(rel.sourceTable);
+          const sanitizedTargetTable = this.sanitizeIdentifier(rel.targetTable);
+          const sanitizedSourceColumn = this.sanitizeIdentifier(rel.sourceColumn);
+          
           // Use proper Mermaid relationship syntax
-          // }o--|| means zero or one to one or more
-          diagram += `  ${rel.sourceTable} }o--|| ${rel.targetTable} : "FK ${rel.sourceColumn}"\n`;
+          // }o--|| means zero or one to one or more  
+          diagram += `  ${sanitizedSourceTable} }o--|| ${sanitizedTargetTable} : "FK ${sanitizedSourceColumn}"\n`;
           processedRelationships.add(relKey);
         }
       }

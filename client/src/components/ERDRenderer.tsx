@@ -54,18 +54,49 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // Clear previous content
       mermaidRef.current.innerHTML = '';
       
+      // Validate and clean the Mermaid code
+      const cleanedCode = mermaidCode.trim();
+      if (!cleanedCode.startsWith('erDiagram')) {
+        throw new Error('Invalid ERD diagram format');
+      }
+      
       // Create a unique ID for this diagram
       const diagramId = `mermaid-${Date.now()}`;
       
-      // Render the diagram
-      const { svg } = await mermaid.render(diagramId, mermaidCode);
+      // Render the diagram with error handling
+      const renderResult = await mermaid.render(diagramId, cleanedCode);
       
       // Insert the SVG
-      mermaidRef.current.innerHTML = svg;
+      if (renderResult && renderResult.svg) {
+        mermaidRef.current.innerHTML = renderResult.svg;
+      } else {
+        throw new Error('No SVG generated from Mermaid');
+      }
       
     } catch (err) {
       console.error('Mermaid rendering error:', err);
-      setError('Failed to render ERD diagram. Please check the data format.');
+      
+      // Try to show a more helpful error message
+      let errorMessage = 'Failed to render ERD diagram.';
+      if (err instanceof Error) {
+        if (err.message.includes('Parse error')) {
+          errorMessage = 'ERD syntax error detected. Please check the data format.';
+        } else if (err.message.includes('Invalid')) {
+          errorMessage = 'Invalid diagram format. Expected ERD syntax.';
+        }
+      }
+      
+      setError(errorMessage);
+      
+      // Show the raw code as fallback
+      if (mermaidRef.current) {
+        mermaidRef.current.innerHTML = `
+          <div class="p-4 bg-gray-100 dark:bg-gray-800 rounded border">
+            <h4 class="font-medium mb-2">Generated Mermaid Code:</h4>
+            <pre class="text-sm overflow-auto max-h-64 whitespace-pre-wrap">${mermaidCode}</pre>
+          </div>
+        `;
+      }
     } finally {
       setIsRendering(false);
     }
