@@ -144,18 +144,24 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               } : 'No grandparent'
             });
             
-            // Force visible styling
+            // Fix the massive SVG dimensions issue
+            svgElement.removeAttribute('style'); // Remove the problematic max-width style
             svgElement.style.width = '100%';
             svgElement.style.height = 'auto';
-            svgElement.style.maxWidth = 'none';
+            svgElement.style.maxWidth = '100%'; // Constrain to container
             svgElement.style.display = 'block';
             svgElement.style.visibility = 'visible';
             svgElement.style.position = 'relative';
-            svgElement.style.zIndex = '1';
+            svgElement.style.transform = 'scale(0.1)'; // Scale down the massive diagram
+            svgElement.style.transformOrigin = 'top left';
             
-            // Add background for visibility testing
+            // Ensure container maintains dimensions
+            targetElement.style.width = '100%';
+            targetElement.style.height = '600px';
+            targetElement.style.minHeight = '600px';
             targetElement.style.backgroundColor = '#f0f0f0';
-            targetElement.style.border = '2px solid red';
+            targetElement.style.border = '2px solid green';
+            targetElement.style.overflow = 'auto';
             
             console.log('Successfully rendered Mermaid diagram with styling');
             console.log('SVG dimensions:', svgElement.getAttribute('viewBox'));
@@ -316,31 +322,15 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           id="mermaid-container"
           ref={mermaidRef}
           style={{ 
-            width: '800px',
+            width: '100%',
             height: '600px',
-            backgroundColor: 'red',
-            border: '5px solid black',
+            backgroundColor: '#f9f9f9',
+            border: '1px solid #ddd',
             position: 'relative',
             display: 'block',
             overflow: 'auto'
           }}
-        >
-          <div style={{
-            background: 'yellow',
-            width: '400px',
-            height: '300px',
-            color: 'black',
-            padding: '20px',
-            fontSize: '18px',
-            fontWeight: 'bold'
-          }}>
-            CONTAINER TEST - IS THIS VISIBLE?
-            <br />
-            ERD should render here
-            <br />
-            {mermaidCode ? `Code length: ${mermaidCode.length}` : 'No mermaid code'}
-          </div>
-        </div>
+        />
       </div>
     </div>
   );
