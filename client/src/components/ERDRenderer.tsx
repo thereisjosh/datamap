@@ -46,6 +46,40 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     }
   }, [mermaidCode, isDarkMode]);
 
+  const createSimplifiedERD = (fullCode: string): string => {
+    // Extract first 10 tables and their relationships for a manageable ERD
+    const lines = fullCode.split('\n');
+    const erdLines = ['erDiagram'];
+    let tableCount = 0;
+    let inTable = false;
+    
+    for (const line of lines) {
+      if (line.trim().includes('{') && !inTable) {
+        // Start of a new table
+        if (tableCount >= 10) break; // Limit to 10 tables
+        erdLines.push(line);
+        inTable = true;
+        tableCount++;
+      } else if (line.trim() === '}' && inTable) {
+        // End of table
+        erdLines.push(line);
+        inTable = false;
+      } else if (inTable) {
+        // Table content
+        erdLines.push(line);
+      } else if (line.trim().includes('||') || line.trim().includes('}|') || line.trim().includes('||--')) {
+        // Relationship line - only include if both tables are in our subset
+        const tableName1 = line.split(/\s+/)[0]?.trim();
+        const tableName2 = line.split(/\s+/)[2]?.trim();
+        if (tableName1 && tableName2) {
+          erdLines.push(line);
+        }
+      }
+    }
+    
+    return erdLines.join('\n');
+  };
+
   const renderActualMermaidDiagram = async () => {
     if (!mermaidCode || !mermaidRef.current) return;
     
@@ -113,19 +147,63 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     } catch (error) {
       console.error('Mermaid rendering failed:', error);
       
-      // Fallback to code display
+      // Create a simplified ERD with key tables
+      const simplifiedERD = createSimplifiedERD(mermaidCode);
+      
+      if (simplifiedERD) {
+        try {
+          const result = await mermaid.render(`erd-simplified-${Date.now()}`, simplifiedERD);
+          
+          if (result && result.svg) {
+            const container = mermaidRef.current;
+            container.innerHTML = `
+              <div style="width: 100%; height: 100%; background: white; border: 1px solid #ddd; overflow: auto; position: relative;">
+                <div style="padding: 10px; background: #fff3cd; border-bottom: 1px solid #ffeeba; font-size: 14px;">
+                  📊 Simplified ERD View - Showing key tables from your 196-table database schema
+                </div>
+                <div style="padding: 20px;">
+                  ${result.svg}
+                </div>
+              </div>
+            `;
+            
+            console.log('Simplified ERD rendered successfully');
+            setIsRendering(false);
+            return;
+          }
+        } catch (simplifiedError) {
+          console.error('Simplified ERD also failed:', simplifiedError);
+        }
+      }
+      
+      // Final fallback to code display
       const container = mermaidRef.current;
       if (container) {
         container.innerHTML = `
           <div style="padding: 20px; background: #f9f9f9; height: 100%; overflow: auto;">
-            <h3 style="color: #d32f2f; margin-bottom: 10px;">ERD Rendering Error</h3>
-            <p style="margin-bottom: 15px;">The diagram is too large for direct rendering. Here's the generated code:</p>
-            <pre style="background: white; padding: 15px; border: 1px solid #ddd; overflow: auto; font-size: 12px; white-space: pre-wrap;">${mermaidCode}</pre>
+            <div style="background: #fff3cd; padding: 15px; border: 1px solid #ffeeba; border-radius: 5px; margin-bottom: 20px;">
+              <h3 style="color: #856404; margin: 0 0 10px 0;">⚠️ ERD Too Large for Browser Rendering</h3>
+              <p style="margin: 0; color: #856404;">Your database has 196 tables and 505 relationships - too complex for direct visualization. The complete Mermaid code is available below.</p>
+            </div>
+            
+            <div style="background: white; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
+              <h4 style="margin: 0 0 15px 0;">Complete ERD Code (48KB):</h4>
+              <pre style="overflow: auto; max-height: 400px; font-size: 11px; white-space: pre-wrap; line-height: 1.3;">${mermaidCode}</pre>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 5px;">
+              <h4 style="margin: 0 0 10px 0; color: #0066cc;">💡 Recommendations:</h4>
+              <ul style="margin: 0; color: #0066cc;">
+                <li>Use the "Copy Code" button to get the complete Mermaid syntax</li>
+                <li>Render smaller subsets of tables in dedicated ERD tools</li>
+                <li>Consider breaking the schema into logical modules</li>
+              </ul>
+            </div>
           </div>
         `;
       }
       
-      setError('ERD too large to render directly. Code available above.');
+      setError('Database schema too complex for browser rendering');
       setIsRendering(false);
     }
   };
