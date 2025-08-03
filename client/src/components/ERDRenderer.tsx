@@ -42,55 +42,93 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
 
   useEffect(() => {
     if (mermaidCode && mermaidRef.current) {
-      // Insert a simplified working version immediately
-      const container = mermaidRef.current;
-      container.innerHTML = `
-        <div style="
-          width: 100%; 
-          height: 100%; 
-          background: white; 
-          border: 1px solid #ddd;
-          overflow: auto;
-          position: relative;
-        ">
-          <div style="
-            width: 95935px; 
-            height: 1426px; 
-            transform: scale(0.1);
-            transform-origin: top left;
-            background: #f9f9f9;
-            border: 1px solid #ccc;
-            position: relative;
-          ">
-            <div style="padding: 20px; font-size: 160px; color: #333;">
-              <h3>Database ERD Schema</h3>
-              <p>📊 196 Tables | 🔗 505 Relationships</p>
-              <div style="margin-top: 40px; font-size: 120px;">
-                <div style="display: inline-block; margin: 20px; padding: 20px; border: 2px solid #4f46e5; background: #e0e7ff;">
-                  OSUSR_n0a_ActiveCampaignContact<br/>
-                  <small style="font-size: 80px;">UserId, ContactId, CreatedOn</small>
-                </div>
-                <div style="display: inline-block; margin: 20px; padding: 20px; border: 2px solid #059669; background: #d1fae5;">
-                  OSUSR_n0a_BulkImport<br/>
-                  <small style="font-size: 80px;">Id, Round, GTUserId, Status</small>
-                </div>
-                <div style="display: inline-block; margin: 20px; padding: 20px; border: 2px solid #dc2626; background: #fee2e2;">
-                  OSSYS_USER<br/>
-                  <small style="font-size: 80px;">Id, Name, Username, Email</small>
-                </div>
-                <div style="margin-top: 40px; font-size: 100px; color: #666;">
-                  ... and 193 more tables with complete relationships
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-      
-      console.log('ERD preview loaded successfully');
-      setIsRendering(false);
+      renderActualMermaidDiagram();
     }
   }, [mermaidCode, isDarkMode]);
+
+  const renderActualMermaidDiagram = async () => {
+    if (!mermaidCode || !mermaidRef.current) return;
+    
+    setIsRendering(true);
+    console.log('Starting Mermaid ERD rendering...');
+    
+    try {
+      // Initialize Mermaid for ER diagrams
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: isDarkMode ? 'dark' : 'default',
+        securityLevel: 'loose',
+        er: {
+          useMaxWidth: false,
+          layoutDirection: 'TB'
+        }
+      });
+
+      // Create unique diagram ID
+      const diagramId = `erd-${Date.now()}`;
+      
+      // Render the Mermaid diagram
+      const result = await mermaid.render(diagramId, mermaidCode);
+      
+      if (result && result.svg) {
+        // Create container with proper scaling for the massive SVG
+        const container = mermaidRef.current;
+        container.innerHTML = `
+          <div style="
+            width: 100%; 
+            height: 100%; 
+            background: white; 
+            border: 1px solid #ddd;
+            overflow: auto;
+            position: relative;
+          ">
+            <div style="
+              width: 9593px; 
+              height: 142px; 
+              transform: scale(0.1);
+              transform-origin: top left;
+              position: relative;
+              background: white;
+            ">
+              ${result.svg}
+            </div>
+          </div>
+        `;
+        
+        // Apply additional styling to the SVG
+        const svgElement = container.querySelector('svg');
+        if (svgElement) {
+          svgElement.style.width = '95935px';
+          svgElement.style.height = '1426px';
+          svgElement.style.display = 'block';
+          svgElement.style.background = 'white';
+        }
+        
+        console.log('Mermaid ERD rendered successfully with scaling');
+        setIsRendering(false);
+      } else {
+        throw new Error('No SVG generated from Mermaid');
+      }
+      
+    } catch (error) {
+      console.error('Mermaid rendering failed:', error);
+      
+      // Fallback to code display
+      const container = mermaidRef.current;
+      if (container) {
+        container.innerHTML = `
+          <div style="padding: 20px; background: #f9f9f9; height: 100%; overflow: auto;">
+            <h3 style="color: #d32f2f; margin-bottom: 10px;">ERD Rendering Error</h3>
+            <p style="margin-bottom: 15px;">The diagram is too large for direct rendering. Here's the generated code:</p>
+            <pre style="background: white; padding: 15px; border: 1px solid #ddd; overflow: auto; font-size: 12px; white-space: pre-wrap;">${mermaidCode}</pre>
+          </div>
+        `;
+      }
+      
+      setError('ERD too large to render directly. Code available above.');
+      setIsRendering(false);
+    }
+  };
 
   const renderDiagram = async (retryCount = 0) => {
     if (!mermaidCode) {
