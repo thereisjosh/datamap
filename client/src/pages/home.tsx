@@ -31,13 +31,43 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
       // Generate Mermaid code from the parsed data
       const mermaidResult = await api.generateMermaid(
         data.tables,
-        data.relationships
+        data.relationships || []
       );
       setMermaidCode(mermaidResult.diagram);
     } catch (err) {
       console.error('Failed to generate Mermaid code:', err);
-      setError('Failed to generate diagram code');
+      // Don't set error here as the tables still loaded successfully
+      // Just use a fallback diagram generation
+      const fallbackDiagram = generateSimpleMermaidCode(data.tables);
+      setMermaidCode(fallbackDiagram);
     }
+  };
+
+  // Fallback function to generate simple Mermaid code on the client side
+  const generateSimpleMermaidCode = (tables: Table[]): string => {
+    let code = "erDiagram\n";
+
+    for (const table of tables) {
+      code += `  ${table.name} {\n`;
+      for (const column of table.columns) {
+        const keyIndicator = column.isPrimaryKey
+          ? " PK"
+          : column.isForeignKey
+            ? " FK"
+            : "";
+        code += `    ${column.type} ${column.name}${keyIndicator}\n`;
+      }
+      code += "  }\n";
+
+      // Add relationships
+      for (const column of table.columns) {
+        if (column.isForeignKey && column.references) {
+          code += `  ${table.name} }o--|| ${column.references.table} : references\n`;
+        }
+      }
+    }
+
+    return code;
   };
 
   const handleError = (errorMessage: string) => {

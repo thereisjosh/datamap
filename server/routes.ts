@@ -1,6 +1,6 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
-import multer from "multer";
+import multer, { type FileFilterCallback } from "multer";
 import cors from "cors";
 import { storage } from "./storage";
 import { excelParserService } from "./services/excelParser";
@@ -13,7 +13,7 @@ const upload = multer({
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
     // Only allow Excel files
     if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
         file.originalname.endsWith('.xlsx')) {
@@ -56,7 +56,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Parse Excel endpoint
-  app.post("/api/parse-excel", upload.single('file'), async (req, res) => {
+  app.post("/api/parse-excel", upload.single('file'), async (req: any, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({
@@ -142,17 +142,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Parse Excel error:', error);
       
-      if (error instanceof multer.MulterError) {
-        if (error.code === 'LIMIT_FILE_SIZE') {
-          return res.status(413).json({
-            error: "File size exceeds 5MB limit",
-            code: 413,
-            details: {
-              max_size: "5MB",
-              received_size: req.file ? `${(req.file.size / 1024 / 1024).toFixed(1)}MB` : "unknown"
-            }
-          });
-        }
+      const multError = error as any;
+      if (multError && multError.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({
+          error: "File size exceeds 5MB limit",
+          code: 413,
+          details: {
+            max_size: "5MB",
+            received_size: (req as any).file ? `${((req as any).file.size / 1024 / 1024).toFixed(1)}MB` : "unknown"
+          }
+        });
       }
 
       res.status(500).json({
@@ -171,10 +170,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { tables, relationships = [], options = {} } = validatedData;
 
+      // Convert relationships to the correct format for Mermaid generation
+      const formattedRelationships = relationships.map(rel => ({
+        id: '',
+        sourceTable: rel.sourceTable,
+        sourceColumn: rel.sourceColumn,
+        targetTable: rel.targetTable,
+        targetColumn: rel.targetColumn,
+        createdAt: new Date()
+      }));
+
       // Generate Mermaid diagram
       const result = mermaidGeneratorService.generateMermaidDiagram(
         tables,
-        relationships,
+        formattedRelationships,
         options
       );
 
