@@ -113,17 +113,43 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           const svgContent = (renderResult as any).svg;
           targetElement.innerHTML = svgContent;
           
-          // Apply proper styling to the SVG element
+          // Apply proper styling to the SVG element and debug
           const svgElement = targetElement.querySelector('svg');
           if (svgElement) {
+            // Debug current state
+            console.log('SVG element found, current styles:', {
+              width: svgElement.style.width,
+              height: svgElement.style.height,
+              display: svgElement.style.display,
+              visibility: svgElement.style.visibility
+            });
+            console.log('Container dimensions:', {
+              width: targetElement.offsetWidth,
+              height: targetElement.offsetHeight,
+              scrollWidth: targetElement.scrollWidth,
+              scrollHeight: targetElement.scrollHeight
+            });
+            
+            // Force visible styling
             svgElement.style.width = '100%';
             svgElement.style.height = 'auto';
-            svgElement.style.maxWidth = '100%';
+            svgElement.style.maxWidth = 'none';
             svgElement.style.display = 'block';
+            svgElement.style.visibility = 'visible';
+            svgElement.style.position = 'relative';
+            svgElement.style.zIndex = '1';
+            
+            // Add background for visibility testing
+            targetElement.style.backgroundColor = '#f0f0f0';
+            targetElement.style.border = '2px solid red';
+            
             console.log('Successfully rendered Mermaid diagram with styling');
             console.log('SVG dimensions:', svgElement.getAttribute('viewBox'));
+            console.log('Final SVG computed styles:', window.getComputedStyle(svgElement));
           } else {
             console.error('SVG element not found after insertion');
+            console.log('Container innerHTML length:', targetElement.innerHTML.length);
+            console.log('Container innerHTML preview:', targetElement.innerHTML.substring(0, 200));
           }
         } else {
           throw new Error('DOM element not available for SVG insertion');
@@ -240,9 +266,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full space-y-4">
       {/* Action buttons */}
-      <div className="flex justify-end space-x-2">
+      <div className="flex justify-end space-x-2 flex-shrink-0">
         <Button
           variant="outline"
           size="sm"
@@ -264,12 +290,24 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       </div>
 
       {/* Diagram container */}
-      <div className="border rounded-lg p-4 bg-white dark:bg-gray-900 overflow-auto max-h-screen">
+      <div 
+        className="border rounded-lg p-4 bg-white dark:bg-gray-900 overflow-auto flex-1"
+        style={{ minHeight: '500px' }}
+      >
         <div
           id="mermaid-container"
           ref={mermaidRef}
-          className="w-full min-h-96"
-          style={{ minHeight: '400px' }}
+          className="w-full h-full"
+          style={{ 
+            width: '100%',
+            height: '100%',
+            minWidth: '800px',
+            minHeight: '400px',
+            backgroundColor: '#fafafa',
+            border: '1px dashed #ccc',
+            position: 'relative',
+            display: 'block'
+          }}
         />
       </div>
     </div>
