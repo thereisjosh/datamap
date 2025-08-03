@@ -41,21 +41,36 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   }, [isDarkMode]);
 
   useEffect(() => {
-    if (mermaidCode && mermaidRef.current) {
-      renderDiagram();
+    if (mermaidCode) {
+      // Use requestAnimationFrame to ensure DOM is fully rendered
+      const frame = requestAnimationFrame(() => {
+        renderDiagram();
+      });
+      return () => cancelAnimationFrame(frame);
     }
   }, [mermaidCode, isDarkMode]);
 
-  const renderDiagram = async () => {
+  const renderDiagram = async (retryCount = 0) => {
     if (!mermaidCode) {
       console.log('No Mermaid code provided');
       return;
     }
     
-    if (!mermaidRef.current) {
-      console.log('DOM element not ready, retrying in 100ms');
-      setTimeout(renderDiagram, 100);
-      return;
+    // Try to get the DOM element via ref or getElementById
+    let targetElement = mermaidRef.current;
+    if (!targetElement) {
+      targetElement = document.getElementById('mermaid-container') as HTMLDivElement;
+    }
+    
+    if (!targetElement) {
+      if (retryCount < 5) {
+        console.log(`DOM element not ready, retry ${retryCount + 1}/5 in 200ms`);
+        setTimeout(() => renderDiagram(retryCount + 1), 200);
+        return;
+      } else {
+        setError('Failed to access DOM element after multiple retries');
+        return;
+      }
     }
 
     setIsRendering(true);
@@ -63,7 +78,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
 
     try {
       // Clear previous content
-      mermaidRef.current.innerHTML = '';
+      targetElement.innerHTML = '';
       
       // Validate and clean the Mermaid code
       const cleanedCode = mermaidCode.trim();
@@ -94,8 +109,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       // Insert the SVG with proper DOM check
       if (renderResult && (renderResult as any).svg) {
-        if (mermaidRef.current) {
-          mermaidRef.current.innerHTML = (renderResult as any).svg;
+        if (targetElement) {
+          targetElement.innerHTML = (renderResult as any).svg;
           console.log('Successfully rendered Mermaid diagram');
         } else {
           throw new Error('DOM element not available for SVG insertion');
@@ -116,9 +131,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       setError(errorMessage);
       
-      // Show the raw code as fallback
-      if (mermaidRef.current) {
-        mermaidRef.current.innerHTML = `
+      // Show the raw code as fallback - try to find the element again
+      const fallbackElement = document.getElementById('mermaid-container');
+      if (fallbackElement) {
+        fallbackElement.innerHTML = `
           <div class="p-4 bg-gray-100 dark:bg-gray-800 rounded border">
             <h4 class="font-medium mb-2 text-red-600">Rendering Failed - Raw Mermaid Code:</h4>
             <pre class="text-sm overflow-auto max-h-64 whitespace-pre-wrap bg-white p-2 rounded border font-mono">${mermaidCode}</pre>
@@ -237,6 +253,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       {/* Diagram container */}
       <div className="border rounded-lg p-4 bg-white dark:bg-gray-900 overflow-auto">
         <div
+          id="mermaid-container"
           ref={mermaidRef}
           className="flex justify-center items-center min-h-64"
         />
