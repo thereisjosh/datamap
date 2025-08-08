@@ -38,7 +38,25 @@ export interface GenerateMermaidResponse {
   metadata: {
     tables_count: number;
     relationships_count: number;
+    domain?: string;
   };
+}
+
+export interface GenerateDomainMermaidResponse {
+  domains: Record<string, GenerateMermaidResponse>;
+  metadata: {
+    total_domains: number;
+    total_tables: number;
+    total_relationships: number;
+  };
+}
+
+export interface MermaidOptions {
+  domain?: string;
+  maxTables?: number;
+  maxRelationships?: number;
+  theme?: string;
+  direction?: string;
 }
 
 export const api = {
@@ -59,7 +77,7 @@ export const api = {
     return response.json();
   },
 
-  async generateMermaid(tables: Table[], relationships: Relationship[] = [], options: any = {}): Promise<GenerateMermaidResponse> {
+  async generateMermaid(tables: Table[], relationships: Relationship[] = [], options: MermaidOptions = {}): Promise<GenerateMermaidResponse> {
     const response = await apiRequest('POST', '/api/generate-mermaid', {
       tables: tables.map(table => ({
         name: table.name,
@@ -73,6 +91,25 @@ export const api = {
       })),
       relationships,
       options
+    });
+
+    return response.json();
+  },
+
+  async generateDomainMermaid(tables: Table[], relationships: Relationship[] = []): Promise<GenerateDomainMermaidResponse> {
+    const response = await apiRequest('POST', '/api/generate-domain-mermaid', {
+      tables: tables.map(table => ({
+        name: table.name,
+        attributes: table.columns.map(col => ({
+          name: col.name,
+          type: col.type,
+          isPrimaryKey: col.isPrimaryKey,
+          isForeignKey: col.isForeignKey,
+          references: col.references
+        }))
+      })),
+      relationships,
+      options: {}
     });
 
     return response.json();

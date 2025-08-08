@@ -216,6 +216,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate domain-specific Mermaid diagrams endpoint
+  app.post("/api/generate-domain-mermaid", async (req, res) => {
+    try {
+      // Validate request body
+      const validatedData = generateMermaidRequestSchema.parse(req.body);
+      
+      const { tables, relationships = [], options = {} } = validatedData;
+
+      // Debug logging: Input relationships
+      console.log('🔍 Input relationships received:', relationships.length);
+      relationships.forEach((rel, index) => {
+        console.log(`  ${index + 1}. ${rel.sourceTable}.${rel.sourceColumn} → ${rel.targetTable}.${rel.targetColumn}`);
+      });
+
+      // Convert relationships to the correct format for Mermaid generation
+      const formattedRelationships = relationships.map(rel => ({
+        id: '',
+        sourceTable: rel.sourceTable,
+        sourceColumn: rel.sourceColumn,
+        targetTable: rel.targetTable,
+        targetColumn: rel.targetColumn,
+        createdAt: new Date()
+      }));
+
+      console.log('🔧 Formatted relationships for Mermaid generation:', formattedRelationships.length);
+
+      // Generate all domain-specific diagrams
+      const domainResults = mermaidGeneratorService.generateAllDomainDiagrams(
+        tables,
+        formattedRelationships
+      );
+
+      // Log the generated diagrams for debugging
+      console.log('📊 Generated domain diagrams:', Object.keys(domainResults));
+      Object.entries(domainResults).forEach(([domain, result]) => {
+        console.log(`  ${domain}: ${result.metadata.tables_count} tables, ${result.metadata.relationships_count} relationships`);
+      });
+
+      res.json({
+        domains: domainResults,
+        metadata: {
+          total_domains: Object.keys(domainResults).length,
+          total_tables: tables.length,
+          total_relationships: formattedRelationships.length
+        }
+      });
+
+    } catch (error) {
+      console.error('Generate domain Mermaid error:', error);
+      
+      res.status(400).json({
+        error: "Invalid request data for domain Mermaid generation",
+        code: 400,
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   // Get parsed tables (for frontend integration)
   app.get("/api/tables", async (req, res) => {
     try {

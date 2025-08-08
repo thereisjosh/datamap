@@ -84,11 +84,11 @@ const UploadPanel = ({
     const sampleContent = `Sample Excel Data Dictionary Structure:
 
 Sheet 1: TableMetadata
-- Physical Table Name: User, Order, Product
+- Logical Table Name: User, Order, Product
 - Data Kind: Entity
 
 Sheet 2: AttributeMetadata  
-- Physical Table Name: User, User, Order, Order, Product
+- Logical Table Name: User, User, Order, Order, Product
 - Attribute Name: Id, Email, Id, UserId, Id
 - Type: int, varchar, int, int, int
 - Is Autonumber: true, false, true, false, true

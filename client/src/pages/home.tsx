@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Github, Moon, Sun, HelpCircle, Eye } from "lucide-react";
 import UploadPanel from "@/components/UploadPanel";
 import MetadataPreview from "@/components/MetadataPreview";
@@ -21,6 +22,10 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("upload");
+  
+  // Domain management state
+  const [domainResults, setDomainResults] = useState<any>({});
+  const [selectedDomain, setSelectedDomain] = useState<string>("overview");
 
   const handleFileUpload = async (data: ParseExcelResponse) => {
     setTables(data.tables);
@@ -28,14 +33,33 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
     setError(null);
 
     try {
-      // Generate Mermaid code from the parsed data
-      const mermaidResult = await api.generateMermaid(
+      // Generate domain-specific Mermaid diagrams from the parsed data
+      const domainResult = await api.generateDomainMermaid(
         data.tables,
         data.relationships || []
       );
-      setMermaidCode(mermaidResult.diagram);
+      
+      // Store all domain results for switching
+      setDomainResults(domainResult.domains);
+      setSelectedDomain("overview"); // Reset to overview
+      
+      // Use the overview diagram as the default
+      const overviewDiagram = domainResult.domains.overview?.diagram;
+      if (overviewDiagram) {
+        setMermaidCode(overviewDiagram);
+      } else {
+        // Fallback to simple diagram if domain generation fails
+        const fallbackDiagram = generateSimpleMermaidCode(data.tables);
+        setMermaidCode(fallbackDiagram);
+      }
+      
+      console.log('Generated domain diagrams:', Object.keys(domainResult.domains));
+      Object.entries(domainResult.domains).forEach(([domain, result]) => {
+        console.log(`${domain}: ${result.metadata.tables_count} tables, ${result.metadata.relationships_count} relationships`);
+      });
+      
     } catch (err) {
-      console.error('Failed to generate Mermaid code:', err);
+      console.error('Failed to generate domain Mermaid code:', err);
       // Don't set error here as the tables still loaded successfully
       // Just use a fallback diagram generation
       const fallbackDiagram = generateSimpleMermaidCode(data.tables);
@@ -70,10 +94,20 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
     return code;
   };
 
+  const handleDomainChange = (domain: string) => {
+    setSelectedDomain(domain);
+    const domainData = domainResults[domain];
+    if (domainData && domainData.diagram) {
+      setMermaidCode(domainData.diagram);
+      console.log(`📊 Switched to ${domain} domain: ${domainData.metadata.tables_count} tables, ${domainData.metadata.relationships_count} relationships`);
+    }
+  };
+
   const handleError = (errorMessage: string) => {
     setError(errorMessage);
     setTables([]);
     setMermaidCode("");
+    setDomainResults({});
   };
 
   const toggleDarkMode = () => {
@@ -182,18 +216,51 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
           <div className="w-full lg:w-1/2">
             <Card className="h-full">
               <CardContent className="pt-6 h-full">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium">ERD Preview</h3>
-                  {(tables.length > 0 || mermaidCode) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handlePreviewERD}
-                      className="flex items-center gap-2"
-                    >
-                      <Eye className="h-4 w-4" />
-                      Full Preview
-                    </Button>
+                <div className="mb-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium">ERD Preview</h3>
+                    {(tables.length > 0 || mermaidCode) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handlePreviewERD}
+                        className="flex items-center gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        Full Preview
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Domain Selector */}
+                  {Object.keys(domainResults).length > 0 && (
+                    <div className="mb-4">
+                      <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                        Select Domain View:
+                      </label>
+                      <Select
+                        value={selectedDomain}
+                        onValueChange={handleDomainChange}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a domain" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(domainResults).map(([domain, result]: [string, any]) => (
+                            <SelectItem key={domain} value={domain}>
+                              <div className="flex flex-col">
+                                <span className="font-medium capitalize">
+                                  {domain.replace('-', ' ')}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {result.metadata.tables_count} tables, {result.metadata.relationships_count} relationships
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   )}
                 </div>
                 <ERDRenderer

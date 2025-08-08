@@ -1,9 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState, memo } from 'react';
 import mermaid from 'mermaid';
-
-// Test if mermaid is properly imported
-console.log('Mermaid version:', (mermaid as any).version || 'unknown');
-console.log('Mermaid object:', mermaid);
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Download, Copy, AlertCircle } from 'lucide-react';
@@ -19,20 +15,23 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   isDarkMode = false,
   isLoading = false,
 }) => {
-  const mermaidRef = useRef<HTMLDivElement>(null);
+  // State for Direct SVG Rendering pattern
+  const [svgContent, setSvgContent] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
 
+  // Initialize Mermaid once
   useEffect(() => {
-    // Initialize Mermaid with basic configuration
     try {
       mermaid.initialize({
-        startOnLoad: false,
+        startOnLoad: false, // Critical for React integration
         theme: isDarkMode ? 'dark' : 'default',
         securityLevel: 'loose',
         fontFamily: 'Arial, sans-serif',
+        useMaxWidth: true,
         er: {
           layoutDirection: 'TB',
+          useMaxWidth: false,
         },
       });
     } catch (err) {
@@ -40,10 +39,105 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     }
   }, [isDarkMode]);
 
+
+  // Industry-standard Direct SVG Rendering with proper async handling
   useEffect(() => {
-    if (mermaidCode && mermaidRef.current) {
-      renderActualMermaidDiagram();
+    let cancelled = false;
+
+    if (!mermaidCode) {
+      setSvgContent('');
+      setError(null);
+      return;
     }
+
+    async function renderDiagram() {
+      if (cancelled) return;
+      
+      setIsRendering(true);
+      setError(null);
+      
+      try {
+        // Generate unique ID for this render operation
+        const uniqueId = `erd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        console.log('🎨 Starting Mermaid Direct SVG Rendering...');
+        
+        // Use proper Mermaid render API - returns SVG string directly
+        const { svg } = await mermaid.render(uniqueId, mermaidCode);
+        
+        if (!cancelled) {
+          console.log('✅ Mermaid render completed successfully');
+          console.log('📊 SVG content preview (first 200 chars):', svg.substring(0, 200));
+          console.log('📏 SVG content length:', svg.length);
+          
+          // Format SVG with proper wrapper for browser display
+          const formattedSvgContent = `
+            <div style="
+              width: 100%; 
+              height: 100%; 
+              overflow: auto; 
+              background: white;
+              padding: 10px;
+              border: 1px solid #ddd;
+            ">
+              ${svg}
+            </div>
+          `;
+          
+          setSvgContent(formattedSvgContent);
+          console.log('✅ SVG content set with formatting wrapper');
+        }
+        
+      } catch (error) {
+        console.error('Mermaid rendering failed:', error);
+        
+        if (!cancelled) {
+          // Try simplified ERD fallback
+          const simplifiedERD = createSimplifiedERD(mermaidCode);
+          if (simplifiedERD) {
+            try {
+              const { svg } = await mermaid.render(`erd-simplified-${Date.now()}`, simplifiedERD);
+              if (!cancelled) {
+                console.log('✅ Simplified ERD rendered successfully');
+                console.log('📊 Simplified SVG preview (first 200 chars):', svg.substring(0, 200));
+                
+                const formattedSimplifiedContent = `
+                  <div style="width: 100%; height: 100%; overflow: auto; background: white;">
+                    <div style="padding: 15px; background: #d4edda; border-bottom: 1px solid #c3e6cb; font-size: 14px; margin-bottom: 10px;">
+                      🎯 <strong>Domain-Focused ERD</strong> - Showing key tables from your database
+                    </div>
+                    <div style="padding: 20px; background: white;">
+                      ${svg}
+                    </div>
+                  </div>
+                `;
+                
+                setSvgContent(formattedSimplifiedContent);
+                console.log('✅ Simplified SVG content set with formatting');
+              }
+            } catch (simplifiedError) {
+              console.error('Simplified ERD also failed:', simplifiedError);
+              if (!cancelled) {
+                setError('Failed to render ERD diagram');
+              }
+            }
+          } else {
+            setError('Failed to render ERD diagram');
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          setIsRendering(false);
+        }
+      }
+    }
+
+    renderDiagram();
+
+    // Cleanup function to prevent race conditions
+    return () => {
+      cancelled = true;
+    };
   }, [mermaidCode, isDarkMode]);
 
   const createSimplifiedERD = (fullCode: string): string => {
@@ -86,26 +180,26 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     
     // Domain 1: User Management (OSSYS_USER, OSSYS_ROLE, etc.)
     const userTables = Object.keys(tables).filter(name => 
-      name.includes('OSSYS_USER') || name.includes('OSSYS_ROLE') || name.includes('OSSYS_GROUP')
+      name.includes('User') || name.includes('Role') || name.includes('Group')
     );
     userTables.forEach(table => keyTables.add(table));
     
-    // Domain 2: Opportunities (OSUSR_3ts_Opportunity*)
+    // Domain 2: Opportunities
     const opportunityTables = Object.keys(tables).filter(name => 
       name.includes('Opportunity') && relationshipCounts[name] > 2
-    ).slice(0, 4); // Top 4 opportunity tables
+    ).slice(0, 4);
     opportunityTables.forEach(table => keyTables.add(table));
     
-    // Domain 3: Active Campaign (OSUSR_n0a_*)
+    // Domain 3: Active Campaign
     const campaignTables = Object.keys(tables).filter(name => 
-      name.includes('OSUSR_n0a_') && relationshipCounts[name] > 1
-    ).slice(0, 3); // Top 3 campaign tables
+      name.includes('Campaign') && relationshipCounts[name] > 1
+    ).slice(0, 3);
     campaignTables.forEach(table => keyTables.add(table));
     
     // Add any high-relationship tables we might have missed
     const topRelatedTables = Object.entries(relationshipCounts)
       .sort(([,a], [,b]) => b - a)
-      .slice(0, 15)
+      .slice(0, 12)
       .map(([name]) => name);
     
     topRelatedTables.forEach(table => keyTables.add(table));
@@ -132,302 +226,20 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       }
     });
     
-    console.log(`Created simplified ERD with ${keyTables.size} key tables from domains: Users, Opportunities, Campaigns`);
+    console.log(`Created simplified ERD with ${keyTables.size} key tables`);
     return erdLines.join('\n');
   };
 
-  const renderActualMermaidDiagram = async () => {
-    if (!mermaidCode || !mermaidRef.current) return;
-    
-    setIsRendering(true);
-    console.log('Starting Mermaid ERD rendering...');
-    
-    try {
-      // Initialize Mermaid for ER diagrams
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: isDarkMode ? 'dark' : 'default',
-        securityLevel: 'loose',
-        er: {
-          useMaxWidth: false,
-          layoutDirection: 'TB'
-        }
-      });
 
-      // Create unique diagram ID
-      const diagramId = `erd-${Date.now()}`;
-      
-      // Render the Mermaid diagram
-      const result = await mermaid.render(diagramId, mermaidCode);
-      
-      if (result && result.svg) {
-        // Create container with proper scaling for the massive SVG
-        const container = mermaidRef.current;
-        container.innerHTML = `
-          <div style="
-            width: 100%; 
-            height: 100%; 
-            background: white; 
-            border: 1px solid #ddd;
-            overflow: auto;
-            position: relative;
-          ">
-            <div style="
-              width: 9593px; 
-              height: 142px; 
-              transform: scale(0.1);
-              transform-origin: top left;
-              position: relative;
-              background: white;
-            ">
-              ${result.svg}
-            </div>
-          </div>
-        `;
-        
-        // Apply additional styling to the SVG
-        const svgElement = container.querySelector('svg');
-        if (svgElement) {
-          svgElement.style.width = '95935px';
-          svgElement.style.height = '1426px';
-          svgElement.style.display = 'block';
-          svgElement.style.background = 'white';
-        }
-        
-        console.log('Mermaid ERD rendered successfully with scaling');
-        setIsRendering(false);
-      } else {
-        throw new Error('No SVG generated from Mermaid');
-      }
-      
-    } catch (error) {
-      console.error('Mermaid rendering failed:', error);
-      
-      // Create a simplified ERD with key tables
-      const simplifiedERD = createSimplifiedERD(mermaidCode);
-      
-      if (simplifiedERD) {
-        try {
-          const result = await mermaid.render(`erd-simplified-${Date.now()}`, simplifiedERD);
-          
-          if (result && result.svg) {
-            const container = mermaidRef.current;
-            container.innerHTML = `
-              <div style="width: 100%; height: 100%; background: white; border: 1px solid #ddd; overflow: auto; position: relative;">
-                <div style="padding: 15px; background: #d4edda; border-bottom: 1px solid #c3e6cb; font-size: 14px;">
-                  🎯 <strong>Domain-Focused ERD</strong> - Showing key tables by domain from your 196-table database:
-                  <br/>
-                  <span style="font-size: 12px; color: #155724;">
-                    👥 User Management • 🎯 Opportunities • 📧 Active Campaign • 🔗 High-Relationship Tables
-                  </span>
-                </div>
-                <div style="padding: 20px;">
-                  ${result.svg}
-                </div>
-              </div>
-            `;
-            
-            console.log('Simplified ERD rendered successfully');
-            setIsRendering(false);
-            return;
-          }
-        } catch (simplifiedError) {
-          console.error('Simplified ERD also failed:', simplifiedError);
-        }
-      }
-      
-      // Final fallback to code display
-      const container = mermaidRef.current;
-      if (container) {
-        container.innerHTML = `
-          <div style="padding: 20px; background: #f9f9f9; height: 100%; overflow: auto;">
-            <div style="background: #fff3cd; padding: 15px; border: 1px solid #ffeeba; border-radius: 5px; margin-bottom: 20px;">
-              <h3 style="color: #856404; margin: 0 0 10px 0;">⚠️ ERD Too Large for Browser Rendering</h3>
-              <p style="margin: 0; color: #856404;">Your database has 196 tables and 505 relationships - too complex for direct visualization. The complete Mermaid code is available below.</p>
-            </div>
-            
-            <div style="background: white; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
-              <h4 style="margin: 0 0 15px 0;">Complete ERD Code (48KB):</h4>
-              <pre style="overflow: auto; max-height: 400px; font-size: 11px; white-space: pre-wrap; line-height: 1.3;">${mermaidCode}</pre>
-            </div>
-            
-            <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 5px;">
-              <h4 style="margin: 0 0 10px 0; color: #0066cc;">💡 Recommendations:</h4>
-              <ul style="margin: 0; color: #0066cc;">
-                <li>Use the "Copy Code" button to get the complete Mermaid syntax</li>
-                <li>Render smaller subsets of tables in dedicated ERD tools</li>
-                <li>Consider breaking the schema into logical modules</li>
-              </ul>
-            </div>
-          </div>
-        `;
-      }
-      
-      setError('Database schema too complex for browser rendering');
-      setIsRendering(false);
-    }
-  };
-
-  const renderDiagram = async (retryCount = 0) => {
-    if (!mermaidCode) {
-      console.log('No Mermaid code provided');
-      return;
-    }
-    
-    // Try to get the DOM element via ref or getElementById
-    let targetElement = mermaidRef.current;
-    if (!targetElement) {
-      targetElement = document.getElementById('mermaid-container') as HTMLDivElement;
-    }
-    
-    if (!targetElement) {
-      if (retryCount < 5) {
-        console.log(`DOM element not ready, retry ${retryCount + 1}/5 in 200ms`);
-        setTimeout(() => renderDiagram(retryCount + 1), 200);
-        return;
-      } else {
-        setError('Failed to access DOM element after multiple retries');
-        return;
-      }
-    }
-
-    setIsRendering(true);
-    setError(null);
-
-    try {
-      // Clear previous content
-      targetElement.innerHTML = '';
-      
-      // Validate and clean the Mermaid code
-      const cleanedCode = mermaidCode.trim();
-      console.log('Attempting to render Mermaid code:', cleanedCode);
-      
-      if (!cleanedCode.startsWith('erDiagram')) {
-        throw new Error('Invalid ERD diagram format');
-      }
-      
-      // Create a unique ID for this diagram
-      const diagramId = `mermaid-${Date.now()}`;
-      
-      // Test with simplified Mermaid config
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: 'default',
-        securityLevel: 'loose',
-      });
-      
-      // Render the diagram with timeout
-      const renderPromise = mermaid.render(diagramId, cleanedCode);
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Mermaid render timeout')), 10000)
-      );
-      
-      const renderResult = await Promise.race([renderPromise, timeoutPromise]);
-      console.log('Mermaid render result:', renderResult);
-      
-      // Insert the SVG with proper DOM check
-      if (renderResult && (renderResult as any).svg) {
-        if (targetElement) {
-          const svgContent = (renderResult as any).svg;
-          targetElement.innerHTML = svgContent;
-          
-          // Apply proper styling to the SVG element and debug
-          const svgElement = targetElement.querySelector('svg');
-          if (svgElement) {
-            // Debug current state
-            console.log('SVG element found, current styles:', {
-              width: svgElement.style.width,
-              height: svgElement.style.height,
-              display: svgElement.style.display,
-              visibility: svgElement.style.visibility
-            });
-            console.log('Container dimensions:', {
-              width: targetElement.offsetWidth,
-              height: targetElement.offsetHeight,
-              scrollWidth: targetElement.scrollWidth,
-              scrollHeight: targetElement.scrollHeight
-            });
-            
-            // Debug parent containers
-            console.log('Parent container dimensions:', {
-              parent: targetElement.parentElement ? {
-                width: targetElement.parentElement.offsetWidth,
-                height: targetElement.parentElement.offsetHeight,
-                className: targetElement.parentElement.className
-              } : 'No parent',
-              grandparent: targetElement.parentElement?.parentElement ? {
-                width: targetElement.parentElement.parentElement.offsetWidth,
-                height: targetElement.parentElement.parentElement.offsetHeight,
-                className: targetElement.parentElement.parentElement.className
-              } : 'No grandparent'
-            });
-            
-            // Fix the massive SVG dimensions issue
-            svgElement.removeAttribute('style'); // Remove the problematic max-width style
-            svgElement.style.width = '100%';
-            svgElement.style.height = 'auto';
-            svgElement.style.maxWidth = '100%'; // Constrain to container
-            svgElement.style.display = 'block';
-            svgElement.style.visibility = 'visible';
-            svgElement.style.position = 'relative';
-            svgElement.style.transform = 'scale(0.1)'; // Scale down the massive diagram
-            svgElement.style.transformOrigin = 'top left';
-            
-            // Ensure container maintains dimensions
-            targetElement.style.width = '100%';
-            targetElement.style.height = '600px';
-            targetElement.style.minHeight = '600px';
-            targetElement.style.backgroundColor = '#f0f0f0';
-            targetElement.style.border = '2px solid green';
-            targetElement.style.overflow = 'auto';
-            
-            console.log('Successfully rendered Mermaid diagram with styling');
-            console.log('SVG dimensions:', svgElement.getAttribute('viewBox'));
-            console.log('Final SVG computed styles:', window.getComputedStyle(svgElement));
-          } else {
-            console.error('SVG element not found after insertion');
-            console.log('Container innerHTML length:', targetElement.innerHTML.length);
-            console.log('Container innerHTML preview:', targetElement.innerHTML.substring(0, 200));
-          }
-        } else {
-          throw new Error('DOM element not available for SVG insertion');
-        }
-      } else {
-        throw new Error('No SVG generated from Mermaid');
-      }
-      
-    } catch (err) {
-      console.error('Mermaid rendering error:', err);
-      console.error('Failed Mermaid code:', mermaidCode);
-      
-      // Try to show a more helpful error message
-      let errorMessage = 'Failed to render ERD diagram.';
-      if (err instanceof Error) {
-        errorMessage += ` Error: ${err.message}`;
-      }
-      
-      setError(errorMessage);
-      
-      // Show the raw code as fallback - try to find the element again
-      const fallbackElement = document.getElementById('mermaid-container');
-      if (fallbackElement) {
-        fallbackElement.innerHTML = `
-          <div class="p-4 bg-gray-100 dark:bg-gray-800 rounded border">
-            <h4 class="font-medium mb-2 text-red-600">Rendering Failed - Raw Mermaid Code:</h4>
-            <pre class="text-sm overflow-auto max-h-64 whitespace-pre-wrap bg-white p-2 rounded border font-mono">${mermaidCode}</pre>
-            <p class="text-sm text-gray-600 mt-2">Error: ${err instanceof Error ? err.message : 'Unknown error'}</p>
-          </div>
-        `;
-      }
-    } finally {
-      setIsRendering(false);
-    }
-  };
 
   const handleDownloadSVG = () => {
-    if (!mermaidRef.current) return;
+    if (!svgContent) return;
 
-    const svgElement = mermaidRef.current.querySelector('svg');
+    // Extract SVG from the HTML content
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgContent, 'text/html');
+    const svgElement = doc.querySelector('svg');
+    
     if (!svgElement) return;
 
     const svgData = new XMLSerializer().serializeToString(svgElement);
@@ -521,13 +333,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           size="sm"
           onClick={handleDownloadSVG}
           className="flex items-center gap-2"
+          disabled={!svgContent}
         >
           <Download className="h-4 w-4" />
           Download SVG
         </Button>
       </div>
 
-      {/* Diagram container */}
+      {/* Diagram container using Direct SVG Rendering */}
       <div 
         className="border rounded-lg p-4 bg-white dark:bg-gray-900 overflow-auto flex-1"
         style={{ 
@@ -539,36 +352,43 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         <div
           style={{
             width: '100%',
-            height: '500px',
+            minHeight: '500px',
+            height: 'auto',
             border: '1px solid #ddd',
             overflow: 'auto',
             backgroundColor: '#f9f9f9',
-            position: 'relative'
+            position: 'relative',
+            display: 'block'
           }}
         >
-          <div
-            id="mermaid-container"
-            ref={mermaidRef}
-            dangerouslySetInnerHTML={{
-              __html: mermaidCode ? 
-                `<div style="width: 9593px; height: 142px; background: white; border: 1px solid #ccc; transform-origin: top left; transform: scale(0.1); overflow: hidden;">
-                   <div style="font-size: 14px; padding: 20px;">
-                     Loading ERD diagram (196 tables, 505 relationships)...<br/>
-                     This large diagram is being processed and scaled to fit.
-                   </div>
-                 </div>` : 
-                '<div style="padding: 20px; color: #666;">Upload an Excel file to see the ERD</div>'
-            }}
-            style={{ 
-              width: '100%',
-              height: '100%',
-              position: 'relative'
-            }}
-          />
+          {svgContent ? (
+            <div dangerouslySetInnerHTML={{ __html: svgContent }} />
+          ) : mermaidCode ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+              <div>Processing ERD diagram...</div>
+              <div style={{ fontSize: '12px', marginTop: '10px' }}>
+                Using industry-standard Direct SVG Rendering
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '20px', color: '#666', textAlign: 'center' }}>
+              Upload an Excel file to see the ERD
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
-export default ERDRenderer;
+// Memoize component to prevent unnecessary re-renders
+const MemoizedERDRenderer = memo(ERDRenderer, (prevProps, nextProps) => {
+  // Only re-render if essential props change
+  return (
+    prevProps.mermaidCode === nextProps.mermaidCode &&
+    prevProps.isDarkMode === nextProps.isDarkMode &&
+    prevProps.isLoading === nextProps.isLoading
+  );
+});
+
+export default MemoizedERDRenderer;

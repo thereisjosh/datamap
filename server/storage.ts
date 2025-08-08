@@ -82,7 +82,10 @@ export class MemStorage implements IStorage {
     const session: UploadSession = { 
       ...insertSession, 
       id,
-      createdAt: new Date()
+      createdAt: new Date(),
+      errors: insertSession.errors || null,
+      tablesCount: insertSession.tablesCount || null,
+      relationshipsCount: insertSession.relationshipsCount || null
     };
     this.uploadSessions.set(id, session);
     return session;
