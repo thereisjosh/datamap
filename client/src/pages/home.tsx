@@ -121,6 +121,8 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
       state: {
         tables,
         mermaidCode,
+        domainResults,
+        selectedDomain,
       },
     });
   };
@@ -176,7 +178,7 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="flex flex-col lg:flex-row gap-4">
+        <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: '800px' }}>
           {/* Left Column - Upload and Metadata */}
           <div className="w-full lg:w-1/2 space-y-4">
             <Tabs
@@ -214,8 +216,8 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
 
           {/* Right Column - ERD Renderer */}
           <div className="w-full lg:w-1/2">
-            <Card className="h-full">
-              <CardContent className="pt-6 h-full">
+            <Card className="h-full" style={{ display: 'flex', flexDirection: 'column' }}>
+              <CardContent className="pt-6 flex-1" style={{ display: 'flex', flexDirection: 'column' }}>
                 <div className="mb-4">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium">ERD Preview</h3>

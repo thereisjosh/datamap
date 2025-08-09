@@ -1,0 +1,97 @@
+/* Industry Standard Responsive Mermaid SVG Styling - 2024 Best Practices */
+
+/* Responsive SVG Container - CSS-based approach */
+.erd-svg-container {
+  width: 100% !important;
+  height: 100% !important;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Make SVG elements responsive and fill container */
+.erd-svg-container svg {
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  display: block;
+  /* Ensure proper scaling in all browsers */
+  object-fit: contain;
+}
+
+/* Force responsive behavior for Mermaid SVGs with useMaxWidth */
+.erd-svg-container svg[style*="max-width"] {
+  max-width: none !important;
+}
+
+/* Ensure SVG preserves aspect ratio while filling space */
+.erd-svg-container svg:not([viewBox]) {
+  /* Fallback viewBox if missing */
+  aspect-ratio: 4/3;
+}
+
+/* Fix for Safari and older browsers - GPU acceleration */
+.erd-svg-container {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Dark mode adjustments */
+.dark .erd-svg-container {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* svg-pan-zoom specific fixes */
+.erd-svg-container .svg-pan-zoom_viewport {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Loading state */
+.erd-svg-container.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* Interactive controls styling */
+.erd-controls {
+  pointer-events: auto;
+  user-select: none;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 768px) {
+  .erd-controls {
+    bottom: 8px !important;
+    right: 8px !important;
+  }
+  
+  .erd-controls button {
+    min-height: 40px;
+    min-width: 40px;
+  }
+}
+
+/* Animation for smooth interactions */
+.erd-controls button {
+  transition: all 0.15s ease-in-out;
+}
+
+.erd-controls button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+}
+
+.erd-controls button:active {
+  transform: translateY(0);
+}
+
+/* Keyboard focus styles */
+.erd-controls button:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}

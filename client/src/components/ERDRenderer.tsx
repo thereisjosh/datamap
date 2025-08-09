@@ -1,8 +1,10 @@
-import React, { useEffect, useState, memo } from 'react';
+import React, { useEffect, useState, memo, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
+import svgPanZoom from 'svg-pan-zoom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Download, Copy, AlertCircle } from 'lucide-react';
+import { Download, Copy, AlertCircle, ZoomIn, ZoomOut, RotateCcw, Move, Maximize2 } from 'lucide-react';
+import './ERDRenderer.css';
 
 interface ERDRendererProps {
   mermaidCode?: string;
@@ -19,8 +21,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const [svgContent, setSvgContent] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
+  
+  // Pan-Zoom state and refs
+  const svgContainerRef = useRef<HTMLDivElement>(null);
+  const panZoomInstance = useRef<any>(null);
+  const [currentZoom, setCurrentZoom] = useState<number>(100);
+  const [isPanEnabled, setIsPanEnabled] = useState<boolean>(true);
 
-  // Initialize Mermaid once
+  // Initialize Mermaid with industry standard responsive configuration
   useEffect(() => {
     try {
       mermaid.initialize({
@@ -28,10 +36,11 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         theme: isDarkMode ? 'dark' : 'default',
         securityLevel: 'loose',
         fontFamily: 'Arial, sans-serif',
-        useMaxWidth: true,
+        // Industry standard responsive configuration
+        useMaxWidth: true, // Enable responsive scaling - key for container filling
         er: {
           layoutDirection: 'TB',
-          useMaxWidth: false,
+          useMaxWidth: true, // Override for ER diagrams specifically
         },
       });
     } catch (err) {
@@ -67,25 +76,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         
         if (!cancelled) {
           console.log('✅ Mermaid render completed successfully');
-          console.log('📊 SVG content preview (first 200 chars):', svg.substring(0, 200));
-          console.log('📏 SVG content length:', svg.length);
           
-          // Format SVG with proper wrapper for browser display
-          const formattedSvgContent = `
-            <div style="
-              width: 100%; 
-              height: 100%; 
-              overflow: auto; 
-              background: white;
-              padding: 10px;
-              border: 1px solid #ddd;
-            ">
-              ${svg}
-            </div>
-          `;
-          
-          setSvgContent(formattedSvgContent);
-          console.log('✅ SVG content set with formatting wrapper');
+          // Use clean SVG directly - let CSS handle responsive styling
+          setSvgContent(svg);
         }
         
       } catch (error) {
@@ -99,21 +92,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               const { svg } = await mermaid.render(`erd-simplified-${Date.now()}`, simplifiedERD);
               if (!cancelled) {
                 console.log('✅ Simplified ERD rendered successfully');
-                console.log('📊 Simplified SVG preview (first 200 chars):', svg.substring(0, 200));
                 
-                const formattedSimplifiedContent = `
-                  <div style="width: 100%; height: 100%; overflow: auto; background: white;">
-                    <div style="padding: 15px; background: #d4edda; border-bottom: 1px solid #c3e6cb; font-size: 14px; margin-bottom: 10px;">
-                      🎯 <strong>Domain-Focused ERD</strong> - Showing key tables from your database
-                    </div>
-                    <div style="padding: 20px; background: white;">
-                      ${svg}
-                    </div>
-                  </div>
-                `;
-                
-                setSvgContent(formattedSimplifiedContent);
-                console.log('✅ Simplified SVG content set with formatting');
+                // Use clean SVG for simplified version too
+                setSvgContent(svg);
               }
             } catch (simplifiedError) {
               console.error('Simplified ERD also failed:', simplifiedError);
@@ -139,6 +120,115 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       cancelled = true;
     };
   }, [mermaidCode, isDarkMode]);
+
+  // Initialize svg-pan-zoom after SVG content is rendered - industry standard approach
+  useEffect(() => {
+    if (svgContent && svgContainerRef.current) {
+      // Small delay to ensure SVG is properly rendered in DOM
+      const timeoutId = setTimeout(() => {
+        const svgElement = svgContainerRef.current?.querySelector('svg');
+        
+        if (svgElement && !panZoomInstance.current) {
+          try {
+            // Save original height before svg-pan-zoom (known issue workaround)
+            const originalHeight = svgElement.getAttribute('height');
+            
+            panZoomInstance.current = svgPanZoom(svgElement, {
+              zoomEnabled: true,
+              panEnabled: isPanEnabled,
+              controlIconsEnabled: false, // We use custom controls
+              fit: true,
+              center: true,
+              zoomScaleSensitivity: 0.3,
+              minZoom: 0.1,
+              maxZoom: 10,
+              beforeZoom: function(oldScale: number, newScale: number) {
+                setCurrentZoom(Math.round(newScale * 100));
+                return true;
+              },
+              beforePan: function() {
+                return isPanEnabled;
+              }
+            });
+            
+            // Restore height if it was clipped (known svg-pan-zoom issue)
+            if (originalHeight && originalHeight !== '150px') {
+              svgElement.setAttribute('height', originalHeight);
+            }
+            
+            // Set initial zoom level
+            const initialZoom = panZoomInstance.current.getZoom();
+            setCurrentZoom(Math.round(initialZoom * 100));
+            
+            console.log('✅ svg-pan-zoom initialized successfully');
+          } catch (error) {
+            console.error('Failed to initialize svg-pan-zoom:', error);
+          }
+        }
+      }, 100);
+
+      return () => {
+        clearTimeout(timeoutId);
+        if (panZoomInstance.current) {
+          panZoomInstance.current.destroy();
+          panZoomInstance.current = null;
+        }
+      };
+    }
+  }, [svgContent, isPanEnabled]);
+
+  // Handle window resize for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      if (panZoomInstance.current) {
+        setTimeout(() => {
+          panZoomInstance.current.updateBBox();
+          panZoomInstance.current.fit();
+          panZoomInstance.current.center();
+        }, 100);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Interactive control functions
+  const handleZoomIn = useCallback(() => {
+    if (panZoomInstance.current) {
+      panZoomInstance.current.zoomIn();
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (panZoomInstance.current) {
+      panZoomInstance.current.zoomOut();
+    }
+  }, []);
+
+  const handleReset = useCallback(() => {
+    if (panZoomInstance.current) {
+      panZoomInstance.current.resetZoom();
+      panZoomInstance.current.center();
+    }
+  }, []);
+
+  const handleFit = useCallback(() => {
+    if (panZoomInstance.current) {
+      panZoomInstance.current.fit();
+      panZoomInstance.current.center();
+    }
+  }, []);
+
+  const handleTogglePan = useCallback(() => {
+    setIsPanEnabled(prev => {
+      const newValue = !prev;
+      if (panZoomInstance.current) {
+        panZoomInstance.current.enablePan(newValue);
+      }
+      return newValue;
+    });
+  }, []);
 
   const createSimplifiedERD = (fullCode: string): string => {
     // Analyze relationships to find key tables by domain
@@ -340,42 +430,104 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         </Button>
       </div>
 
-      {/* Diagram container using Direct SVG Rendering */}
+      {/* Responsive SVG container - industry standard approach */}
       <div 
-        className="border rounded-lg p-4 bg-white dark:bg-gray-900 overflow-auto flex-1"
+        className="border rounded-lg p-4 bg-white dark:bg-gray-900 flex-1 relative"
         style={{ 
-          minHeight: '500px',
           width: '100%',
-          height: '100%'
+          height: '100%',
+          overflow: 'hidden' // Prevent control overflow
         }}
       >
-        <div
-          style={{
-            width: '100%',
-            minHeight: '500px',
-            height: 'auto',
-            border: '1px solid #ddd',
-            overflow: 'auto',
-            backgroundColor: '#f9f9f9',
-            position: 'relative',
-            display: 'block'
-          }}
-        >
-          {svgContent ? (
-            <div dangerouslySetInnerHTML={{ __html: svgContent }} />
-          ) : mermaidCode ? (
-            <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
-              <div>Processing ERD diagram...</div>
-              <div style={{ fontSize: '12px', marginTop: '10px' }}>
-                Using industry-standard Direct SVG Rendering
+        {svgContent ? (
+          <>
+            {/* SVG content container with responsive styling */}
+            <div 
+              ref={svgContainerRef}
+              dangerouslySetInnerHTML={{ __html: svgContent }}
+              style={{ 
+                width: '100%',
+                height: '100%'
+              }}
+              className="erd-svg-container"
+            />
+            
+            {/* Floating Interactive Controls */}
+            <div 
+              className="erd-controls absolute bottom-4 right-4 flex flex-col gap-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border p-2"
+              style={{ zIndex: 100 }}
+            >
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleZoomIn}
+                  title="Zoom In (+)"
+                  className="h-8 w-8 p-0"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleZoomOut}
+                  title="Zoom Out (-)"
+                  className="h-8 w-8 p-0"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleReset}
+                  title="Reset (0)"
+                  className="h-8 w-8 p-0"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleFit}
+                  title="Fit to Screen (F)"
+                  className="h-8 w-8 p-0"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <Button
+                variant={isPanEnabled ? "default" : "ghost"}
+                size="sm"
+                onClick={handleTogglePan}
+                title="Toggle Pan Mode (Space)"
+                className="h-8 w-8 p-0"
+              >
+                <Move className="h-4 w-4" />
+              </Button>
+              
+              {/* Zoom indicator */}
+              <div className="text-xs text-center text-muted-foreground mt-1">
+                {currentZoom}%
               </div>
             </div>
-          ) : (
-            <div style={{ padding: '20px', color: '#666', textAlign: 'center' }}>
-              Upload an Excel file to see the ERD
+          </>
+        ) : mermaidCode ? (
+          <div className="flex items-center justify-center h-full text-center text-muted-foreground">
+            <div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+              <div>Processing ERD diagram...</div>
+              <div className="text-xs mt-2">Using industry-standard responsive rendering</div>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full text-center text-muted-foreground">
+            Upload an Excel file to see the ERD
+          </div>
+        )}
       </div>
     </div>
   );
