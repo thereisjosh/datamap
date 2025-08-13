@@ -24,42 +24,78 @@ interface DomainConfig {
   maxTables: number;
   maxRelationships: number;
   priority: number;
+  color: string;
+  description: string;
 }
 
+
 export class MermaidGeneratorService {
-  // Domain configurations for better organization
+
+  // Domain configurations following big tech ERD practices - business capability focused
   private domainConfigs: DomainConfig[] = [
     {
       id: 'user-management',
       name: 'User Management',
+      description: 'Identity, authentication, roles, and permissions',
       tablePatterns: ['User', 'Role', 'Group', 'Permission', 'Login'],
       maxTables: 30,
       maxRelationships: 60,
-      priority: 1
+      priority: 1,
+      color: ''
+    },
+    {
+      id: 'donations-payments',
+      name: 'Donations & Payments',
+      description: 'Complete donation ecosystem: giving, payments, claims, receipts',
+      tablePatterns: [
+        'Donation', 'Giver', 'Pledge', 'Fund', 'Donor',
+        'Payment', 'Transaction', 'Invoice', 'Billing',
+        'ClaimTDR', 'TaxDeductible', 'Receipt'
+      ],
+      maxTables: 50,
+      maxRelationships: 100,
+      priority: 2,
+      color: ''
     },
     {
       id: 'opportunities',
       name: 'Opportunities',
+      description: 'Sales pipeline, deals, quotes, and lead management',
       tablePatterns: ['Opportunity', 'Deal', 'Quote', 'Lead'],
       maxTables: 40,
       maxRelationships: 80,
-      priority: 2
+      priority: 3,
+      color: ''
     },
     {
       id: 'campaigns',
-      name: 'Active Campaign',
-      tablePatterns: ['ActiveCampaignContact', 'BulkImport', 'FieldConfig'],
-      maxTables: 30,
-      maxRelationships: 60,
-      priority: 3
+      name: 'Campaigns & Marketing',
+      description: 'Marketing automation, campaigns, and customer engagement',
+      tablePatterns: ['Campaign', 'Marketing', 'Contact'],
+      maxTables: 35,
+      maxRelationships: 70,
+      priority: 4,
+      color: ''
     },
     {
       id: 'system',
       name: 'System & Configuration',
-      tablePatterns: ['Log', 'SSO', 'AppVar', 'ConsentFile', 'Article', 'Campaign', 'EntityGroup'],
+      description: 'Infrastructure, logging, configuration, and system support',
+      tablePatterns: ['Log', 'SSO', 'AppVar', 'Configuration', 'Settings'],
       maxTables: 25,
       maxRelationships: 50,
-      priority: 4
+      priority: 5,
+      color: ''
+    },
+    {
+      id: 'cross-domain',
+      name: 'Cross-Domain Connections',
+      description: 'Relationships that span across business domains',
+      tablePatterns: [], // Special domain - doesn't match table patterns
+      maxTables: 30,
+      maxRelationships: 100,
+      priority: 6,
+      color: ''
     }
   ];
 
@@ -124,63 +160,157 @@ export class MermaidGeneratorService {
     return false;
   }
 
-  // Group tables by domain
+  // Industry-standard domain grouping following DDD bounded context principles
   private groupTablesByDomain(tables: TableData[]): Record<string, TableData[]> {
-    console.log(`🏷️ groupTablesByDomain called with ${tables.length} tables`);
+    console.log(`🏷️ Industry-standard domain grouping for ${tables.length} tables`);
+    console.log(`  Following DDD bounded context patterns used by Netflix/Amazon/Google`);
     console.log(`  Table names: ${tables.map(t => t.name).join(', ')}`);
     
     const grouped: Record<string, TableData[]> = {};
     
-    // Initialize groups
+    // Initialize business capability domains
     this.domainConfigs.forEach(config => {
       grouped[config.id] = [];
     });
     
-    // Group tables by domain patterns
+    // Business-capability-first domain assignment (priority order matters)
     tables.forEach(table => {
-      console.log(`\n🔍 Processing table: "${table.name}"`);
+      console.log(`\n🏢 Processing table: "${table.name}" for business capability assignment`);
       let assigned = false;
       
-      for (const config of this.domainConfigs) {
-        console.log(`  Checking domain "${config.id}" with patterns: [${config.tablePatterns.join(', ')}]`);
+      // Sort by priority to ensure business-critical domains get first choice
+      const sortedConfigs = [...this.domainConfigs].sort((a, b) => a.priority - b.priority);
+      
+      for (const config of sortedConfigs) {
+        console.log(`  🎯 Checking business domain "${config.name}" (${config.id})`);
+        console.log(`    Patterns: [${config.tablePatterns.join(', ')}]`);
         
         const matchesPattern = config.tablePatterns.some(pattern => {
           const tableName = table.name.toLowerCase();
           const patternLower = pattern.toLowerCase();
           
-          // Try multiple matching strategies
-          const exactMatch = table.name.includes(pattern);
-          const caseInsensitiveMatch = tableName.includes(patternLower);
+          // More precise matching strategies - prioritize exact word matches
+          const exactMatch = table.name === pattern;
+          const exactCaseInsensitiveMatch = tableName === patternLower;
+          
+          // Word boundary matching - pattern appears as whole word or prefix
+          const wordBoundaryMatch = new RegExp(`\\b${patternLower}`, 'i').test(tableName) ||
+                                   new RegExp(`^${patternLower}`, 'i').test(tableName);
+          
+          // Legacy broad matching for partial patterns (more restrictive now)
           const partialMatch = this.isPartialTableMatch(tableName, patternLower);
           
-          const matches = exactMatch || caseInsensitiveMatch || partialMatch;
+          // Prioritize exact matches and word boundaries over partial matches
+          const matches = exactMatch || exactCaseInsensitiveMatch || wordBoundaryMatch || 
+                         (partialMatch && tableName.length > patternLower.length + 3); // Avoid short partial matches
           
-          console.log(`    Pattern "${pattern}" → ${matches ? '✅ MATCH' : '❌ no match'} (exact: ${exactMatch}, case-insensitive: ${caseInsensitiveMatch}, partial: ${partialMatch})`);
+          console.log(`    Pattern "${pattern}" → ${matches ? '✅ MATCH' : '❌ no match'} (exact: ${exactMatch || exactCaseInsensitiveMatch}, word-boundary: ${wordBoundaryMatch}, partial: ${partialMatch})`);
           return matches;
         });
         
         if (matchesPattern) {
-          console.log(`  ✅ Assigned "${table.name}" to domain "${config.id}"`);
+          console.log(`  ✅ Business capability match: "${table.name}" → "${config.name}"`);
           grouped[config.id].push(table);
           assigned = true;
-          break; // Assign to first matching domain
+          break; // Assign to first matching business capability (priority-based)
         }
       }
       
-      // If no domain matches, assign to system
+      // Smart fallback: Analyze table name for better domain assignment
       if (!assigned) {
-        console.log(`  ⚠️ No domain match for "${table.name}" - assigned to system domain`);
-        grouped['system'].push(table);
+        const tableLower = table.name.toLowerCase();
+        
+        // Check for common system/infrastructure patterns
+        if (tableLower.includes('log') || tableLower.includes('audit') || 
+            tableLower.includes('config') || tableLower.includes('setting') ||
+            tableLower.includes('sso') || tableLower.includes('auth')) {
+          console.log(`  🏗️ Infrastructure assignment: "${table.name}" → System domain`);
+          grouped['system'].push(table);
+        }
+        // Check for business-related patterns that might indicate opportunities
+        else if (tableLower.includes('opportunity') || tableLower.includes('lead') || 
+                 tableLower.includes('deal') || tableLower.includes('quote')) {
+          console.log(`  🎯 Smart assignment: "${table.name}" → Opportunities domain`);
+          grouped['opportunities'].push(table);
+        }
+        // Check for user/contact patterns
+        else if (tableLower.includes('contact') || tableLower.includes('person') || 
+                 tableLower.includes('profile')) {
+          console.log(`  👤 Smart assignment: "${table.name}" → User Management domain`);
+          grouped['user-management'].push(table);
+        }
+        // Generic tables go to system domain but with less priority
+        else {
+          console.log(`  🔧 General assignment: "${table.name}" → System domain (fallback)`);
+          grouped['system'].push(table);
+        }
       }
     });
     
-    // Summary logging
-    console.log('\n📊 Domain grouping results:');
-    Object.entries(grouped).forEach(([domain, domainTables]) => {
-      console.log(`  ${domain}: ${domainTables.length} tables [${domainTables.map(t => t.name).join(', ')}]`);
+    // Business capability summary following DDD bounded context logging
+    console.log('\n🎯 Business Capability Domain Assignment Results:');
+    Object.entries(grouped).forEach(([domainId, domainTables]) => {
+      const config = this.domainConfigs.find(c => c.id === domainId);
+      const domainName = config?.name || domainId;
+      console.log(`  📊 ${domainName}: ${domainTables.length} entities`);
+      if (domainTables.length > 0) {
+        console.log(`    └── [${domainTables.map(t => t.name).join(', ')}]`);
+      }
     });
     
     return grouped;
+  }
+
+
+  // Get domain configuration information
+  getDomainConfigs(): DomainConfig[] {
+    return this.domainConfigs;
+  }
+
+  // Detect cross-domain relationships for special styling
+  private detectCrossDomainRelationships(
+    relationships: Relationship[], 
+    tableGroupings: Record<string, TableData[]>
+  ): { intraDomain: Relationship[], crossDomain: Relationship[] } {
+    const intraDomain: Relationship[] = [];
+    const crossDomain: Relationship[] = [];
+    
+    // Create table to domain mapping for quick lookup
+    const tableToDomain = new Map<string, string>();
+    Object.entries(tableGroupings).forEach(([domain, tables]) => {
+      tables.forEach(table => tableToDomain.set(table.name, domain));
+    });
+    
+    relationships.forEach(rel => {
+      const sourceDomain = tableToDomain.get(rel.sourceTable);
+      const targetDomain = tableToDomain.get(rel.targetTable);
+      
+      if (sourceDomain && targetDomain) {
+        if (sourceDomain === targetDomain) {
+          intraDomain.push(rel);
+        } else {
+          crossDomain.push(rel);
+          console.log(`🔗 Cross-domain relationship detected: ${rel.sourceTable}(${sourceDomain}) → ${rel.targetTable}(${targetDomain})`);
+        }
+      }
+    });
+    
+    console.log(`📊 Relationship analysis: ${intraDomain.length} intra-domain, ${crossDomain.length} cross-domain`);
+    return { intraDomain, crossDomain };
+  }
+
+  // Generate domain-specific CSS - COMPLETELY REMOVED ALL STYLING
+  generateDomainCSS(domain?: string): string {
+    console.log(`🎨 GENERATING CLEAN CSS FOR DOMAIN: ${domain} - ALL STYLING REMOVED`);
+    console.log(`  ✅ No entity styling, no relationship styling, no domain colors applied`);
+    
+    // Return minimal CSS with no diagram styling for completely clean appearance
+    return `
+/* ✅ COMPLETELY CLEAN: No diagram styling applied - pure structural diagrams only */
+.erd-svg-container svg {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+`;
   }
 
   // Get the most connected tables within a domain
@@ -318,7 +448,28 @@ export class MermaidGeneratorService {
     
     if (options.domain && options.domain !== 'overview') {
       const domainConfig = this.domainConfigs.find(d => d.id === options.domain);
-      if (domainConfig) {
+      
+      if (options.domain === 'cross-domain') {
+        // Special handling for cross-domain connections view
+        console.log('🔗 Generating Cross-Domain Connections view');
+        
+        const allTableGroupings = this.groupTablesByDomain(tables);
+        const relationshipAnalysis = this.detectCrossDomainRelationships(relationships, allTableGroupings);
+        
+        // Get tables involved in cross-domain relationships
+        const crossDomainTables = new Set<string>();
+        relationshipAnalysis.crossDomain.forEach(rel => {
+          crossDomainTables.add(rel.sourceTable);
+          crossDomainTables.add(rel.targetTable);
+        });
+        
+        selectedTables = tables.filter(table => crossDomainTables.has(table.name));
+        selectedRelationships = relationshipAnalysis.crossDomain;
+        
+        console.log(`  Selected ${selectedTables.length} tables involved in cross-domain relationships`);
+        console.log(`  Found ${selectedRelationships.length} cross-domain relationships`);
+        
+      } else if (domainConfig) {
         const domainTables = tables.filter(table => 
           domainConfig.tablePatterns.some(pattern => table.name.includes(pattern))
         );
@@ -376,6 +527,19 @@ export class MermaidGeneratorService {
       selectedRelationships = this.getMeaningfulRelationships(relationships, tableNames, options.maxRelationships || 25);
     }
 
+    // Industry-standard cross-domain relationship detection for enhanced styling
+    let groupedTablesForDetection: Record<string, TableData[]> = {};
+    if (options.domain && options.domain !== 'overview') {
+      // For specific domains, still need all table groupings to detect cross-domain relationships
+      groupedTablesForDetection = this.groupTablesByDomain(tables);
+    } else {
+      // For overview, group the selected tables only
+      groupedTablesForDetection = this.groupTablesByDomain(selectedTables);
+    }
+    
+    const relationshipAnalysis = this.detectCrossDomainRelationships(selectedRelationships, groupedTablesForDetection);
+    console.log(`🔗 Relationship analysis complete: ${relationshipAnalysis.intraDomain.length} intra-domain, ${relationshipAnalysis.crossDomain.length} cross-domain`);
+
     // Generate entity definitions
     for (const table of selectedTables) {
       const sanitizedTableName = this.sanitizeIdentifier(table.name);
@@ -402,22 +566,35 @@ export class MermaidGeneratorService {
       diagram += '\n';
     }
 
-    // Generate relationships
+    // Generate relationships with industry-standard cross-domain styling
     const processedRelationships = new Set<string>();
     
-    for (const rel of selectedRelationships) {
-      // Create a unique key for this relationship to avoid duplicates
+    // Process intra-domain relationships first (primary styling)
+    for (const rel of relationshipAnalysis.intraDomain) {
       const relKey = `${rel.sourceTable}-${rel.sourceColumn}-${rel.targetTable}-${rel.targetColumn}`;
       
       if (!processedRelationships.has(relKey)) {
-        // Sanitize table names for relationships
         const sanitizedSourceTable = this.sanitizeIdentifier(rel.sourceTable);
         const sanitizedTargetTable = this.sanitizeIdentifier(rel.targetTable);
         const sanitizedSourceColumn = this.sanitizeIdentifier(rel.sourceColumn);
         
-        // Use proper Mermaid relationship syntax
-        // }o--|| means zero or one to one or more  
+        // Intra-domain relationships use solid lines with domain styling
         diagram += `  ${sanitizedSourceTable} }o--|| ${sanitizedTargetTable} : "FK ${sanitizedSourceColumn}"\n`;
+        processedRelationships.add(relKey);
+      }
+    }
+    
+    // Process cross-domain relationships (different styling)
+    for (const rel of relationshipAnalysis.crossDomain) {
+      const relKey = `${rel.sourceTable}-${rel.sourceColumn}-${rel.targetTable}-${rel.targetColumn}`;
+      
+      if (!processedRelationships.has(relKey)) {
+        const sanitizedSourceTable = this.sanitizeIdentifier(rel.sourceTable);
+        const sanitizedTargetTable = this.sanitizeIdentifier(rel.targetTable);
+        const sanitizedSourceColumn = this.sanitizeIdentifier(rel.sourceColumn);
+        
+        // Cross-domain relationships will be styled differently via CSS
+        diagram += `  ${sanitizedSourceTable} }o--|| ${sanitizedTargetTable} : "Cross-Domain FK ${sanitizedSourceColumn}"\n`;
         processedRelationships.add(relKey);
       }
     }

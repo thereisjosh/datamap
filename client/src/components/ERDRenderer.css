@@ -11,17 +11,83 @@
 /* Make SVG elements responsive and fill container */
 .erd-svg-container svg {
   width: 100% !important;
-  height: auto !important;
+  height: 100% !important;  /* Changed from 'auto' to '100%' to prevent viewBox collapse */
   max-width: 100% !important;
   max-height: 100% !important;
-  display: block;
+  min-height: 400px !important; /* Prevent complete collapse during viewBox changes */
+  min-width: 300px !important;  /* Prevent width collapse */
+  display: block !important;
   /* Ensure proper scaling in all browsers */
   object-fit: contain;
+  /* Prevent collapse during viewBox manipulation */
+  flex-shrink: 0 !important;
+  /* Force dimensions even with problematic attributes */
+  box-sizing: border-box !important;
+}
+
+/* Aggressive fix for SVGs with height="null" or other problematic values */
+.erd-svg-container svg[height="null"],
+.erd-svg-container svg[height="0"],
+.erd-svg-container svg[height="0px"],
+.erd-svg-container svg[height=""],
+.erd-svg-container svg:not([height]) {
+  height: 100% !important;
+  min-height: 400px !important;
+}
+
+/* Aggressive fix for SVGs with width="null" or other problematic values */
+.erd-svg-container svg[width="null"],
+.erd-svg-container svg[width="0"],
+.erd-svg-container svg[width="0px"],
+.erd-svg-container svg[width=""],
+.erd-svg-container svg:not([width]) {
+  width: 100% !important;
+  min-width: 300px !important;
 }
 
 /* Force responsive behavior for Mermaid SVGs with useMaxWidth */
 .erd-svg-container svg[style*="max-width"] {
   max-width: none !important;
+}
+
+/* Transform group smooth transitions for pan-zoom - SVG-native transforms only */
+.erd-svg-container svg #pan-zoom-group {
+  /* SVG-native transforms with CSS transitions on transform attribute */
+  transition: transform 0.3s ease-out;
+  /* No CSS transforms - using SVG transform attribute only */
+}
+
+/* Disable transitions during dragging for better performance */
+.erd-svg-container.dragging svg #pan-zoom-group {
+  transition: none;
+}
+
+/* Professional selection handles styling - WCAG compliant */
+.erd-svg-container svg .selection-handle {
+  /* Ensure handles stay visible at all zoom levels */
+  vector-effect: non-scaling-stroke;
+  
+  /* Smooth transitions for handles */
+  transition: opacity 0.2s ease;
+  
+  /* Ensure handles are always on top */
+  z-index: 1000;
+}
+
+/* Handle visibility animation */
+.erd-svg-container svg .selection-handle {
+  animation: handle-appear 0.2s ease-out;
+}
+
+@keyframes handle-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Ensure SVG preserves aspect ratio while filling space */

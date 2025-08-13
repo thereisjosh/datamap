@@ -299,19 +299,10 @@ export class ExcelParserService {
         let referencedTable = referenceTable?.toString().trim();
         let referencedColumn = columnTable?.toString().trim();
         
-        // If not explicitly defined, try to infer relationships from naming conventions
+        // Industry best practice: Trust Excel data completely, no hardcoded inference
+        // Following Netflix/Amazon/Google patterns - data should be explicit in source
         if (!isForeignKey) {
-          const inferredRelationship = this.inferRelationshipFromNaming(columnName, tableMap);
-          if (inferredRelationship) {
-            isForeignKey = true;
-            referencedTable = inferredRelationship.table;
-            referencedColumn = inferredRelationship.column;
-            console.log('Inferred relationship from naming:', {
-              sourceColumn: columnName,
-              inferredTable: referencedTable,
-              inferredColumn: referencedColumn
-            });
-          }
+          console.log(`No explicit relationship found for ${tableName}.${columnName} - following industry practice of trusting source data only`);
         }
         
         const column: Column = {

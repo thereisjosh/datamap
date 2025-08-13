@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERDgen Backend Services - API Documentation & Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', 'sans-serif'],
+                        'mono': ['JetBrains Mono', 'Monaco', 'Consolas', 'monospace']
+                    },
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8'
+                        }
+                    }
+                }
+            },
+            darkMode: 'class'
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 font-sans">
+    <!-- @COMPONENT: Navigation Header -->
+    <header class="sticky top-0 z-50 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-server text-white text-lg"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold text-slate-900 dark:text-white">ERDgen Backend</h1>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">API Services & Management</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <!-- Service Status Indicator -->
+                    <div class="flex items-center space-x-2 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 rounded-full">
+                        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span class="text-sm font-medium text-green-700 dark:text-green-400">Services Online</span>
+                    </div>
+                    
+                    <!-- Theme Toggle -->
+                    <button id="theme-toggle" class="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                        <i class="fas fa-moon dark:hidden text-slate-600"></i>
+                        <i class="fas fa-sun hidden dark:block text-slate-300"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+    <!-- @END_COMPONENT: Navigation Header -->
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <!-- @COMPONENT: Service Overview Dashboard -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-6">Service Overview</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Health Status Card -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-heartbeat text-green-600 dark:text-green-400 text-xl"></i>
+                        </div>
+                        <span class="px-2 py-1 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">
+                            Healthy
+                        </span>
+                    </div>
+                    <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-1">System Health</h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">All services operational</p>
+                    <div class="mt-3 text-xs text-slate-400 dark:text-slate-500">
+                        Last check: <span data-mock="true">2 minutes ago</span>
+                    </div>
+                </div>
+
+                <!-- Upload Statistics Card -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-upload text-blue-600 dark:text-blue-400 text-xl"></i>
+                        </div>
+                        <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 text-xs font-medium rounded-full">
+                            +12%
+                        </span>
+                    </div>
+                    <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-1">Files Processed</h3>
+                    <p class="text-2xl font-bold text-slate-900 dark:text-white" data-mock="true">1,247</p>
+                    <div class="mt-3 text-xs text-slate-400 dark:text-slate-500">
+                        This month
+                    </div>
+                </div>
+
+                <!-- Error Rate Card -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-orange-100 dark:bg-orange-900/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-exclamation-triangle text-orange-600 dark:text-orange-400 text-xl"></i>
+                        </div>
+                        <span class="px-2 py-1 bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 text-xs font-medium rounded-full">
+                            -8%
+                        </span>
+                    </div>
+                    <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-1">Error Rate</h3>
+                    <p class="text-2xl font-bold text-slate-900 dark:text-white" data-mock="true">0.3%</p>
+                    <div class="mt-3 text-xs text-slate-400 dark:text-slate-500">
+                        Last 7 days
+                    </div>
+                </div>
+
+                <!-- Response Time Card -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-tachometer-alt text-purple-600 dark:text-purple-400 text-xl"></i>
+                        </div>
+                        <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 text-xs font-medium rounded-full">
+                            Optimal
+                        </span>
+                    </div>
+                    <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-1">Avg Response</h3>
+                    <p class="text-2xl font-bold text-slate-900 dark:text-white" data-mock="true">284ms</p>
+                    <div class="mt-3 text-xs text-slate-400 dark:text-slate-500">
+                        P95: <span data-mock="true">450ms</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- @END_COMPONENT: Service Overview Dashboard -->
+
+        <!-- @COMPONENT: API Endpoints Documentation -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-6">API Endpoints</h2>
+            
+            <div class="space-y-6">
+                <!-- Parse Excel Endpoint -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div class="p-6 border-b border-slate-200 dark:border-slate-700">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center space-x-3">
+                                <span class="px-3 py-1 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm font-bold rounded-md">
+                                    POST
+                                </span>
+                                <code class="text-lg font-mono text-slate-900 dark:text-white">/api/parse-excel</code>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-link text-slate-400"></i>
+                                <span class="text-sm text-slate-500 dark:text-slate-400">Connected to UploadPanel</span>
+                            </div>
+                        </div>
+                        <p class="text-slate-600 dark:text-slate-300 mb-4">
+                            Accepts uploaded Excel files and extracts table metadata, column definitions, and foreign key relationships.
+                        </p>
+                        
+                        <!-- Request Details -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div>
+                                <h4 class="text-sm font-semibold text-slate-900 dark:text-white mb-3">Request</h4>
+                                <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                                    <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">Content-Type: multipart/form-data</p>
+                                    <pre class="text-sm font-mono text-slate-700 dark:text-slate-300"><code>file: Excel file (.xlsx)
+Max size: 5MB
+Required sheets:
+- TableMetadata
+- AttributeMetadata</code></pre>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h4 class="text-sm font-semibold text-slate-900 dark:text-white mb-3">Response</h4>
+                                <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                                    <pre class="text-sm font-mono text-slate-700 dark:text-slate-300"><code>{
+  "tables": [
+    {
+      "name": "User",
+      "attributes": [
+        {
+          "name": "Id",
+          "type": "int",
+          "is_pk": true
+        }
+      ]
+    }
+  ],
+  "relationships": [...]
+}</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Interactive Test Panel -->
+                    <div class="p-6 bg-slate-50 dark:bg-slate-900/50">
+                        <h4 class="text-sm font-semibold text-slate-900 dark:text-white mb-3">Test This Endpoint</h4>
+                        <div class="flex items-center space-x-4">
+                            <input type="file" accept=".xlsx" class="block w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" data-mock="true">
+                            <button class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition-colors">
+                                Test Upload
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                            <!-- @FUNCTIONALITY: File upload testing should validate file type and size, then call the actual API endpoint -->
+                            Upload a sample Excel file to test the parsing functionality
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Generate Mermaid Endpoint -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div class="p-6 border-b border-slate-200 dark:border-slate-700">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center space-x-3">
+                                <span class="px-3 py-1 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm font-bold rounded-md">
+                                    POST
+                                </span>
+                                <code class="text-lg font-mono text-slate-900 dark:text-white">/api/generate-mermaid</code>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-link text-slate-400"></i>
+                                <span class="text-sm text-slate-500 dark:text-slate-400">Connected to ERDRenderer</span>
+                            </div>
+                        </div>
+                        <p class="text-slate-600 dark:text-slate-300 mb-4">
+                            Converts parsed table metadata into valid Mermaid ERD syntax for diagram rendering.
+                        </p>
+                        
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div>
+                                <h4 class="text-sm font-semibold text-slate-900 dark:text-white mb-3">Request</h4>
+                                <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                                    <pre class="text-sm font-mono text-slate-700 dark:text-slate-300"><code>{
+  "tables": [...],
+  "relationships": [...],
+  "options": {
+    "theme": "default",
+    "direction": "TB"
+  }
+}</code></pre>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h4 class="text-sm font-semibold text-slate-900 dark:text-white mb-3">Response</h4>
+                                <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                                    <pre class="text-sm font-mono text-slate-700 dark:text-slate-300"><code>{
+  "diagram": "erDiagram\n  User {...}\n  Order {...}",
+  "metadata": {
+    "tables_count": 3,
+    "relationships_count": 2
+  }
+}</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-6 bg-slate-50 dark:bg-slate-900/50">
+                        <h4 class="text-sm font-semibold text-slate-900 dark:text-white mb-3">Test This Endpoint</h4>
+                        <div class="space-y-3">
+                            <textarea class="w-full h-24 p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono" placeholder="Paste JSON metadata here..." data-mock="true"></textarea>
+                            <div class="flex justify-between items-center">
+                                <button class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition-colors">
+                                    Generate Mermaid
+                                </button>
+                                <button class="px-4 py-2 text-primary-600 hover:text-primary-700 text-sm font-medium">
+                                    Load Sample Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Health Check Endpoint -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div class="p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center space-x-3">
+                                <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 text-sm font-bold rounded-md">
+                                    GET
+                                </span>
+                                <code class="text-lg font-mono text-slate-900 dark:text-white">/api/health</code>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span class="text-sm text-green-600 dark:text-green-400 font-medium">Active</span>
+                            </div>
+                        </div>
+                        <p class="text-slate-600 dark:text-slate-300 mb-4">
+                            Returns service health status and system information for monitoring and deployment checks.
+                        </p>
+                        
+                        <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                            <h4 class="text-sm font-semibold text-slate-900 dark:text-white mb-2">Live Response</h4>
+                            <pre class="text-sm font-mono text-slate-700 dark:text-slate-300"><code>{
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "version": "1.0.0",
+  "uptime": "2d 4h 23m",
+  "services": {
+    "excel_parser": "operational",
+    "mermaid_generator": "operational"
+  }
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- @END_COMPONENT: API Endpoints Documentation -->
+
+        <!-- @COMPONENT: Error Handling Examples -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-6">Error Handling</h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Validation Errors -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="w-8 h-8 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-exclamation-circle text-red-600 dark:text-red-400"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Validation Errors</h3>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div class="bg-red-50 dark:bg-red-900/10 rounded-lg p-4 border-l-4 border-red-500">
+                            <p class="text-sm font-medium text-red-800 dark:text-red-300 mb-2">File Size Exceeded</p>
+                            <pre class="text-xs font-mono text-red-700 dark:text-red-400"><code>{
+  "error": "File size exceeds 5MB limit",
+  "code": 413,
+  "details": {
+    "max_size": "5MB",
+    "received_size": "7.2MB"
+  }
+}</code></pre>
+                        </div>
+                        
+                        <div class="bg-red-50 dark:bg-red-900/10 rounded-lg p-4 border-l-4 border-red-500">
+                            <p class="text-sm font-medium text-red-800 dark:text-red-300 mb-2">Missing Required Sheet</p>
+                            <pre class="text-xs font-mono text-red-700 dark:text-red-400"><code>{
+  "error": "Missing required sheet: AttributeMetadata",
+  "code": 422,
+  "available_sheets": ["TableMetadata", "Summary"]
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Processing Errors -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="w-8 h-8 bg-orange-100 dark:bg-orange-900/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-cog text-orange-600 dark:text-orange-400"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Processing Errors</h3>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div class="bg-orange-50 dark:bg-orange-900/10 rounded-lg p-4 border-l-4 border-orange-500">
+                            <p class="text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">Invalid Data Format</p>
+                            <pre class="text-xs font-mono text-orange-700 dark:text-orange-400"><code>{
+  "error": "Invalid column format in row 15",
+  "code": 422,
+  "details": {
+    "row": 15,
+    "column": "Attribute Name",
+    "expected": "string",
+    "received": "null"
+  }
+}</code></pre>
+                        </div>
+                        
+                        <div class="bg-orange-50 dark:bg-orange-900/10 rounded-lg p-4 border-l-4 border-orange-500">
+                            <p class="text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">Mermaid Generation Failed</p>
+                            <pre class="text-xs font-mono text-orange-700 dark:text-orange-400"><code>{
+  "error": "Failed to generate Mermaid syntax",
+  "code": 500,
+  "details": {
+    "tables_processed": 3,
+    "failed_at": "relationship_mapping"
+  }
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- @END_COMPONENT: Error Handling Examples -->
+
+        <!-- @COMPONENT: Configuration Settings -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-6">Configuration</h2>
+            
+            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Runtime Settings -->
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Runtime Settings</h3>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-600 dark:text-slate-300">Max Upload Size</span>
+                                <span class="text-sm font-mono text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">5MB</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-600 dark:text-slate-300">Supported MIME Types</span>
+                                <span class="text-sm font-mono text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">.xlsx</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-600 dark:text-slate-300">CORS Policy</span>
+                                <span class="text-sm font-mono text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">Frontend Only</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-600 dark:text-slate-300">Environment</span>
+                                <span class="text-sm font-mono text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">Development</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Service Dependencies -->
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Service Dependencies</h3>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-600 dark:text-slate-300">Excel Parser (xlsx)</span>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                    <span class="text-sm text-green-600 dark:text-green-400">v0.18.5</span>
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-600 dark:text-slate-300">Express Framework</span>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                    <span class="text-sm text-green-600 dark:text-green-400">v4.18.2</span>
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-600 dark:text-slate-300">Multer (File Upload)</span>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                    <span class="text-sm text-green-600 dark:text-green-400">v1.4.5</span>
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-slate-600 dark:text-slate-300">CORS Middleware</span>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                    <span class="text-sm text-green-600 dark:text-green-400">v2.8.5</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- @END_COMPONENT: Configuration Settings -->
+
+        <!-- @COMPONENT: Live Logs and Activity -->
+        <section class="mb-8">
+            <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-6">Live Activity</h2>
+            
+            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div class="p-6 border-b border-slate-200 dark:border-slate-700">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Request Logs</h3>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span class="text-sm text-slate-500 dark:text-slate-400">Live</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="p-6 bg-slate-50 dark:bg-slate-900">
+                    <div class="font-mono text-sm space-y-2 max-h-64 overflow-y-auto">
+                        <!-- @MAP: logs.map(log => ( -->
+                        <div class="flex items-start space-x-4 text-slate-600 dark:text-slate-300" data-mock="true">
+                            <span class="text-slate-400 dark:text-slate-500 whitespace-nowrap">10:45:23</span>
+                            <span class="text-blue-600 dark:text-blue-400">POST</span>
+                            <span>/api/parse-excel</span>
+                            <span class="text-green-600 dark:text-green-400">200</span>
+                            <span class="text-slate-400 dark:text-slate-500">342ms</span>
+                        </div>
+                        
+                        <div class="flex items-start space-x-4 text-slate-600 dark:text-slate-300" data-mock="true">
+                            <span class="text-slate-400 dark:text-slate-500 whitespace-nowrap">10:44:51</span>
+                            <span class="text-blue-600 dark:text-blue-400">POST</span>
+                            <span>/api/generate-mermaid</span>
+                            <span class="text-green-600 dark:text-green-400">200</span>
+                            <span class="text-slate-400 dark:text-slate-500">127ms</span>
+                        </div>
+                        
+                        <div class="flex items-start space-x-4 text-slate-600 dark:text-slate-300" data-mock="true">
+                            <span class="text-slate-400 dark:text-slate-500 whitespace-nowrap">10:44:15</span>
+                            <span class="text-green-600 dark:text-green-400">GET</span>
+                            <span>/api/health</span>
+                            <span class="text-green-600 dark:text-green-400">200</span>
+                            <span class="text-slate-400 dark:text-slate-500">12ms</span>
+                        </div>
+                        
+                        <div class="flex items-start space-x-4 text-slate-600 dark:text-slate-300" data-mock="true">
+                            <span class="text-slate-400 dark:text-slate-500 whitespace-nowrap">10:43:42</span>
+                            <span class="text-blue-600 dark:text-blue-400">POST</span>
+                            <span>/api/parse-excel</span>
+                            <span class="text-red-600 dark:text-red-400">422</span>
+                            <span class="text-slate-400 dark:text-slate-500">89ms</span>
+                            <span class="text-red-600 dark:text-red-400 text-xs">Missing AttributeMetadata sheet</span>
+                        </div>
+                        
+                        <div class="flex items-start space-x-4 text-slate-600 dark:text-slate-300" data-mock="true">
+                            <span class="text-slate-400 dark:text-slate-500 whitespace-nowrap">10:42:18</span>
+                            <span class="text-blue-600 dark:text-blue-400">POST</span>
+                            <span>/api/parse-excel</span>
+                            <span class="text-green-600 dark:text-green-400">200</span>
+                            <span class="text-slate-400 dark:text-slate-500">523ms</span>
+                        </div>
+                        <!-- @END_MAP -->
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- @END_COMPONENT: Live Logs and Activity -->
+    </main>
+
+    <footer class="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 py-8">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-4 md:mb-0">
+                    <p class="text-sm text-slate-500 dark:text-slate-400">
+                        ERDgen Backend Services v1.0.0 - Built with Node.js & Express
+                    </p>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <a href="#" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                        API Documentation
+                    </a>
+                    <a href="#" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                        GitHub Repository
+                    </a>
+                    <a href="#" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                        Support
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Theme Toggle Functionality
+        (function() {
+            const themeToggle = document.getElementById('theme-toggle');
+            const html = document.documentElement;
+            
+            // Check for saved theme preference or default to light
+            const savedTheme = localStorage.getItem('theme');
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            if (savedTheme === 'dark' || (!savedTheme && systemDark)) {
+                html.classList.add('dark');
+            }
+            
+            themeToggle.addEventListener('click', () => {
+                html.classList.toggle('dark');
+                localStorage.setItem('theme', html.classList.contains('dark') ? 'dark' : 'light');
+            });
+        })();
+
+        // Simulate live log updates
+        (function() {
+            const logContainer = document.querySelector('[data-mock="true"]').parentElement;
+            const logEntries = [
+                { time: '10:46:12', method: 'POST', path: '/api/parse-excel', status: '200', duration: '289ms' },
+                { time: '10:46:45', method: 'GET', path: '/api/health', status: '200', duration: '8ms' },
+                { time: '10:47:23', method: 'POST', path: '/api/generate-mermaid', status: '200', duration: '156ms' }
+            ];
+            
+            // TODO: Implement real-time log streaming via WebSocket connection
+            // This would connect to the actual backend service for live updates
+            
+            setInterval(() => {
+                const randomEntry = logEntries[Math.floor(Math.random() * logEntries.length)];
+                const newTime = new Date().toLocaleTimeString('en-US', { hour12: false });
+                
+                // Create new log entry (commented out to avoid DOM manipulation in static mockup)
+                // const logDiv = document.createElement('div');
+                // logDiv.className = 'flex items-start space-x-4 text-slate-600 dark:text-slate-300';
+                // logDiv.innerHTML = `...`;
+                // logContainer.insertBefore(logDiv, logContainer.firstChild);
+            }, 5000);
+        })();
+
+        // API Testing Functionality
+        (function() {
+            // TODO: Implement actual API testing functionality
+            // This would make real HTTP requests to the backend endpoints
+            
+            const testButtons = document.querySelectorAll('button:contains("Test")');
+            // Implementation would handle file uploads, JSON requests, and display responses
+        })();
+    </script>
+</body>
+</html>

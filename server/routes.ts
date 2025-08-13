@@ -274,6 +274,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get domain configuration and styling information
+  app.get("/api/domain-config", async (req, res) => {
+    try {
+      res.json({
+        domains: mermaidGeneratorService.getDomainConfigs(),
+        colors: mermaidGeneratorService.getDomainColors()
+      });
+    } catch (error) {
+      console.error('Domain config error:', error);
+      res.status(500).json({ 
+        error: 'Failed to get domain configuration',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Generate domain-specific CSS
+  app.get("/api/domain-css/:domain?", async (req, res) => {
+    try {
+      const { domain } = req.params;
+      const css = mermaidGeneratorService.generateDomainCSS(domain);
+      
+      res.setHeader('Content-Type', 'text/css');
+      res.send(css);
+    } catch (error) {
+      console.error('Domain CSS generation error:', error);
+      res.status(500).json({ 
+        error: 'Failed to generate domain CSS',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Get parsed tables (for frontend integration)
   app.get("/api/tables", async (req, res) => {
     try {

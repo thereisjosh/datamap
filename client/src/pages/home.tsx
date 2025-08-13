@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Github, Moon, Sun, HelpCircle, Eye } from "lucide-react";
+import { Github, Moon, Sun, HelpCircle, Eye, Search, X } from "lucide-react";
 import UploadPanel from "@/components/UploadPanel";
 import MetadataPreview from "@/components/MetadataPreview";
 import ERDRenderer from "@/components/ERDRenderer";
@@ -26,6 +26,16 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
   // Domain management state
   const [domainResults, setDomainResults] = useState<any>({});
   const [selectedDomain, setSelectedDomain] = useState<string>("overview");
+  
+  // Search and filtering state
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<{
+    tables: string[];
+    columns: string[];
+    relationships: string[];
+  }>({ tables: [], columns: [], relationships: [] });
+  const [isSearchActive, setIsSearchActive] = useState<boolean>(false);
+  const [pendingTableSelection, setPendingTableSelection] = useState<string | null>(null);
 
   const handleFileUpload = async (data: ParseExcelResponse) => {
     setTables(data.tables);
@@ -114,6 +124,145 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
     if (setIsDarkMode) {
       setIsDarkMode(!isDarkMode);
     }
+  };
+
+  // Search functionality
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setIsSearchActive(query.trim().length > 0);
+    
+    if (query.trim().length === 0) {
+      setSearchResults({ tables: [], columns: [], relationships: [] });
+      return;
+    }
+    
+    const lowerQuery = query.toLowerCase();
+    const results = {
+      tables: [] as string[],
+      columns: [] as string[], 
+      relationships: [] as string[]
+    };
+    
+    // Search through tables
+    tables.forEach(table => {
+      // Search table names
+      if (table.name.toLowerCase().includes(lowerQuery)) {
+        results.tables.push(table.name);
+      }
+      
+      // Search column names
+      table.columns.forEach(column => {
+        if (column.name.toLowerCase().includes(lowerQuery)) {
+          results.columns.push(`${table.name}.${column.name}`);
+        }
+        
+        // Search column types
+        if (column.type.toLowerCase().includes(lowerQuery)) {
+          results.columns.push(`${table.name}.${column.name} (${column.type})`);
+        }
+      });
+    });
+    
+    // Search through relationships (if available from current domain results)
+    Object.values(domainResults).forEach((domain: any) => {
+      if (domain.diagram) {
+        const lines = domain.diagram.split('\n');
+        lines.forEach(line => {
+          if (line.includes('--') && (line.includes('FK') || line.includes('Cross-Domain'))) {
+            if (line.toLowerCase().includes(lowerQuery)) {
+              results.relationships.push(line.trim());
+            }
+          }
+        });
+      }
+    });
+    
+    setSearchResults(results);
+    console.log(`🔍 Search results for "${query}":`, results);
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery("");
+    setIsSearchActive(false);
+    setSearchResults({ tables: [], columns: [], relationships: [] });
+  };
+
+  const handleSearchResultClick = (resultType: string, result: string) => {
+    console.log(`🎯 FIXED SEARCH RESULT CLICK: ${resultType} - ${result}`);
+    
+    if (resultType === 'table') {
+      // FIXED: Proper table-to-domain detection instead of unreliable string matching
+      let targetDomain = null;
+      let tableFoundInCurrentDomain = false;
+      
+      // First, check if table exists in current domain (prefer staying in current domain)
+      if (selectedDomain && domainResults[selectedDomain]) {
+        const currentDomainData = domainResults[selectedDomain];
+        // Use more precise matching - check for table name as entity definition
+        const entityPattern = new RegExp(`^\\s*${result}\\s*\\{`, 'm');
+        if (currentDomainData.diagram && entityPattern.test(currentDomainData.diagram)) {
+          tableFoundInCurrentDomain = true;
+          targetDomain = selectedDomain;
+          console.log(`✅ Table "${result}" found in current domain "${selectedDomain}" - staying here`);
+        }
+      }
+      
+      // If not in current domain, find the primary domain that owns this table
+      if (!tableFoundInCurrentDomain) {
+        const domainEntries = Object.entries(domainResults);
+        
+        // Sort by domain priority to ensure consistent domain assignment
+        const domainPriority = ['user-management', 'donations-payments', 'opportunities', 'campaigns', 'system'];
+        const sortedEntries = domainEntries.sort(([a], [b]) => {
+          const aPriority = domainPriority.indexOf(a);
+          const bPriority = domainPriority.indexOf(b);
+          return (aPriority === -1 ? 999 : aPriority) - (bPriority === -1 ? 999 : bPriority);
+        });
+        
+        for (const [domainId, domainData] of sortedEntries) {
+          if (domainData && domainData.diagram) {
+            // Precise matching: look for table as entity definition, not just substring
+            const entityPattern = new RegExp(`^\\s*${result}\\s*\\{`, 'm');
+            if (entityPattern.test(domainData.diagram)) {
+              targetDomain = domainId;
+              console.log(`📊 Table "${result}" primary domain found: "${domainId}"`);
+              break;
+            }
+          }
+        }
+      }
+      
+      if (targetDomain) {
+        console.log(`🎯 Switching to domain "${targetDomain}" for table "${result}"`);
+        handleDomainChange(targetDomain);
+        setPendingTableSelection(result);
+      } else {
+        console.warn(`⚠️ Table "${result}" not found in any domain - staying in current domain`);
+        setPendingTableSelection(result);
+      }
+      
+      // Clear search with small delay for better UX
+      setTimeout(() => {
+        setSearchQuery("");
+        setIsSearchActive(false);
+        setSearchResults({ tables: [], columns: [], relationships: [] });
+      }, 100);
+    }
+  };
+
+  const handleTableSelectionComplete = () => {
+    // Clear pending selection after ERDRenderer processes it
+    setPendingTableSelection(null);
+  };
+
+  const handleDomainSwitchForTable = (targetDomain: string, tableName: string) => {
+    console.log(`🎯 Domain switch requested: ${targetDomain} for table: ${tableName}`);
+    
+    // Switch to the target domain
+    handleDomainChange(targetDomain);
+    
+    // Set the table to be selected after domain switch completes
+    setPendingTableSelection(tableName);
   };
 
   const handlePreviewERD = () => {
@@ -234,6 +383,102 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
                     )}
                   </div>
                   
+                  {/* Smart Search Component */}
+                  {tables.length > 0 && (
+                    <div className="mb-4">
+                      <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                        Search Tables & Columns:
+                      </label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                        <input
+                          type="text"
+                          placeholder="Search tables, columns, relationships..."
+                          value={searchQuery}
+                          onChange={(e) => handleSearch(e.target.value)}
+                          className="w-full pl-10 pr-10 py-2 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                        />
+                        {searchQuery && (
+                          <button
+                            onClick={handleClearSearch}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                      
+                      {/* Search Results */}
+                      {isSearchActive && (
+                        <div className="mt-2 max-h-48 overflow-y-auto border border-border rounded-md bg-background/95 backdrop-blur-sm">
+                          {searchResults.tables.length > 0 && (
+                            <div className="p-2 border-b border-border">
+                              <div className="text-xs font-medium text-muted-foreground mb-1">Tables ({searchResults.tables.length})</div>
+                              {searchResults.tables.slice(0, 5).map((table, index) => (
+                                <div
+                                  key={`table-${index}`}
+                                  onClick={() => handleSearchResultClick('table', table)}
+                                  className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
+                                >
+                                  <div className="w-2 h-2 bg-blue-500 rounded-sm"></div>
+                                  {table}
+                                </div>
+                              ))}
+                              {searchResults.tables.length > 5 && (
+                                <div className="px-2 py-1 text-xs text-muted-foreground">
+                                  +{searchResults.tables.length - 5} more tables...
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {searchResults.columns.length > 0 && (
+                            <div className="p-2 border-b border-border">
+                              <div className="text-xs font-medium text-muted-foreground mb-1">Columns ({searchResults.columns.length})</div>
+                              {searchResults.columns.slice(0, 5).map((column, index) => (
+                                <div
+                                  key={`column-${index}`}
+                                  onClick={() => handleSearchResultClick('column', column)}
+                                  className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
+                                >
+                                  <div className="w-2 h-2 bg-green-500 rounded-sm"></div>
+                                  {column}
+                                </div>
+                              ))}
+                              {searchResults.columns.length > 5 && (
+                                <div className="px-2 py-1 text-xs text-muted-foreground">
+                                  +{searchResults.columns.length - 5} more columns...
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {searchResults.relationships.length > 0 && (
+                            <div className="p-2">
+                              <div className="text-xs font-medium text-muted-foreground mb-1">Relationships ({searchResults.relationships.length})</div>
+                              {searchResults.relationships.slice(0, 3).map((rel, index) => (
+                                <div
+                                  key={`rel-${index}`}
+                                  onClick={() => handleSearchResultClick('relationship', rel)}
+                                  className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
+                                >
+                                  <div className="w-2 h-2 bg-purple-500 rounded-sm"></div>
+                                  <span className="truncate">{rel}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          {searchResults.tables.length === 0 && searchResults.columns.length === 0 && searchResults.relationships.length === 0 && (
+                            <div className="p-4 text-center text-muted-foreground text-sm">
+                              No results found for "{searchQuery}"
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
                   {/* Domain Selector */}
                   {Object.keys(domainResults).length > 0 && (
                     <div className="mb-4">
@@ -269,6 +514,10 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
                   mermaidCode={mermaidCode}
                   isDarkMode={isDarkMode}
                   isLoading={isLoading}
+                  domain={selectedDomain}
+                  selectedTableFromSearch={pendingTableSelection}
+                  onTableSelectionComplete={handleTableSelectionComplete}
+                  onDomainSwitch={handleDomainSwitchForTable}
                 />
               </CardContent>
             </Card>
