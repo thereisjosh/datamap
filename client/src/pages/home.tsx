@@ -1,10 +1,13 @@
 import React, { useState } from "react";
 import { useLocation } from "wouter";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { OrganizationInfo } from "@/components/organizations/OrganizationSelector";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Github, Moon, Sun, HelpCircle, Eye, Search, X } from "lucide-react";
+import { Eye, Search, X, Plus, FileSpreadsheet, Users, Activity } from "lucide-react";
 import UploadPanel from "@/components/UploadPanel";
 import MetadataPreview from "@/components/MetadataPreview";
 import ERDRenderer from "@/components/ERDRenderer";
@@ -17,6 +20,7 @@ interface HomeProps {
 
 const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
   const [, navigate] = useLocation();
+  const { user, profile, activeOrganization } = useAuth();
   const [tables, setTables] = useState<Table[]>([]);
   const [mermaidCode, setMermaidCode] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -120,11 +124,6 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
     setDomainResults({});
   };
 
-  const toggleDarkMode = () => {
-    if (setIsDarkMode) {
-      setIsDarkMode(!isDarkMode);
-    }
-  };
 
   // Search functionality
   const handleSearch = (query: string) => {
@@ -278,98 +277,90 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
 
   return (
     <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-      {/* Navigation Bar */}
-      <header className="sticky top-0 z-10 bg-background border-b border-border">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center">
-            <h1 className="text-2xl font-bold text-primary hover:text-primary/80 transition-colors">
-              ERDgen
-            </h1>
+      {/* App Header */}
+      <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      
+      {/* Dashboard Header */}
+      <div className="bg-muted/30 border-b">
+        <div className="container mx-auto px-4 py-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">
+                Welcome back, {profile?.name?.split(' ')[0] || 'User'}!
+              </h1>
+              <p className="text-muted-foreground">
+                Create and manage your ERD projects with your team
+              </p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="hidden sm:flex items-center space-x-6 text-sm text-muted-foreground">
+                <div className="flex items-center space-x-1">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span>0 Projects</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <Users className="h-4 w-4" />
+                  <span>Team Member</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <Activity className="h-4 w-4" />
+                  <span>Active</span>
+                </div>
+              </div>
+              <Button className="flex items-center space-x-2">
+                <Plus className="h-4 w-4" />
+                <span>New Project</span>
+              </Button>
+            </div>
           </div>
-          <nav className="hidden md:flex items-center space-x-6">
-            <a
-              href="#"
-              className="text-sm font-medium hover:text-primary transition-colors flex items-center gap-1"
-            >
-              <HelpCircle size={16} />
-              How It Works
-            </a>
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium hover:text-primary transition-colors flex items-center gap-1"
-            >
-              <Github size={16} />
-              GitHub Repo
-            </a>
-            <a
-              href="mailto:contact@erdgen.app"
-              className="text-sm font-medium hover:text-primary transition-colors"
-            >
-              Contact
-            </a>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleDarkMode}
-              className="ml-2"
-              aria-label={`Switch to ${isDarkMode ? "light" : "dark"} mode`}
-            >
-              {isDarkMode ? (
-                <Sun size={20} aria-hidden="true" />
-              ) : (
-                <Moon size={20} aria-hidden="true" />
-              )}
-            </Button>
-          </nav>
+          
+          {/* Organization Info */}
+          {activeOrganization && (
+            <div className="mt-6">
+              <OrganizationInfo showMemberCount />
+            </div>
+          )}
         </div>
-      </header>
+      </div>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: '800px' }}>
-          {/* Left Column - Upload and Metadata */}
-          <div className="w-full lg:w-1/2 space-y-4">
-            <Tabs
-              value={activeTab}
-              onValueChange={setActiveTab}
-              className="w-full"
-            >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="upload">Upload</TabsTrigger>
-                <TabsTrigger value="metadata" disabled={tables.length === 0}>
-                  Metadata
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="upload" className="mt-4">
-                <Card>
-                  <CardContent className="pt-6">
-                    <UploadPanel
-                      onFileUpload={handleFileUpload}
-                      isLoading={isLoading}
-                      error={error}
-                      onError={handleError}
-                    />
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              <TabsContent value="metadata" className="mt-4">
-                <Card>
-                  <CardContent className="pt-6">
-                    <MetadataPreview tables={tables} />
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </div>
+        <div className="space-y-8">
+          {/* Quick Actions */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col lg:flex-row gap-6">
+                {/* Left: Upload Section */}
+                <div className="flex-1">
+                  <h2 className="text-xl font-semibold mb-4">Create New ERD</h2>
+                  <Tabs
+                    value={activeTab}
+                    onValueChange={setActiveTab}
+                    className="w-full"
+                  >
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="upload">Upload File</TabsTrigger>
+                      <TabsTrigger value="metadata" disabled={tables.length === 0}>
+                        Review Data
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="upload" className="mt-4">
+                      <UploadPanel
+                        onFileUpload={handleFileUpload}
+                        isLoading={isLoading}
+                        error={error}
+                        onError={handleError}
+                      />
+                    </TabsContent>
+                    <TabsContent value="metadata" className="mt-4">
+                      <MetadataPreview tables={tables} />
+                    </TabsContent>
+                  </Tabs>
+                </div>
 
-          {/* Right Column - ERD Renderer */}
-          <div className="w-full lg:w-1/2">
-            <Card className="h-full" style={{ display: 'flex', flexDirection: 'column' }}>
-              <CardContent className="pt-6 flex-1" style={{ display: 'flex', flexDirection: 'column' }}>
-                <div className="mb-4">
+                {/* Right: ERD Preview */}
+                <div className="flex-1">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium">ERD Preview</h3>
+                    <h2 className="text-xl font-semibold">ERD Preview</h2>
                     {(tables.length > 0 || mermaidCode) && (
                       <Button
                         variant="outline"
@@ -510,68 +501,34 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
                     </div>
                   )}
                 </div>
-                <ERDRenderer
-                  mermaidCode={mermaidCode}
-                  isDarkMode={isDarkMode}
-                  isLoading={isLoading}
-                  domain={selectedDomain}
-                  selectedTableFromSearch={pendingTableSelection}
-                  onTableSelectionComplete={handleTableSelectionComplete}
-                  onDomainSwitch={handleDomainSwitchForTable}
-                />
-              </CardContent>
-            </Card>
-          </div>
+                  <ERDRenderer
+                    mermaidCode={mermaidCode}
+                    isDarkMode={isDarkMode}
+                    isLoading={isLoading}
+                    domain={selectedDomain}
+                    selectedTableFromSearch={pendingTableSelection}
+                    onTableSelectionComplete={handleTableSelectionComplete}
+                    onDomainSwitch={handleDomainSwitchForTable}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="bg-muted mt-12 py-8">
+      <footer className="bg-muted/50 mt-16 py-6">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="mb-4 md:mb-0">
-              <p className="text-sm text-muted-foreground">
-                &copy; {new Date().getFullYear()} ERDgen. All rights reserved.
-              </p>
+            <p className="text-sm text-muted-foreground">
+              &copy; {new Date().getFullYear()} ERDBuilder. All rights reserved.
+            </p>
+            <div className="flex items-center space-x-4 mt-2 md:mt-0">
+              <span className="text-xs text-muted-foreground">
+                Powered by {activeOrganization?.name || 'Your Organization'}
+              </span>
             </div>
-            <div className="flex space-x-6">
-              <a
-                href="#"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Privacy
-              </a>
-              <a
-                href="#"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Terms
-              </a>
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                GitHub
-              </a>
-              <a
-                href="https://linkedin.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                LinkedIn
-              </a>
-            </div>
-          </div>
-          <div className="mt-4 text-center md:text-left">
-            <a
-              href="mailto:contact@erdgen.app"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              contact@erdgen.app
-            </a>
           </div>
         </div>
       </footer>
