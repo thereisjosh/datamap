@@ -2,10 +2,14 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 // Client-side Supabase client for Vite/React applications
 export function createClient() {
-  return createSupabaseClient(
-    import.meta.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+  
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Missing Supabase environment variables. Please check your .env.local file.')
+  }
+  
+  return createSupabaseClient(supabaseUrl, supabaseKey)
 }
 
 // Database types - will be generated after we push migrations
