@@ -66,8 +66,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   
   // Zoom sensitivity configuration for responsive trackpad/mouse zooming
   const ZOOM_BASE_SENSITIVITY = 0.002; // Base zoom sensitivity (2.5x more responsive than 0.0008)
-  const ZOOM_TRACKPAD_MULTIPLIER = 1.8; // Additional multiplier for trackpads (more aggressive than pan)
-  const ZOOM_MAX_SENSITIVITY = 0.004; // Maximum sensitivity to prevent overly aggressive zooming
+  const ZOOM_TRACKPAD_MULTIPLIER = 2.8; // Additional multiplier for trackpads (increased for better responsiveness)
+  const ZOOM_MAX_SENSITIVITY = 0.006; // Maximum sensitivity increased to accommodate higher trackpad multiplier
   
   // Clean rendering - no domain styling
 
