@@ -511,7 +511,6 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
                     onDomainSwitch={handleDomainSwitchForTable}
                   />
                 </div>
-              </div>
             </CardContent>
           </Card>
         </div>
