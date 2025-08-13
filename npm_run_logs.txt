@@ -2,25 +2,5 @@
 > rest-express@1.0.0 dev
 > NODE_ENV=development tsx server/index.ts
 
-Re-optimizing dependencies because lockfile has changed
-4:21:42 PM [express] serving on port 3000
-4:32:00 PM [vite] hmr update /src/App.tsx?v=AzLX6DVa7jAkRl4LsFD4w, /src/index.css?v=AzLX6DVa7jAkRl4LsFD4w
-4:32:01 PM [vite] Internal server error: Failed to resolve import "@/components/auth/AuthGuard" from "client/src/App.tsx". Does the file exist?
-  Plugin: vite:import-analysis
-  File: /Users/joshua/Downloads/Coding/ERDBuilder/client/src/App.tsx:7:26
-  22 |  import { TooltipProvider } from "@/components/ui/tooltip";
-  23 |  import { AuthProvider } from "@/components/auth/AuthProvider";
-  24 |  import { AuthGuard } from "@/components/auth/AuthGuard";
-     |                             ^
-  25 |  import NotFound from "@/pages/not-found";
-  26 |  import Welcome from "@/pages/welcome";
-      at TransformPluginContext._formatError (file:///Users/joshua/Downloads/Coding/ERDBuilder/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:49258:41)
-      at TransformPluginContext.error (file:///Users/joshua/Downloads/Coding/ERDBuilder/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:49253:16)
-      at normalizeUrl (file:///Users/joshua/Downloads/Coding/ERDBuilder/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:64291:23)
-      at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
-      at async file:///Users/joshua/Downloads/Coding/ERDBuilder/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:64423:39
-      at async Promise.all (index 9)
-      at async TransformPluginContext.transform (file:///Users/joshua/Downloads/Coding/ERDBuilder/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:64350:7)
-      at async PluginContainer.transform (file:///Users/joshua/Downloads/Coding/ERDBuilder/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:49099:18)
-      at async loadAndTransform (file:///Users/joshua/Downloads/Coding/ERDBuilder/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:51977:27)
-      at async viteTransformMiddleware (file:///Users/joshua/Downloads/Coding/ERDBuilder/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:62105:24)
+4:38:46 PM [express] serving on port 3000
+4:38:50 PM [vite] Pre-transform error: Failed to resolve import "../../../lib/supabase" from "client/src/components/auth/AuthProvider.tsx". Does the file exist?

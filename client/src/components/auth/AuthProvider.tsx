@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { createClient } from '../../../lib/supabase'
-import { completeUserOnboarding, getUserOrganizations } from '../../../lib/auth'
+import { createClient } from '../../../../lib/supabase'
+import { completeUserOnboarding, getUserOrganizations } from '../../../../lib/auth'
 import type { User } from '@supabase/supabase-js'
-import type { UserProfile, Organization, OrganizationMember } from '../../../lib/auth'
+import type { UserProfile, Organization, OrganizationMember } from '../../../../lib/auth'
 
 interface AuthContextType {
   user: User | null
