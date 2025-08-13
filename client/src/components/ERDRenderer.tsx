@@ -64,6 +64,11 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const PAN_TRACKPAD_MULTIPLIER = 1.5; // Additional multiplier for trackpads
   const PAN_ZOOM_SENSITIVITY_FACTOR = 0.3; // How much zoom affects sensitivity
   
+  // Zoom sensitivity configuration for responsive trackpad/mouse zooming
+  const ZOOM_BASE_SENSITIVITY = 0.002; // Base zoom sensitivity (2.5x more responsive than 0.0008)
+  const ZOOM_TRACKPAD_MULTIPLIER = 1.8; // Additional multiplier for trackpads (more aggressive than pan)
+  const ZOOM_MAX_SENSITIVITY = 0.004; // Maximum sensitivity to prevent overly aggressive zooming
+  
   // Clean rendering - no domain styling
 
   // Initialize Mermaid with industry standard responsive configuration
@@ -1013,10 +1018,20 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         deltaY *= 400; // Convert pages to pixels (rough approximation)
       }
       
-      // Industry-standard zoom sensitivity - normalized across platforms
-      const sensitivity = 0.0008;
-      const scaleDelta = -deltaY * sensitivity;
+      // Responsive zoom sensitivity - significantly improved for trackpad/mouse
+      // Detect potential trackpad usage (smaller, more frequent deltaY values)
+      const isPotentialTrackpad = Math.abs(deltaY) < 10;
+      const trackpadMultiplier = isPotentialTrackpad ? ZOOM_TRACKPAD_MULTIPLIER : 1.0;
+      
+      const effectiveZoomSensitivity = Math.min(
+        ZOOM_BASE_SENSITIVITY * trackpadMultiplier,
+        ZOOM_MAX_SENSITIVITY
+      );
+      
+      const scaleDelta = -deltaY * effectiveZoomSensitivity;
       const zoomFactor = Math.exp(scaleDelta); // Smooth exponential scaling
+      
+      console.log(`🔍 Zoom sensitivity: deltaY=${deltaY}, trackpad=${isPotentialTrackpad}, sensitivity=${effectiveZoomSensitivity.toFixed(4)}, factor=${zoomFactor.toFixed(3)}`);
       
       // Calculate new zoom with limits
       const newZoom = Math.max(0.1, Math.min(10, currentZoom * zoomFactor));
