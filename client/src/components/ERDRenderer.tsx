@@ -284,6 +284,108 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     setCurrentPan({ x: newPanX, y: newPanY });
   }, [currentPan, currentZoom]);
 
+  // Utility function to convert client coordinates to current transformed SVG coordinate space
+  const getTransformedCursorPosition = useCallback((clientX: number, clientY: number, container: HTMLDivElement) => {
+    const svg = container.querySelector('svg') as SVGSVGElement;
+    if (!svg) return { x: clientX, y: clientY };
+
+    // Get container rect for relative positioning
+    const rect = container.getBoundingClientRect();
+    const containerX = clientX - rect.left;
+    const containerY = clientY - rect.top;
+
+    // Create SVG point for proper coordinate transformation
+    const svgPoint = svg.createSVGPoint();
+    svgPoint.x = containerX;
+    svgPoint.y = containerY;
+
+    // Get the transform group and its current transformation matrix
+    const transformGroup = container.querySelector('#pan-zoom-group') as SVGGElement;
+    if (!transformGroup) return { x: containerX, y: containerY };
+
+    try {
+      // Get the inverse of the current transformation matrix
+      const ctm = transformGroup.getCTM();
+      if (ctm) {
+        // Transform the point using the inverse matrix to get coordinates in transformed space
+        const transformedPoint = svgPoint.matrixTransform(ctm.inverse());
+        return { x: transformedPoint.x, y: transformedPoint.y };
+      }
+    } catch (error) {
+      console.warn('Failed to get transformation matrix, falling back to basic conversion');
+    }
+
+    // Fallback: basic coordinate conversion using current zoom and pan
+    const adjustedX = (containerX - currentPan.x) / currentZoom;
+    const adjustedY = (containerY - currentPan.y) / currentZoom;
+    
+    return { x: adjustedX, y: adjustedY };
+  }, [currentZoom, currentPan]);
+
+  // Industry standard cursor-centered zoom using proper transformation matrix composition
+  const zoomAtCursor = useCallback((newZoom: number, cursorX: number, cursorY: number) => {
+    if (!svgContainerRef.current) return;
+    
+    const container = svgContainerRef.current;
+    const transformGroup = container.querySelector('#pan-zoom-group') as SVGGElement;
+    
+    if (!transformGroup || !document.contains(transformGroup)) {
+      console.warn('❌ zoomAtCursor: Transform group not found or disconnected');
+      return;
+    }
+
+    // Validate inputs
+    if (!isFinite(newZoom) || newZoom <= 0) {
+      console.warn('Invalid zoom value:', newZoom);
+      return;
+    }
+
+    // Get cursor position in current transformed coordinate space
+    const cursorPos = getTransformedCursorPosition(cursorX, cursorY, container);
+    
+    console.log(`🎯 Cursor-centered zoom: Client(${cursorX.toFixed(1)}, ${cursorY.toFixed(1)}) -> Transformed(${cursorPos.x.toFixed(1)}, ${cursorPos.y.toFixed(1)})`);
+    console.log(`🔍 Zoom: ${currentZoom.toFixed(2)}x -> ${newZoom.toFixed(2)}x`);
+
+    // Calculate zoom factor
+    const zoomFactor = newZoom / currentZoom;
+    
+    // Industry standard transformation sequence: translate(cursor) * scale(factor) * translate(-cursor)
+    // This ensures the point under the cursor stays fixed during zoom
+    
+    // Current transform: translate(currentPan.x, currentPan.y) scale(currentZoom)
+    // We need to compose this with our cursor-centered zoom transform
+    
+    // Calculate new pan position using the cursor as the fixed point
+    // Formula: newPan = cursor + (oldPan - cursor) * zoomFactor
+    const newPanX = cursorPos.x + (currentPan.x - cursorPos.x) * zoomFactor;
+    const newPanY = cursorPos.y + (currentPan.y - cursorPos.y) * zoomFactor;
+
+    // Validate calculations
+    if (!isFinite(newPanX) || !isFinite(newPanY)) {
+      console.error('🚨 Invalid cursor-centered zoom calculation!');
+      console.error(`  - newPanX: ${newPanX}, newPanY: ${newPanY}`);
+      console.error(`  - cursorPos: (${cursorPos.x}, ${cursorPos.y})`);
+      console.error(`  - zoomFactor: ${zoomFactor}`);
+      return;
+    }
+
+    // Apply the new transform
+    const svgTransformString = `translate(${newPanX}, ${newPanY}) scale(${newZoom})`;
+    
+    console.log(`🧮 Cursor-centered transform: "${svgTransformString}"`);
+    
+    // Clear CSS transforms to prevent conflicts
+    (transformGroup as any).style.transform = '';
+    
+    // Apply SVG transform
+    transformGroup.setAttribute('transform', svgTransformString);
+    
+    // Update state
+    setCurrentZoom(newZoom);
+    setCurrentPan({ x: newPanX, y: newPanY });
+    
+  }, [currentZoom, currentPan, getTransformedCursorPosition]);
+
   // Note: Removed visual debugging markers to prevent inconsistent red dots
 
   // Add professional selection corner handles aligned with actual content dimensions
@@ -1041,37 +1143,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         return;
       }
       
-      // Convert mouse position to SVG coordinate space
-      // This is the key to proper zoom-to-cursor behavior
-      const svg = container.querySelector('svg') as SVGSVGElement;
-      if (!svg) return;
-      
-      const viewBoxAttr = svg.getAttribute('viewBox');
-      if (!viewBoxAttr) {
-        // Fallback: Use container dimensions if no viewBox
-        const svgX = clientX;
-        const svgY = clientY;
-        console.log(`📍 Zoom target (no viewBox): SVG(${svgX.toFixed(2)}, ${svgY.toFixed(2)})`);
-        zoomToScale(newZoom, svgX, svgY);
-        return;
-      }
-      
-      // Parse viewBox for proper coordinate conversion
-      const [vbX, vbY, vbWidth, vbHeight] = viewBoxAttr.split(' ').map(Number);
-      const svgRect = svg.getBoundingClientRect();
-      
-      // Convert pixel coordinates to SVG coordinate space
-      const scaleX = vbWidth / svgRect.width;
-      const scaleY = vbHeight / svgRect.height;
-      
-      const svgX = vbX + clientX * scaleX;
-      const svgY = vbY + clientY * scaleY;
-      
-      console.log(`📍 Cursor-based zoom: Client(${clientX.toFixed(2)}, ${clientY.toFixed(2)}) -> SVG(${svgX.toFixed(2)}, ${svgY.toFixed(2)})`);
-      console.log(`🔍 Zoom: ${currentZoom.toFixed(2)}x -> ${newZoom.toFixed(2)}x (factor: ${zoomFactor.toFixed(3)})`);
-      
-      // Apply zoom centered on cursor position
-      zoomToScale(newZoom, svgX, svgY);
+      // Use industry standard cursor-centered zoom
+      zoomAtCursor(newZoom, e.clientX, e.clientY);
     };
     
     // Mouse drag handlers for panning
@@ -1148,7 +1221,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       container.removeEventListener('mouseleave', handleMouseLeave);
       container.style.cursor = 'default';
     };
-  }, [svgContainerRef.current, currentZoom, isDragging, dragStart, isPanEnabled, zoomToScale, panToPosition]);
+  }, [svgContainerRef.current, currentZoom, isDragging, dragStart, isPanEnabled, zoomToScale, panToPosition, zoomAtCursor]);
 
   // Transform wrapper creation for SVG content with comprehensive debugging
   const wrapSVGWithTransformGroup = useCallback((svgContent: string): string => {
