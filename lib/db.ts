@@ -49,4 +49,41 @@ async function getDb() {
 }
 
 // Export the lazy connection function
-export { getDb };
+// Set RLS context for multi-tenant security
+async function setRLSContext(userId?: string, organizationId?: string) {
+  if (!sql) return;
+  
+  try {
+    if (userId) {
+      await sql`SELECT set_config('app.current_user_id', ${userId}, true)`;
+    }
+    if (organizationId) {
+      await sql`SELECT set_config('app.current_organization_id', ${organizationId}, true)`;
+    }
+  } catch (error) {
+    console.warn('Warning: Could not set RLS context:', error);
+  }
+}
+
+// Clear RLS context
+async function clearRLSContext() {
+  if (!sql) return;
+  
+  try {
+    await sql`SELECT set_config('app.current_user_id', NULL, true)`;
+    await sql`SELECT set_config('app.current_organization_id', NULL, true)`;
+  } catch (error) {
+    console.warn('Warning: Could not clear RLS context:', error);
+  }
+}
+
+// Get database instance with RLS context
+async function getDbWithContext(userId?: string, organizationId?: string) {
+  const db = await getDb();
+  if (db && (userId || organizationId)) {
+    await setRLSContext(userId, organizationId);
+  }
+  return db;
+}
+
+export { getDb, setRLSContext, clearRLSContext, getDbWithContext };

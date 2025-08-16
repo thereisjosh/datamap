@@ -24,7 +24,7 @@ export const session = pgTable("session", {
   userAgent: text("user_agent"),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   // BetterAuth Organization Plugin Required Fields
-  activeOrganizationId: text("active_organization_id").references(() => organization.id, { onDelete: "set null" }),
+  activeOrganizationId: uuid("active_organization_id").references(() => organization.id, { onDelete: "set null" }),
   activeTeamId: text("active_team_id"), // For future team support
 });
 
@@ -55,11 +55,11 @@ export const verification = pgTable("verification", {
 
 // BetterAuth Organization Management Tables (matching BetterAuth schema expectations)
 export const organization = pgTable("organization", {
-  id: text("id").primaryKey(),
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   slug: text("slug").unique(), // BetterAuth standard
   logo: text("logo"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   metadata: text("metadata"), // BetterAuth uses text, not jsonb
   // Custom fields for our app
   domain: varchar("domain").unique(),
@@ -69,16 +69,16 @@ export const organization = pgTable("organization", {
 });
 
 export const member = pgTable("member", {
-  id: text("id").primaryKey(),
-  organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: uuid("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   role: text("role").notNull().default("member"), // BetterAuth standard roles: 'owner', 'admin', 'member'
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 export const invitation = pgTable("invitation", {
-  id: text("id").primaryKey(),
-  organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: uuid("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
   email: text("email").notNull(),
   role: text("role"),
   status: text("status").notNull().default("pending"), // 'pending', 'accepted', 'expired', 'cancelled'
@@ -95,7 +95,7 @@ export const projects = pgTable("projects", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name").notNull(),
   description: text("description"),
-  organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
+  organizationId: uuid("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
   ownerId: text("owner_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("active"), // 'active', 'archived', 'deleted'
   settings: jsonb("settings").default(sql`'{}'::jsonb`), // Theme, layout preferences, etc.
@@ -120,31 +120,31 @@ export const tables = pgTable("tables", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   attributes: jsonb("attributes").notNull(), // Array of column definitions
-  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
-  organizationId: text("organization_id").references(() => organization.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  projectId: uuid("projectId").references(() => projects.id, { onDelete: "cascade" }),
+  organizationId: uuid("organizationId").references(() => organization.id, { onDelete: "cascade" }),
+  createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow(),
 });
 
 export const relationships = pgTable("relationships", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  sourceTable: text("source_table").notNull(),
-  sourceColumn: text("source_column").notNull(),
-  targetTable: text("target_table").notNull(),
-  targetColumn: text("target_column").notNull(),
-  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
-  organizationId: text("organization_id").references(() => organization.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  sourceTable: text("sourceTable").notNull(),
+  sourceColumn: text("sourceColumn").notNull(),
+  targetTable: text("targetTable").notNull(),
+  targetColumn: text("targetColumn").notNull(),
+  projectId: uuid("projectId").references(() => projects.id, { onDelete: "cascade" }),
+  organizationId: uuid("organizationId").references(() => organization.id, { onDelete: "cascade" }),
+  createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow(),
 });
 
 export const uploadSessions = pgTable("upload_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   filename: text("filename").notNull(),
   status: text("status").notNull(), // 'processing', 'completed', 'failed'
-  tablesCount: text("tables_count"),
-  relationshipsCount: text("relationships_count"),
+  tablesCount: text("tablesCount"),
+  relationshipsCount: text("relationshipsCount"),
   errors: jsonb("errors"), // Array of error messages
-  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  projectId: uuid("projectId").references(() => projects.id, { onDelete: "cascade" }),
+  createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow(),
 });
 
 // Zod schemas for validation
