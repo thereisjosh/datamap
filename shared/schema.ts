@@ -120,8 +120,8 @@ export const tables = pgTable("tables", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   attributes: jsonb("attributes").notNull(), // Array of column definitions
-  projectId: uuid("projectId").references(() => projects.id, { onDelete: "cascade" }),
-  organizationId: uuid("organizationId").references(() => organization.id, { onDelete: "cascade" }),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  organizationId: uuid("organization_id").references(() => organization.id, { onDelete: "cascade" }),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow(),
 });
 
@@ -131,8 +131,8 @@ export const relationships = pgTable("relationships", {
   sourceColumn: text("sourceColumn").notNull(),
   targetTable: text("targetTable").notNull(),
   targetColumn: text("targetColumn").notNull(),
-  projectId: uuid("projectId").references(() => projects.id, { onDelete: "cascade" }),
-  organizationId: uuid("organizationId").references(() => organization.id, { onDelete: "cascade" }),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  organizationId: uuid("organization_id").references(() => organization.id, { onDelete: "cascade" }),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow(),
 });
 
@@ -143,7 +143,7 @@ export const uploadSessions = pgTable("upload_sessions", {
   tablesCount: text("tablesCount"),
   relationshipsCount: text("relationshipsCount"),
   errors: jsonb("errors"), // Array of error messages
-  projectId: uuid("projectId").references(() => projects.id, { onDelete: "cascade" }),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow(),
 });
 

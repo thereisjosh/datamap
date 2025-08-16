@@ -23,7 +23,7 @@ CREATE OR REPLACE FUNCTION is_organization_member(org_id TEXT, user_id TEXT) RET
 BEGIN
   RETURN EXISTS (
     SELECT 1 FROM member 
-    WHERE "organizationId" = org_id::uuid AND "userId" = user_id
+    WHERE organization_id = org_id::uuid AND user_id = user_id
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -33,7 +33,7 @@ CREATE OR REPLACE FUNCTION get_user_organization_role(org_id TEXT, user_id TEXT)
 BEGIN
   RETURN (
     SELECT role FROM member 
-    WHERE "organizationId" = org_id::uuid AND "userId" = user_id
+    WHERE organization_id = org_id::uuid AND user_id = user_id
     LIMIT 1
   );
 END;
@@ -47,8 +47,8 @@ CREATE POLICY "Users can view organizations they belong to" ON organization
   FOR SELECT
   USING (
     id IN (
-      SELECT "organizationId" FROM member 
-      WHERE "userId" = current_setting('app.current_user_id', true)
+      SELECT organization_id FROM member 
+      WHERE user_id = current_setting('app.current_user_id', true)
     )
   );
 
@@ -59,9 +59,9 @@ ALTER TABLE member ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view members of their organizations" ON member
   FOR SELECT
   USING (
-    "organizationId" IN (
-      SELECT "organizationId" FROM member AS m2
-      WHERE m2."userId" = current_setting('app.current_user_id', true)
+    organization_id IN (
+      SELECT organization_id FROM member AS m2
+      WHERE m2.user_id = current_setting('app.current_user_id', true)
     )
   );
 
@@ -74,9 +74,9 @@ ALTER TABLE invitation ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view invitations for their organizations" ON invitation
   FOR SELECT
   USING (
-    "organizationId" IN (
-      SELECT "organizationId" FROM member 
-      WHERE "userId" = current_setting('app.current_user_id', true)
+    organization_id IN (
+      SELECT organization_id FROM member 
+      WHERE user_id = current_setting('app.current_user_id', true)
     )
   );
 
@@ -88,39 +88,39 @@ ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view projects in their organizations" ON projects
   FOR SELECT
   USING (
-    "organizationId" IN (
-      SELECT "organizationId" FROM member 
-      WHERE "userId" = current_setting('app.current_user_id', true)
+    organization_id IN (
+      SELECT organization_id FROM member 
+      WHERE user_id = current_setting('app.current_user_id', true)
     )
   );
 
 CREATE POLICY "Users can create projects in their organizations" ON projects
   FOR INSERT
   WITH CHECK (
-    "organizationId" IN (
-      SELECT "organizationId" FROM member 
-      WHERE "userId" = current_setting('app.current_user_id', true)
+    organization_id IN (
+      SELECT organization_id FROM member 
+      WHERE user_id = current_setting('app.current_user_id', true)
       AND role IN ('owner', 'admin', 'member')
     )
-    AND "ownerId" = current_setting('app.current_user_id', true)
+    AND owner_id = current_setting('app.current_user_id', true)
   );
 
 CREATE POLICY "Users can update their own projects" ON projects
   FOR UPDATE
   USING (
-    "ownerId" = current_setting('app.current_user_id', true)
-    AND "organizationId" IN (
-      SELECT "organizationId" FROM member 
-      WHERE "userId" = current_setting('app.current_user_id', true)
+    owner_id = current_setting('app.current_user_id', true)
+    AND organization_id IN (
+      SELECT organization_id FROM member 
+      WHERE user_id = current_setting('app.current_user_id', true)
     )
   );
 
 CREATE POLICY "Admins can delete projects in their organizations" ON projects
   FOR DELETE
   USING (
-    "organizationId" IN (
-      SELECT "organizationId" FROM member 
-      WHERE "userId" = current_setting('app.current_user_id', true)
+    organization_id IN (
+      SELECT organization_id FROM member 
+      WHERE user_id = current_setting('app.current_user_id', true)
       AND role IN ('owner', 'admin')
     )
   );
@@ -132,21 +132,21 @@ ALTER TABLE project_files ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view project files through organization membership" ON project_files
   FOR SELECT
   USING (
-    "projectId" IN (
+    project_id IN (
       SELECT p.id FROM projects p
-      JOIN member m ON p."organizationId" = m."organizationId"
-      WHERE m."userId" = current_setting('app.current_user_id', true)
+      JOIN member m ON p.organization_id = m.organization_id
+      WHERE m.user_id = current_setting('app.current_user_id', true)
     )
   );
 
 CREATE POLICY "Users can manage project files they own" ON project_files
   FOR ALL
   USING (
-    "projectId" IN (
+    project_id IN (
       SELECT p.id FROM projects p
-      JOIN member m ON p."organizationId" = m."organizationId"
-      WHERE m."userId" = current_setting('app.current_user_id', true)
-      AND (p."ownerId" = current_setting('app.current_user_id', true) OR m.role IN ('owner', 'admin'))
+      JOIN member m ON p.organization_id = m.organization_id
+      WHERE m.user_id = current_setting('app.current_user_id', true)
+      AND (p.owner_id = current_setting('app.current_user_id', true) OR m.role IN ('owner', 'admin'))
     )
   );
 
@@ -157,21 +157,21 @@ ALTER TABLE tables ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view tables in their organizations" ON tables
   FOR SELECT
   USING (
-    "organizationId" IN (
-      SELECT "organizationId" FROM member 
-      WHERE "userId" = current_setting('app.current_user_id', true)
+    organization_id IN (
+      SELECT organization_id FROM member 
+      WHERE user_id = current_setting('app.current_user_id', true)
     )
-    OR "organizationId" IS NULL -- Allow legacy data without organizationId
+    OR organization_id IS NULL -- Allow legacy data without organization_id
   );
 
 CREATE POLICY "Users can manage tables in their organizations" ON tables
   FOR ALL
   USING (
-    "organizationId" IN (
-      SELECT "organizationId" FROM member 
-      WHERE "userId" = current_setting('app.current_user_id', true)
+    organization_id IN (
+      SELECT organization_id FROM member 
+      WHERE user_id = current_setting('app.current_user_id', true)
     )
-    OR "organizationId" IS NULL -- Allow legacy data without organizationId
+    OR organization_id IS NULL -- Allow legacy data without organization_id
   );
 
 -- Enable RLS on relationships table (legacy)
@@ -181,21 +181,21 @@ ALTER TABLE relationships ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view relationships in their organizations" ON relationships
   FOR SELECT
   USING (
-    "organizationId" IN (
-      SELECT "organizationId" FROM member 
-      WHERE "userId" = current_setting('app.current_user_id', true)
+    organization_id IN (
+      SELECT organization_id FROM member 
+      WHERE user_id = current_setting('app.current_user_id', true)
     )
-    OR "organizationId" IS NULL -- Allow legacy data without organizationId
+    OR organization_id IS NULL -- Allow legacy data without organization_id
   );
 
 CREATE POLICY "Users can manage relationships in their organizations" ON relationships
   FOR ALL
   USING (
-    "organizationId" IN (
-      SELECT "organizationId" FROM member 
-      WHERE "userId" = current_setting('app.current_user_id', true)
+    organization_id IN (
+      SELECT organization_id FROM member 
+      WHERE user_id = current_setting('app.current_user_id', true)
     )
-    OR "organizationId" IS NULL -- Allow legacy data without organizationId
+    OR organization_id IS NULL -- Allow legacy data without organization_id
   );
 
 -- Enable RLS on upload_sessions table
@@ -205,35 +205,35 @@ ALTER TABLE upload_sessions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view upload sessions through project access" ON upload_sessions
   FOR SELECT
   USING (
-    "projectId" IN (
+    project_id IN (
       SELECT p.id FROM projects p
-      JOIN member m ON p."organizationId" = m."organizationId"
-      WHERE m."userId" = current_setting('app.current_user_id', true)
+      JOIN member m ON p.organization_id = m.organization_id
+      WHERE m.user_id = current_setting('app.current_user_id', true)
     )
-    OR "projectId" IS NULL -- Allow sessions without projectId
+    OR project_id IS NULL -- Allow sessions without project_id
   );
 
 CREATE POLICY "Users can manage upload sessions for their projects" ON upload_sessions
   FOR ALL
   USING (
-    "projectId" IN (
+    project_id IN (
       SELECT p.id FROM projects p
-      JOIN member m ON p."organizationId" = m."organizationId"
-      WHERE m."userId" = current_setting('app.current_user_id', true)
-      AND (p."ownerId" = current_setting('app.current_user_id', true) OR m.role IN ('owner', 'admin'))
+      JOIN member m ON p.organization_id = m.organization_id
+      WHERE m.user_id = current_setting('app.current_user_id', true)
+      AND (p.owner_id = current_setting('app.current_user_id', true) OR m.role IN ('owner', 'admin'))
     )
-    OR "projectId" IS NULL -- Allow sessions without projectId
+    OR project_id IS NULL -- Allow sessions without project_id
   );
 
 -- Create indexes for performance optimization
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_member_user_org 
-ON member ("userId", "organizationId");
+ON member (user_id, organization_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_projects_org_owner 
-ON projects ("organizationId", "ownerId");
+ON projects (organization_id, owner_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_invitations_org_status 
-ON invitation ("organizationId", status);
+ON invitation (organization_id, status);
 
 -- Grant necessary permissions to application user
 -- Note: Replace 'app_user' with your actual application database user
