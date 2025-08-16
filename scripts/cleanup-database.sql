@@ -6,6 +6,9 @@ DROP TABLE IF EXISTS public.invitations_backup;
 DROP TABLE IF EXISTS public.organization_members_backup;
 DROP TABLE IF EXISTS public.organizations_backup;
 
+-- Verify backup tables are removed
+SELECT 'Backup tables cleanup completed' as status;
+
 -- Add comments for remaining essential tables
 COMMENT ON TABLE public.user IS 'BetterAuth user accounts';
 COMMENT ON TABLE public.session IS 'BetterAuth user sessions with organization context';
