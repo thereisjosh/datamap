@@ -157,21 +157,21 @@ ALTER TABLE tables ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view tables in their organizations" ON tables
   FOR SELECT
   USING (
-    organization_id IN (
+    "organizationId" IN (
       SELECT organization_id FROM member 
       WHERE user_id = current_setting('app.current_user_id', true)
     )
-    OR organization_id IS NULL -- Allow legacy data without organization_id
+    OR "organizationId" IS NULL -- Allow legacy data without organizationId
   );
 
 CREATE POLICY "Users can manage tables in their organizations" ON tables
   FOR ALL
   USING (
-    organization_id IN (
+    "organizationId" IN (
       SELECT organization_id FROM member 
       WHERE user_id = current_setting('app.current_user_id', true)
     )
-    OR organization_id IS NULL -- Allow legacy data without organization_id
+    OR "organizationId" IS NULL -- Allow legacy data without organizationId
   );
 
 -- Enable RLS on relationships table (legacy)
@@ -181,21 +181,21 @@ ALTER TABLE relationships ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view relationships in their organizations" ON relationships
   FOR SELECT
   USING (
-    organization_id IN (
+    "organizationId" IN (
       SELECT organization_id FROM member 
       WHERE user_id = current_setting('app.current_user_id', true)
     )
-    OR organization_id IS NULL -- Allow legacy data without organization_id
+    OR "organizationId" IS NULL -- Allow legacy data without organizationId
   );
 
 CREATE POLICY "Users can manage relationships in their organizations" ON relationships
   FOR ALL
   USING (
-    organization_id IN (
+    "organizationId" IN (
       SELECT organization_id FROM member 
       WHERE user_id = current_setting('app.current_user_id', true)
     )
-    OR organization_id IS NULL -- Allow legacy data without organization_id
+    OR "organizationId" IS NULL -- Allow legacy data without organizationId
   );
 
 -- Enable RLS on upload_sessions table
@@ -205,24 +205,24 @@ ALTER TABLE upload_sessions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view upload sessions through project access" ON upload_sessions
   FOR SELECT
   USING (
-    project_id IN (
+    "projectId" IN (
       SELECT p.id FROM projects p
       JOIN member m ON p.organization_id = m.organization_id
       WHERE m.user_id = current_setting('app.current_user_id', true)
     )
-    OR project_id IS NULL -- Allow sessions without project_id
+    OR "projectId" IS NULL -- Allow sessions without projectId
   );
 
 CREATE POLICY "Users can manage upload sessions for their projects" ON upload_sessions
   FOR ALL
   USING (
-    project_id IN (
+    "projectId" IN (
       SELECT p.id FROM projects p
       JOIN member m ON p.organization_id = m.organization_id
       WHERE m.user_id = current_setting('app.current_user_id', true)
       AND (p.owner_id = current_setting('app.current_user_id', true) OR m.role IN ('owner', 'admin'))
     )
-    OR project_id IS NULL -- Allow sessions without project_id
+    OR "projectId" IS NULL -- Allow sessions without projectId
   );
 
 -- Create indexes for performance optimization
