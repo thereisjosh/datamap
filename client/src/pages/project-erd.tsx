@@ -83,12 +83,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         setRelationships(data.relationships);
         setMermaidCode(data.mermaidCode);
         
-        console.log('Loaded project data:', {
-          project: data.project.name,
-          tables: data.tables.length,
-          relationships: data.relationships.length,
-          mermaidCode: data.mermaidCode.length
-        });
         
         // Generate domain views after loading project data
         await generateDomainViews(data.tables, data.relationships);
@@ -183,7 +177,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         };
       });
       
-      console.log('Transformed tables for API:', transformedTables);
       
       // Call the domain generation API with correct parameters (not an object)
       const response = await api.generateDomainMermaid(
@@ -194,8 +187,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
       // Server returns {domains: {...}, metadata: {...}} format
       if (response.domains) {
         setDomainResults(response.domains);
-        console.log('Generated domain results:', Object.keys(response.domains));
-        console.log('Domain metadata:', response.metadata);
         
         // Validate selected domain from URL parameter
         const domains = Object.keys(response.domains);
@@ -324,7 +315,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
   };
 
   const handleSearchResultClick = (type: string, item: string, domain?: string) => {
-    console.log(`🔍 Search result clicked: ${type} - ${item} (domain: ${domain || 'auto-detect'})`);
     
     if (type === 'table') {
       // Use provided domain or find which domain contains this table

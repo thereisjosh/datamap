@@ -27,8 +27,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   onDomainSwitch,
   domainResults = {}
 }) => {
-  // 🚨 DEBUG: Component render tracking
-  console.log(`🔄 ERDRenderer RENDER: selectedTableFromSearch="${selectedTableFromSearch}", domain="${domain}", mermaidCode.length=${mermaidCode.length}`);
   
   // State for Direct SVG Rendering pattern
   const [svgContent, setSvgContent] = useState<string>('');
@@ -1017,9 +1015,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const tableCenter = getTableCenterCoordinates(tableName);
     if (tableCenter) {
       setLastClickPosition({ x: tableCenter.x, y: tableCenter.y });
-      console.log(`🎯 Updated click position to table center: (${tableCenter.x.toFixed(2)}, ${tableCenter.y.toFixed(2)})`);
-    } else {
-      console.log(`⚠️ Could not determine table center for ${tableName}, keeping original click position`);
     }
     
     // Schedule centering to happen after styling completes
@@ -1034,9 +1029,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       // Only handle clicks within our SVG container
       if (svgContainer && svgContainer.contains(target)) {
-        console.log(`📍 Document click detected in SVG area:`);
-        console.log(`  Target:`, target.tagName, (target as any).className?.baseVal || target.className);
-        console.log(`  Position: (${event.clientX}, ${event.clientY})`);
         
         // Capture click coordinates in SVG space for zoom-to-cursor functionality
         const svgElement = svgContainer.querySelector('svg');
@@ -1055,7 +1047,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             }
             
             const baseSvgPoint = svgPoint.matrixTransform(svgMatrix.inverse());
-            console.log(`📍 Screen (${event.clientX}, ${event.clientY}) → Base SVG (${baseSvgPoint.x.toFixed(2)}, ${baseSvgPoint.y.toFixed(2)})`);
             
             // Step 2: Account for pan-zoom-group transform if it exists
             const panZoomGroup = svgContainer.querySelector('#pan-zoom-group') as SVGGElement;
@@ -1075,22 +1066,17 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                   const finalPoint = panZoomPoint.matrixTransform(panZoomMatrix.inverse());
                   
                   setLastClickPosition({ x: finalPoint.x, y: finalPoint.y });
-                  console.log(`🎯 Final coordinates in pan-zoom space: (${finalPoint.x.toFixed(2)}, ${finalPoint.y.toFixed(2)})`);
-                  console.log(`🔧 Pan-zoom matrix: scale=${panZoomMatrix.a.toFixed(2)}, translate=(${panZoomMatrix.e.toFixed(2)}, ${panZoomMatrix.f.toFixed(2)})`);
                 } else {
                   // No pan-zoom matrix, use base SVG coordinates
                   setLastClickPosition({ x: baseSvgPoint.x, y: baseSvgPoint.y });
-                  console.log(`🎯 Using base SVG coordinates (no pan-zoom matrix): (${baseSvgPoint.x.toFixed(2)}, ${baseSvgPoint.y.toFixed(2)})`);
                 }
               } else {
                 // No transforms in pan-zoom group, use base SVG coordinates
                 setLastClickPosition({ x: baseSvgPoint.x, y: baseSvgPoint.y });
-                console.log(`🎯 Using base SVG coordinates (no transforms): (${baseSvgPoint.x.toFixed(2)}, ${baseSvgPoint.y.toFixed(2)})`);
               }
             } else {
               // No pan-zoom group found, use base SVG coordinates
               setLastClickPosition({ x: baseSvgPoint.x, y: baseSvgPoint.y });
-              console.log(`🎯 Using base SVG coordinates (no pan-zoom group): (${baseSvgPoint.x.toFixed(2)}, ${baseSvgPoint.y.toFixed(2)})`);
             }
             
             // Clear the position after 30 seconds to give users time to use zoom controls
@@ -1635,10 +1621,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const newZoom = Math.min(10, currentZoom * 1.2);
     // Use last click position if available, otherwise zoom to viewport center
     if (lastClickPosition) {
-      console.log(`🎯 Zooming in toward last click at (${lastClickPosition.x.toFixed(2)}, ${lastClickPosition.y.toFixed(2)})`);
       zoomToScale(newZoom, lastClickPosition.x, lastClickPosition.y);
     } else {
-      console.log(`🎯 Zooming in toward viewport center (no click position stored)`);
       zoomToScale(newZoom);
     }
   }, [currentZoom, zoomToScale, lastClickPosition]);
@@ -1647,10 +1631,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const newZoom = Math.max(0.1, currentZoom * 0.8);
     // Use last click position if available, otherwise zoom to viewport center
     if (lastClickPosition) {
-      console.log(`🎯 Zooming out from last click at (${lastClickPosition.x.toFixed(2)}, ${lastClickPosition.y.toFixed(2)})`);
       zoomToScale(newZoom, lastClickPosition.x, lastClickPosition.y);
     } else {
-      console.log(`🎯 Zooming out from viewport center (no click position stored)`);
       zoomToScale(newZoom);
     }
   }, [currentZoom, zoomToScale, lastClickPosition]);

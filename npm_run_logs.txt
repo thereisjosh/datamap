@@ -1,6 +1,0 @@
-
-> rest-express@1.0.0 dev
-> NODE_ENV=development tsx server/index.ts
-
-4:38:46 PM [express] serving on port 3000
-4:38:50 PM [vite] Pre-transform error: Failed to resolve import "../../../lib/supabase" from "client/src/components/auth/AuthProvider.tsx". Does the file exist?
