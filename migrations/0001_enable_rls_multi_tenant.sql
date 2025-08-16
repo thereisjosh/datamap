@@ -226,13 +226,13 @@ CREATE POLICY "Users can manage upload sessions for their projects" ON upload_se
   );
 
 -- Create indexes for performance optimization
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_member_user_org 
+CREATE INDEX IF NOT EXISTS idx_member_user_org 
 ON member (user_id, organization_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_projects_org_owner 
+CREATE INDEX IF NOT EXISTS idx_projects_org_owner 
 ON projects (organization_id, owner_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_invitations_org_status 
+CREATE INDEX IF NOT EXISTS idx_invitations_org_status 
 ON invitation (organization_id, status);
 
 -- Grant necessary permissions to application user
