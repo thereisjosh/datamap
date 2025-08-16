@@ -147,10 +147,10 @@ const ERDPreview = () => {
         });
         
         for (const [domainId, domainData] of sortedEntries) {
-          if (domainData && domainData.diagram) {
+          if (domainData && (domainData as any).diagram) {
             // Precise matching: look for table as entity definition, not just substring
             const entityPattern = new RegExp(`^\\s*${result}\\s*\\{`, 'm');
-            if (entityPattern.test(domainData.diagram)) {
+            if (entityPattern.test((domainData as any).diagram)) {
               targetDomain = domainId;
               console.log(`📊 Table "${result}" primary domain found: "${domainId}"`);
               break;

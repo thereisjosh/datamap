@@ -12,6 +12,7 @@ import {
 } from '../ui/dropdown-menu'
 import { Badge } from '../ui/badge'
 import { Database, User, Settings, LogOut, Moon, Sun, HelpCircle } from 'lucide-react'
+import { useLocation } from 'wouter'
 
 interface AppHeaderProps {
   isDarkMode?: boolean
@@ -21,6 +22,7 @@ interface AppHeaderProps {
 export function AppHeader({ isDarkMode = false, setIsDarkMode }: AppHeaderProps) {
   const { user, profile, signOut, activeOrganization } = useAuth()
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [, navigate] = useLocation()
 
   const handleSignOut = async () => {
     try {
@@ -58,12 +60,15 @@ export function AppHeader({ isDarkMode = false, setIsDarkMode }: AppHeaderProps)
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center space-x-3">
+          <button 
+            onClick={() => navigate('/projects')}
+            className="flex items-center space-x-3 hover:opacity-80 transition-opacity"
+          >
             <Database className="h-7 w-7 text-primary" />
             <div>
               <h1 className="text-xl font-bold text-primary">ERDBuilder</h1>
             </div>
-          </div>
+          </button>
 
           {/* Organization Selector - Center */}
           <div className="hidden md:flex flex-1 justify-center max-w-md mx-8">
@@ -157,12 +162,24 @@ export function AppHeader({ isDarkMode = false, setIsDarkMode }: AppHeaderProps)
                 <DropdownMenuSeparator className="md:hidden" />
 
                 {/* Menu Items */}
-                <DropdownMenuItem className="cursor-pointer">
+                <DropdownMenuItem 
+                  className="cursor-pointer"
+                  onClick={() => {
+                    setShowUserMenu(false)
+                    navigate('/settings/profile')
+                  }}
+                >
                   <User className="mr-2 h-4 w-4" />
                   Profile Settings
                 </DropdownMenuItem>
 
-                <DropdownMenuItem className="cursor-pointer">
+                <DropdownMenuItem 
+                  className="cursor-pointer"
+                  onClick={() => {
+                    setShowUserMenu(false)
+                    navigate('/settings/organization')
+                  }}
+                >
                   <Settings className="mr-2 h-4 w-4" />
                   Organization Settings
                 </DropdownMenuItem>

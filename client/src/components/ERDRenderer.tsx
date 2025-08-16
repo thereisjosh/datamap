@@ -13,6 +13,7 @@ interface ERDRendererProps {
   selectedTableFromSearch?: string | null;
   onTableSelectionComplete?: () => void;
   onDomainSwitch?: (domain: string, tableName: string) => void;
+  domainResults?: Record<string, any>;
 }
 
 
@@ -23,8 +24,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   domain,
   selectedTableFromSearch = null,
   onTableSelectionComplete,
-  onDomainSwitch
+  onDomainSwitch,
+  domainResults = {}
 }) => {
+  // 🚨 DEBUG: Component render tracking
+  console.log(`🔄 ERDRenderer RENDER: selectedTableFromSearch="${selectedTableFromSearch}", domain="${domain}", mermaidCode.length=${mermaidCode.length}`);
+  
   // State for Direct SVG Rendering pattern
   const [svgContent, setSvgContent] = useState<string>('');
   const [originalSvgContent, setOriginalSvgContent] = useState<string>(''); // Store original content separately
@@ -34,12 +39,17 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const [needsCenteringAfterStyling, setNeedsCenteringAfterStyling] = useState<{ tableName: string; } | null>(null);
   const [isInitialStylingComplete, setIsInitialStylingComplete] = useState<boolean>(false);
   
+  // Search-specific state for immediate centering
+  const [searchTargetTable, setSearchTargetTable] = useState<string | null>(null);
+  const [isSearchTriggered, setIsSearchTriggered] = useState<boolean>(false);
+  
   // Transform-based Pan-Zoom state and refs
   const svgContainerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const transformGroupRef = useRef<SVGGElement | null>(null);
   const [currentZoom, setCurrentZoom] = useState<number>(1.0);
   const [currentPan, setCurrentPan] = useState<{x: number, y: number}>({x: 0, y: 0});
+  const [lastClickPosition, setLastClickPosition] = useState<{ x: number; y: number } | null>(null);
   const [isPanEnabled, setIsPanEnabled] = useState<boolean>(true);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{x: number, y: number}>({x: 0, y: 0});
@@ -480,6 +490,124 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     existingHandles.forEach(handle => handle.remove());
   }, []);
 
+  // Helper function to get table center coordinates
+  const getTableCenterCoordinates = useCallback((tableName: string): { x: number; y: number } | null => {
+    if (!svgContainerRef.current) {
+      return null;
+    }
+
+    const svgContainer = svgContainerRef.current;
+    const svg = svgContainer.querySelector('svg') as SVGSVGElement;
+    if (!svg) {
+      return null;
+    }
+
+    // Try multiple strategies to find the table entity (same logic as centerOnTable)
+    let tableEntity: Element | null = null;
+    
+    // Strategy 1: Use data-table-name attribute
+    tableEntity = svg.querySelector(`g[class*="node"][data-table-name="${tableName}"]`) || 
+                  svg.querySelector(`g[data-table-name="${tableName}"]`);
+    
+    // Strategy 2: Use Mermaid-generated ID
+    if (!tableEntity) {
+      tableEntity = svg.querySelector(`g[id*="entity-${tableName}-"]`);
+    }
+    
+    // Strategy 3: Search by text content in nodeLabel spans
+    if (!tableEntity) {
+      const nodeLabels = Array.from(svg.querySelectorAll('span.nodeLabel'));
+      for (const label of nodeLabels) {
+        if (label.textContent?.trim() === tableName) {
+          tableEntity = label.closest('g[class*="node"]');
+          if (tableEntity) break;
+        }
+      }
+    }
+
+    if (!tableEntity) {
+      return null;
+    }
+
+    // Calculate center coordinates using the same logic as centerOnTable
+    let elementCenterX = 0;
+    let elementCenterY = 0;
+    let coordinatesFound = false;
+    
+    // Strategy 1: getBBox() - Most reliable for SVG elements
+    try {
+      if (tableEntity.ownerDocument && typeof tableEntity.getBoundingClientRect === 'function') {
+        const bbox = (tableEntity as SVGGraphicsElement).getBBox();
+        
+        if (bbox && bbox.width > 0 && bbox.height > 0 && 
+            isFinite(bbox.x) && isFinite(bbox.y) &&
+            bbox.x > -10000 && bbox.x < 10000 &&
+            bbox.y > -10000 && bbox.y < 10000) {
+          
+          // Get transform coordinates
+          let transformX = 0;
+          let transformY = 0;
+          
+          const transform = tableEntity.getAttribute('transform');
+          if (transform) {
+            const translateMatch = transform.match(/translate\(([^,\)]+)(?:,\s*([^,\)]+))?\)/);
+            if (translateMatch) {
+              transformX = parseFloat(translateMatch[1]) || 0;
+              transformY = parseFloat(translateMatch[2]) || 0;
+            }
+          }
+          
+          // Calculate center in SVG coordinate space
+          elementCenterX = transformX + (bbox.x + bbox.width / 2);
+          elementCenterY = transformY + (bbox.y + bbox.height / 2);
+          coordinatesFound = true;
+        }
+      }
+    } catch (bboxError) {
+      // Fall through to strategy 2
+    }
+    
+    // Strategy 2: Transform attributes fallback
+    if (!coordinatesFound) {
+      const transform = tableEntity.getAttribute('transform');
+      if (transform) {
+        const translateMatch = transform.match(/translate\(([^,\)]+)(?:,\s*([^,\)]+))?\)/);
+        if (translateMatch) {
+          const transformX = parseFloat(translateMatch[1]) || 0;
+          const transformY = parseFloat(translateMatch[2]) || 0;
+          
+          if (isFinite(transformX) && isFinite(transformY) &&
+              transformX > -10000 && transformX < 10000 &&
+              transformY > -10000 && transformY < 10000) {
+            elementCenterX = transformX;
+            elementCenterY = transformY;
+            coordinatesFound = true;
+          }
+        }
+      }
+    }
+    
+    // Strategy 3: ForeignObject fallback
+    if (!coordinatesFound) {
+      const foreignObjects = Array.from(tableEntity.querySelectorAll('foreignObject'));
+      if (foreignObjects.length > 0) {
+        const foreignObject = foreignObjects[0];
+        const foreignX = parseFloat(foreignObject.getAttribute('x') || '0');
+        const foreignY = parseFloat(foreignObject.getAttribute('y') || '0');
+        const foreignWidth = parseFloat(foreignObject.getAttribute('width') || '0');
+        const foreignHeight = parseFloat(foreignObject.getAttribute('height') || '0');
+        
+        if (foreignWidth > 0 && foreignHeight > 0) {
+          elementCenterX = foreignX + foreignWidth / 2;
+          elementCenterY = foreignY + foreignHeight / 2;
+          coordinatesFound = true;
+        }
+      }
+    }
+
+    return coordinatesFound ? { x: elementCenterX, y: elementCenterY } : null;
+  }, []);
+
   // Enhanced table centering function with improved handling for complex tables
   const centerOnTable = useCallback((tableName: string, retryCount: number = 0) => {
     console.log(`🎯 centerOnTable called for: ${tableName} (attempt ${retryCount + 1})`);
@@ -595,7 +723,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         console.log(`  🔄 Strategy 1: getBBox() coordinate detection (industry standard)...`);
         try {
           // Ensure element is properly attached before calling getBBox
-          if (tableEntity.ownerDocument && tableEntity.getBoundingClientRect) {
+          if (tableEntity.ownerDocument && typeof tableEntity.getBoundingClientRect === 'function') {
             const bbox = (tableEntity as SVGGraphicsElement).getBBox();
             console.log(`  - getBBox() result:`, bbox);
             
@@ -699,9 +827,22 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         }
         
         if (coordinatesFound) {
-          // Enhanced validation with bounds checking for complex tables
-          const isValidX = isFinite(elementCenterX) && elementCenterX > -10000 && elementCenterX < 10000;
-          const isValidY = isFinite(elementCenterY) && elementCenterY > -10000 && elementCenterY < 10000;
+          // Get SVG viewBox for accurate bounds checking
+          const svgElement = svgContainerRef.current?.querySelector('svg');
+          let maxX = 20000, maxY = 20000; // Default fallback bounds
+          
+          if (svgElement) {
+            const viewBox = svgElement.getAttribute('viewBox');
+            if (viewBox) {
+              const [, , width, height] = viewBox.split(' ').map(Number);
+              maxX = width + 1000; // Add buffer for transforms
+              maxY = height + 1000; // Add buffer for transforms
+            }
+          }
+          
+          // Enhanced validation with dynamic bounds based on SVG viewBox
+          const isValidX = isFinite(elementCenterX) && elementCenterX > -1000 && elementCenterX < maxX;
+          const isValidY = isFinite(elementCenterY) && elementCenterY > -1000 && elementCenterY < maxY;
           
           if (isValidX && isValidY) {
             console.log(`  📍 Final element center: (${elementCenterX}, ${elementCenterY})`);
@@ -746,26 +887,38 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       if (!tableElement && onDomainSwitch) {
         console.log(`🔍 Table "${tableName}" not found in current domain "${domain || 'unknown'}" - requesting domain switch`);
         
-        // Define domain patterns similar to server-side logic
-        const domainPatterns = {
-          'user-management': ['User', 'Role', 'Group', 'Permission', 'Login'],
-          'donations-payments': ['Donation', 'Giver', 'Pledge', 'Fund', 'Donor', 'Payment', 'Transaction', 'Invoice', 'Billing', 'ClaimTDR', 'TaxDeductible', 'Receipt'],
-          'opportunities': ['Opportunity', 'Deal', 'Quote', 'Lead'],
-          'campaigns': ['Campaign', 'Marketing', 'Contact', 'ActiveCampaign', 'BulkImport'],
-          'system': ['Log', 'SSO', 'AppVar', 'Configuration', 'Settings']
-        };
-        
-        // Find which domain this table likely belongs to
+        // Use real domainResults to find which domain contains this table
         let targetDomain = null;
-        for (const [domainId, patterns] of Object.entries(domainPatterns)) {
-          for (const pattern of patterns) {
-            if (tableName.toLowerCase().includes(pattern.toLowerCase()) || pattern.toLowerCase().includes(tableName.toLowerCase())) {
-              targetDomain = domainId;
-              console.log(`📊 Table "${tableName}" matches domain "${domainId}" pattern "${pattern}"`);
-              break;
+        
+        if (Object.keys(domainResults).length > 0) {
+          for (const [domainName, domainData] of Object.entries(domainResults)) {
+            if (domainData?.diagram) {
+              // Parse the mermaid diagram to check if it contains the table
+              const diagram = domainData.diagram;
+              const lines = diagram.split('\n');
+              
+              for (const line of lines) {
+                const trimmedLine = line.trim();
+                // Check for table definition: "TableName {" or relationship references
+                if (trimmedLine.startsWith(tableName + ' {') || 
+                    trimmedLine.includes(tableName + ' ||') ||
+                    trimmedLine.includes('|| ' + tableName) ||
+                    trimmedLine.includes(tableName + ' }')) {
+                  targetDomain = domainName;
+                  console.log(`📊 Table "${tableName}" found in domain "${domainName}"`);
+                  break;
+                }
+              }
+              
+              if (targetDomain) break;
             }
           }
-          if (targetDomain) break;
+          
+          // Fallback to overview if not found in specific domains
+          if (!targetDomain && domainResults.overview) {
+            targetDomain = 'overview';
+            console.log(`📊 Table "${tableName}" not found in specific domains, falling back to overview`);
+          }
         }
         
         if (targetDomain && targetDomain !== domain) {
@@ -859,9 +1012,19 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       }
     }, 10);
     
+    // Update lastClickPosition to table center for better zoom experience
+    // This ensures that zoom controls focus on the table center rather than click coordinates
+    const tableCenter = getTableCenterCoordinates(tableName);
+    if (tableCenter) {
+      setLastClickPosition({ x: tableCenter.x, y: tableCenter.y });
+      console.log(`🎯 Updated click position to table center: (${tableCenter.x.toFixed(2)}, ${tableCenter.y.toFixed(2)})`);
+    } else {
+      console.log(`⚠️ Could not determine table center for ${tableName}, keeping original click position`);
+    }
+    
     // Schedule centering to happen after styling completes
     setNeedsCenteringAfterStyling({ tableName });
-  }, [selectedTable, domain, onDomainSwitch]);
+  }, [selectedTable, domain, onDomainSwitch, getTableCenterCoordinates]);
 
   // Add event delegation for table clicks - handles clicks on any child element
   useEffect(() => {
@@ -874,6 +1037,69 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         console.log(`📍 Document click detected in SVG area:`);
         console.log(`  Target:`, target.tagName, (target as any).className?.baseVal || target.className);
         console.log(`  Position: (${event.clientX}, ${event.clientY})`);
+        
+        // Capture click coordinates in SVG space for zoom-to-cursor functionality
+        const svgElement = svgContainer.querySelector('svg');
+        if (svgElement) {
+          try {
+            // Convert screen coordinates to SVG coordinates, accounting for pan-zoom transforms
+            const svgPoint = svgElement.createSVGPoint();
+            svgPoint.x = event.clientX;
+            svgPoint.y = event.clientY;
+            
+            // Step 1: Transform screen coordinates to base SVG coordinates
+            const svgMatrix = svgElement.getScreenCTM();
+            if (!svgMatrix) {
+              console.warn('Could not get SVG screen CTM');
+              return;
+            }
+            
+            const baseSvgPoint = svgPoint.matrixTransform(svgMatrix.inverse());
+            console.log(`📍 Screen (${event.clientX}, ${event.clientY}) → Base SVG (${baseSvgPoint.x.toFixed(2)}, ${baseSvgPoint.y.toFixed(2)})`);
+            
+            // Step 2: Account for pan-zoom-group transform if it exists
+            const panZoomGroup = svgContainer.querySelector('#pan-zoom-group') as SVGGElement;
+            if (panZoomGroup) {
+              // Get the current transform of the pan-zoom group
+              const panZoomTransform = panZoomGroup.transform.baseVal;
+              if (panZoomTransform.numberOfItems > 0) {
+                // Get the consolidated matrix from all transforms in the pan-zoom group
+                const panZoomMatrix = panZoomTransform.consolidate()?.matrix;
+                if (panZoomMatrix) {
+                  // Create SVG point in base SVG coordinates
+                  const panZoomPoint = svgElement.createSVGPoint();
+                  panZoomPoint.x = baseSvgPoint.x;
+                  panZoomPoint.y = baseSvgPoint.y;
+                  
+                  // Transform through inverse of pan-zoom matrix to get coordinates in pan-zoom space
+                  const finalPoint = panZoomPoint.matrixTransform(panZoomMatrix.inverse());
+                  
+                  setLastClickPosition({ x: finalPoint.x, y: finalPoint.y });
+                  console.log(`🎯 Final coordinates in pan-zoom space: (${finalPoint.x.toFixed(2)}, ${finalPoint.y.toFixed(2)})`);
+                  console.log(`🔧 Pan-zoom matrix: scale=${panZoomMatrix.a.toFixed(2)}, translate=(${panZoomMatrix.e.toFixed(2)}, ${panZoomMatrix.f.toFixed(2)})`);
+                } else {
+                  // No pan-zoom matrix, use base SVG coordinates
+                  setLastClickPosition({ x: baseSvgPoint.x, y: baseSvgPoint.y });
+                  console.log(`🎯 Using base SVG coordinates (no pan-zoom matrix): (${baseSvgPoint.x.toFixed(2)}, ${baseSvgPoint.y.toFixed(2)})`);
+                }
+              } else {
+                // No transforms in pan-zoom group, use base SVG coordinates
+                setLastClickPosition({ x: baseSvgPoint.x, y: baseSvgPoint.y });
+                console.log(`🎯 Using base SVG coordinates (no transforms): (${baseSvgPoint.x.toFixed(2)}, ${baseSvgPoint.y.toFixed(2)})`);
+              }
+            } else {
+              // No pan-zoom group found, use base SVG coordinates
+              setLastClickPosition({ x: baseSvgPoint.x, y: baseSvgPoint.y });
+              console.log(`🎯 Using base SVG coordinates (no pan-zoom group): (${baseSvgPoint.x.toFixed(2)}, ${baseSvgPoint.y.toFixed(2)})`);
+            }
+            
+            // Clear the position after 30 seconds to give users time to use zoom controls
+            setTimeout(() => setLastClickPosition(null), 30000);
+            
+          } catch (error) {
+            console.warn('Could not convert click coordinates to SVG space:', error);
+          }
+        }
         
         // Try multiple strategies to find the table entity
         let entityParent: Element | null = null;
@@ -1407,13 +1633,27 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Interactive control functions for custom pan-zoom
   const handleZoomIn = useCallback(() => {
     const newZoom = Math.min(10, currentZoom * 1.2);
-    zoomToScale(newZoom);
-  }, [currentZoom, zoomToScale]);
+    // Use last click position if available, otherwise zoom to viewport center
+    if (lastClickPosition) {
+      console.log(`🎯 Zooming in toward last click at (${lastClickPosition.x.toFixed(2)}, ${lastClickPosition.y.toFixed(2)})`);
+      zoomToScale(newZoom, lastClickPosition.x, lastClickPosition.y);
+    } else {
+      console.log(`🎯 Zooming in toward viewport center (no click position stored)`);
+      zoomToScale(newZoom);
+    }
+  }, [currentZoom, zoomToScale, lastClickPosition]);
 
   const handleZoomOut = useCallback(() => {
     const newZoom = Math.max(0.1, currentZoom * 0.8);
-    zoomToScale(newZoom);
-  }, [currentZoom, zoomToScale]);
+    // Use last click position if available, otherwise zoom to viewport center
+    if (lastClickPosition) {
+      console.log(`🎯 Zooming out from last click at (${lastClickPosition.x.toFixed(2)}, ${lastClickPosition.y.toFixed(2)})`);
+      zoomToScale(newZoom, lastClickPosition.x, lastClickPosition.y);
+    } else {
+      console.log(`🎯 Zooming out from viewport center (no click position stored)`);
+      zoomToScale(newZoom);
+    }
+  }, [currentZoom, zoomToScale, lastClickPosition]);
 
   const handleReset = useCallback(() => {
     if (!svgContainerRef.current) return;
@@ -1502,14 +1742,30 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     // Remove selection handles
     removeSelectionHandles();
     
+    // Clear all visual selection states
+    const svgContainer = svgContainerRef.current;
+    if (svgContainer) {
+      // Remove any aria-pressed states from table elements
+      const selectedElements = svgContainer.querySelectorAll('[aria-pressed="true"]');
+      selectedElements.forEach(element => {
+        element.setAttribute('aria-pressed', 'false');
+      });
+    }
+    
+    // Reset React state
     setSelectedTable(null);
     setHighlightedTables(new Set());
     setViewMode('overview');
     
+    // Notify parent component that selection has been cleared
+    if (onTableSelectionComplete) {
+      onTableSelectionComplete();
+    }
+    
     handleFit();
     
-    console.log('🧹 Cleared table selection and handles');
-  }, [handleFit, removeSelectionHandles]);
+    console.log('🧹 Cleared table selection, handles, and DOM states');
+  }, [handleFit, removeSelectionHandles, onTableSelectionComplete]);
 
   const handleDomainFocus = useCallback(() => {
     // Focus on the current domain by fitting and centering
@@ -1750,28 +2006,85 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // Just use the base styled content, no additional CSS injection
       setSvgContent(baseSvgContent);
       
-      // If there's a pending table selection, handle it after styling completes
-      if (needsCenteringAfterStyling) {
+      // Only handle legacy centering if it's NOT a search-triggered selection
+      if (needsCenteringAfterStyling && !isSearchTriggered) {
         setTimeout(() => {
           centerOnTable(needsCenteringAfterStyling.tableName);
           setNeedsCenteringAfterStyling(null);
         }, 300); // Increased delay to ensure DOM updates complete and elements are positioned
       }
     }
-  }, [selectedTable, highlightedTables, baseSvgContent, isInitialStylingComplete, needsCenteringAfterStyling, centerOnTable]);
+  }, [selectedTable, highlightedTables, baseSvgContent, isInitialStylingComplete, needsCenteringAfterStyling, centerOnTable, isSearchTriggered]);
+
+  // Debug: Track selectedTableFromSearch prop changes
+  useEffect(() => {
+    console.log(`📥 PROP CHANGE: selectedTableFromSearch changed to "${selectedTableFromSearch}"`);
+  }, [selectedTableFromSearch]);
 
   // Handle external table selection from search
   useEffect(() => {
+    console.log(`🔍 ERDRenderer useEffect triggered: selectedTableFromSearch="${selectedTableFromSearch}", selectedTable="${selectedTable}"`);
+    
     if (selectedTableFromSearch && selectedTableFromSearch !== selectedTable) {
       console.log(`🔍 External table selection request: ${selectedTableFromSearch}`);
+      
+      // Mark this as a search-triggered selection for immediate centering
+      setSearchTargetTable(selectedTableFromSearch);
+      setIsSearchTriggered(true);
+      
+      // Clear any legacy centering requests since we're handling this via search centering
+      setNeedsCenteringAfterStyling(null);
+      
       handleTableClick(selectedTableFromSearch);
       
-      // Notify parent component that selection is complete
-      if (onTableSelectionComplete) {
-        onTableSelectionComplete();
-      }
+      // DON'T notify parent immediately - let the centering complete first
+      // The centering useEffect will handle notification after centering
+      console.log(`⏳ Skipping immediate onTableSelectionComplete to allow centering`);
+      // if (onTableSelectionComplete) {
+      //   onTableSelectionComplete();
+      // }
+    } else {
+      console.log(`❌ Condition not met: selectedTableFromSearch="${selectedTableFromSearch}" (truthy: ${!!selectedTableFromSearch}), selectedTable="${selectedTable}", equal: ${selectedTableFromSearch === selectedTable}`);
     }
   }, [selectedTableFromSearch, selectedTable, handleTableClick, onTableSelectionComplete]);
+
+  // Immediate centering for search results after ERD content changes
+  useEffect(() => {
+    console.log(`🎯 Search centering useEffect: searchTargetTable="${searchTargetTable}", isSearchTriggered=${isSearchTriggered}, svgContent=${!!svgContent}, baseSvgContent=${!!baseSvgContent}`);
+    
+    if (searchTargetTable && isSearchTriggered && svgContent && baseSvgContent) {
+      console.log(`🎯 Search-triggered centering: targeting table "${searchTargetTable}"`);
+      
+      // Wait for DOM to be ready, then center immediately
+      const timeoutId = setTimeout(() => {
+        console.log(`🔄 About to call centerOnTable("${searchTargetTable}")`);
+        centerOnTable(searchTargetTable);
+        
+        // Clear search target after successful centering
+        setSearchTargetTable(null);
+        setIsSearchTriggered(false);
+        
+        console.log(`✅ Search centering completed for table: ${searchTargetTable}`);
+        
+        // Now notify parent that selection is complete
+        if (onTableSelectionComplete) {
+          console.log(`📤 Calling onTableSelectionComplete after centering`);
+          onTableSelectionComplete();
+        }
+      }, 200); // Shorter delay for immediate response
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [svgContent, searchTargetTable, isSearchTriggered, baseSvgContent, centerOnTable, onTableSelectionComplete]);
+
+  // Enhanced domain switch completion detection
+  useEffect(() => {
+    if (searchTargetTable && !isSearchTriggered && svgContent) {
+      // This handles the case where domain switch completed and ERD re-rendered
+      console.log(`🌐 Domain switch completed, re-triggering search centering for: ${searchTargetTable}`);
+      setIsSearchTriggered(true);
+    }
+  }, [svgContent, searchTargetTable, isSearchTriggered]);
 
   const createSimplifiedERD = (fullCode: string): string => {
     // Analyze relationships to find key tables by domain
@@ -2219,7 +2532,9 @@ const MemoizedERDRenderer = memo(ERDRenderer, (prevProps, nextProps) => {
   return (
     prevProps.mermaidCode === nextProps.mermaidCode &&
     prevProps.isDarkMode === nextProps.isDarkMode &&
-    prevProps.isLoading === nextProps.isLoading
+    prevProps.isLoading === nextProps.isLoading &&
+    prevProps.selectedTableFromSearch === nextProps.selectedTableFromSearch &&
+    prevProps.domain === nextProps.domain
   );
 });
 

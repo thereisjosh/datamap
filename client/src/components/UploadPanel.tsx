@@ -11,6 +11,7 @@ interface UploadPanelProps {
   isLoading?: boolean;
   error?: string | null;
   onError: (error: string) => void;
+  projectId?: string;
 }
 
 const UploadPanel = ({
@@ -18,6 +19,7 @@ const UploadPanel = ({
   isLoading = false,
   error = null,
   onError,
+  projectId,
 }: UploadPanelProps) => {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -42,7 +44,7 @@ const UploadPanel = ({
             });
           }, 200);
 
-          const result = await api.parseExcelFile(file);
+          const result = await api.parseExcelFile(file, projectId);
           
           clearInterval(progressInterval);
           setUploadProgress(100);

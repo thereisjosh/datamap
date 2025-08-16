@@ -1,0 +1,266 @@
+import React, { useState } from 'react';
+import { Search, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+
+interface SearchResult {
+  tables: Array<{
+    name: string;
+    domain: string;
+  }>;
+  columns: Array<{
+    name: string;
+    table: string;
+    type: string;
+    isPK: boolean;
+    isFK: boolean;
+  }>;
+  relationships: string[];
+}
+
+interface UnifiedSearchComponentProps {
+  tables: any[];
+  relationships: any[];
+  onSearchResultClick: (type: string, item: string | object, domain?: string) => void;
+  findDomainsForTable: (tableName: string) => string[];
+  className?: string;
+  placeholder?: string;
+  layout?: 'floating' | 'card'; // floating for preview page, card for ERD page
+}
+
+export const UnifiedSearchComponent: React.FC<UnifiedSearchComponentProps> = ({
+  tables,
+  relationships,
+  onSearchResultClick,
+  findDomainsForTable,
+  className = '',
+  placeholder = 'Search tables, columns, relationships...',
+  layout = 'floating'
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResult>({
+    tables: [],
+    columns: [],
+    relationships: []
+  });
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setIsSearchActive(query.length > 0);
+    
+    if (query.length > 0) {
+      const lowercaseQuery = query.toLowerCase();
+      
+      // Search through real table names and create separate entries per domain
+      const matchingTableEntries: Array<{ name: string; domain: string }> = [];
+      const matchingTableNames = tables
+        .map(table => table.name)
+        .filter(tableName => 
+          tableName.toLowerCase().includes(lowercaseQuery)
+        );
+      
+      // For each matching table, create separate entries for each domain it appears in
+      matchingTableNames.forEach(tableName => {
+        const domains = findDomainsForTable(tableName);
+        domains.forEach(domain => {
+          matchingTableEntries.push({
+            name: tableName,
+            domain: domain
+          });
+        });
+      });
+      
+      // Search through real column names with table context
+      const matchingColumns: Array<{
+        name: string;
+        table: string;
+        type: string;
+        isPK: boolean;
+        isFK: boolean;
+      }> = [];
+      tables.forEach(table => {
+        const columns = table.columns || table.attributes || [];
+        if (Array.isArray(columns)) {
+          columns.forEach(col => {
+            const columnName = (typeof col === 'object' && col?.name) ? col.name : String(col);
+            if (columnName.toLowerCase().includes(lowercaseQuery)) {
+              matchingColumns.push({
+                name: columnName,
+                table: table.name,
+                type: (typeof col === 'object' && col?.type) ? col.type : 'text',
+                isPK: (typeof col === 'object' && col?.isPrimaryKey) ? col.isPrimaryKey : false,
+                isFK: (typeof col === 'object' && col?.isForeignKey) ? col.isForeignKey : false
+              });
+            }
+          });
+        }
+      });
+      
+      // Search through real relationships
+      const matchingRelationships = relationships
+        .map(rel => `${rel.sourceTable}-${rel.targetTable}`)
+        .filter(relName => 
+          relName.toLowerCase().includes(lowercaseQuery)
+        );
+      
+      // Remove duplicates (for columns, dedupe by table.column combination)
+      const uniqueColumns = matchingColumns.filter((col, index, arr) => 
+        index === arr.findIndex(c => c.table === col.table && c.name === col.name)
+      );
+      
+      setSearchResults({
+        tables: matchingTableEntries,
+        columns: uniqueColumns,
+        relationships: [...new Set(matchingRelationships)]
+      });
+    } else {
+      setSearchResults({ tables: [], columns: [], relationships: [] });
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setIsSearchActive(false);
+    setSearchResults({ tables: [], columns: [], relationships: [] });
+  };
+
+  const handleResultClick = (type: string, item: string | object, domain?: string) => {
+    onSearchResultClick(type, item, domain);
+    handleClearSearch(); // Clear search after selection
+  };
+
+  const containerClass = layout === 'floating' 
+    ? "absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto border border-border rounded-md bg-background shadow-lg z-10"
+    : "max-h-48 overflow-y-auto border border-border rounded-md bg-background shadow-lg";
+
+  return (
+    <div className={`relative ${className}`}>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+        <Input
+          type="text"
+          placeholder={placeholder}
+          value={searchQuery}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="pl-10 pr-10"
+        />
+        {searchQuery && (
+          <button
+            onClick={handleClearSearch}
+            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      
+      {/* Search Results */}
+      {isSearchActive && (
+        <div className={containerClass}>
+          {searchResults.tables.length > 0 && (
+            <div className="p-2 border-b border-border">
+              <div className="text-xs font-medium text-muted-foreground mb-1">Tables</div>
+              {searchResults.tables.map((tableEntry, index) => {
+                const domainText = tableEntry.domain?.replace('-', ' ') || 'overview';
+                
+                return (
+                  <div
+                    key={`${tableEntry.name}-${tableEntry.domain}-${index}`}
+                    onClick={() => handleResultClick('table', tableEntry.name, tableEntry.domain)}
+                    className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
+                  >
+                    <div className="w-2 h-2 bg-blue-500 rounded-sm"></div>
+                    <div className="flex items-center justify-between flex-1 min-w-0">
+                      <span className="font-medium text-foreground truncate">{tableEntry.name}</span>
+                      <span className="text-xs text-muted-foreground ml-2 capitalize shrink-0">
+                        ({domainText})
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          
+          {searchResults.columns.length > 0 && (
+            <div className="p-2 border-b border-border">
+              <div className="text-xs font-medium text-muted-foreground mb-1">Columns</div>
+              {searchResults.columns.map((column, index) => (
+                <div
+                  key={index}
+                  onClick={() => handleResultClick('column', column)}
+                  className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
+                >
+                  <div className="w-2 h-2 bg-green-500 rounded-sm"></div>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="font-medium text-foreground">
+                      {column.table}.{column.name}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {column.isPK && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                          PK
+                        </span>
+                      )}
+                      {column.isFK && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                          FK
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {column.type}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {searchResults.relationships.length > 0 && (
+            <div className="p-2">
+              <div className="text-xs font-medium text-muted-foreground mb-1">Relationships</div>
+              {searchResults.relationships.map((rel, index) => {
+                const [sourceTable, targetTable] = rel.split('-');
+                const sourceDomains = findDomainsForTable(sourceTable);
+                const targetDomains = findDomainsForTable(targetTable);
+                
+                // Determine if it's a cross-domain relationship
+                const isCrossDomain = !sourceDomains.some(domain => targetDomains.includes(domain));
+                const domainText = isCrossDomain 
+                  ? 'cross-domain' 
+                  : sourceDomains[0]?.replace('-', ' ') || 'overview';
+                
+                return (
+                  <div
+                    key={index}
+                    onClick={() => handleResultClick('relationship', rel)}
+                    className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
+                  >
+                    <div className={`w-2 h-2 rounded-sm ${isCrossDomain ? 'bg-orange-500' : 'bg-purple-500'}`}></div>
+                    <div className="flex items-center justify-between flex-1 min-w-0">
+                      <span className="font-medium text-foreground truncate">
+                        {sourceTable} → {targetTable}
+                      </span>
+                      <span className="text-xs text-muted-foreground ml-2 capitalize shrink-0">
+                        ({domainText})
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          
+          {searchResults.tables.length === 0 && searchResults.columns.length === 0 && searchResults.relationships.length === 0 && (
+            <div className="p-4 text-center text-muted-foreground text-sm">
+              No results found
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default UnifiedSearchComponent;

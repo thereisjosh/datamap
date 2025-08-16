@@ -9,6 +9,13 @@ import NotFound from "@/pages/not-found";
 import Welcome from "@/pages/welcome";
 import Home from "@/pages/home";
 import ERDPreview from "@/pages/erd-preview";
+import ProfileSettings from "@/pages/settings/profile";
+import OrganizationSettings from "@/pages/settings/organization";
+import Projects from "@/pages/projects";
+import ProjectUpload from "@/pages/project-upload";
+import ProjectERD from "@/pages/project-erd";
+import ProjectPreview from "@/pages/project-preview";
+import AcceptInvitation from "@/pages/accept-invitation";
 import { useState } from "react";
 
 function Router() {
@@ -19,8 +26,31 @@ function Router() {
       {/* Public routes */}
       <Route path="/" component={Welcome} />
       <Route path="/welcome" component={Welcome} />
+      <Route path="/accept-invitation/:token">
+        <AcceptInvitation isDarkMode={isDarkMode} />
+      </Route>
       
       {/* Protected routes */}
+      <Route path="/projects">
+        <AuthGuard>
+          <Projects isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+        </AuthGuard>
+      </Route>
+      <Route path="/projects/:projectId/upload">
+        <AuthGuard>
+          <ProjectUpload isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+        </AuthGuard>
+      </Route>
+      <Route path="/projects/:projectId/erd">
+        <AuthGuard>
+          <ProjectERD isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+        </AuthGuard>
+      </Route>
+      <Route path="/projects/:projectId/preview">
+        <AuthGuard>
+          <ProjectPreview isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+        </AuthGuard>
+      </Route>
       <Route path="/dashboard">
         <AuthGuard>
           <Home isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
@@ -29,6 +59,16 @@ function Router() {
       <Route path="/erd-preview">
         <AuthGuard>
           <ERDPreview />
+        </AuthGuard>
+      </Route>
+      <Route path="/settings/profile">
+        <AuthGuard>
+          <ProfileSettings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+        </AuthGuard>
+      </Route>
+      <Route path="/settings/organization">
+        <AuthGuard>
+          <OrganizationSettings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
         </AuthGuard>
       </Route>
       

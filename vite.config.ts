@@ -23,10 +23,19 @@ export default defineConfig({
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
   },
+  define: {
+    global: 'globalThis',
+  },
+  optimizeDeps: {
+    exclude: ['../lib/db.ts', '../lib/auth.ts'],
+  },
   root: path.resolve(import.meta.dirname, "client"),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      external: ['drizzle-orm', 'postgres', 'pg'],
+    },
   },
   server: {
     fs: {

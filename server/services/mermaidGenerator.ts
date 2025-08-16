@@ -435,12 +435,15 @@ export class MermaidGeneratorService {
     return meaningfulRelationships;
   }
 
-  generateMermaidDiagram(tables: TableData[], relationships: Relationship[] = [], options: MermaidOptions = {}): MermaidResponse {
+  generateMermaidDiagram(tables: TableData[], relationships: Relationship[] = [], options: MermaidOptions = {}, precomputedDomainGroups?: Record<string, TableData[]>): MermaidResponse {
     console.log(`🎨 generateMermaidDiagram called for domain: ${options.domain || 'default'}`);
     console.log(`  Input tables: ${tables.length}`);
     console.log(`  Input relationships: ${relationships.length}`);
     
     let diagram = 'erDiagram\n';
+    
+    // Compute domain groupings once if not provided (for efficiency)
+    const groupedTables = precomputedDomainGroups || this.groupTablesByDomain(tables);
     
     // If a specific domain is requested, filter for that domain
     let selectedTables: TableData[];
@@ -450,40 +453,78 @@ export class MermaidGeneratorService {
       const domainConfig = this.domainConfigs.find(d => d.id === options.domain);
       
       if (options.domain === 'cross-domain') {
-        // Special handling for cross-domain connections view
+        // Special handling for cross-domain connections view with intelligent limiting
         console.log('🔗 Generating Cross-Domain Connections view');
         
-        const allTableGroupings = this.groupTablesByDomain(tables);
-        const relationshipAnalysis = this.detectCrossDomainRelationships(relationships, allTableGroupings);
+        const relationshipAnalysis = this.detectCrossDomainRelationships(relationships, groupedTables);
         
-        // Get tables involved in cross-domain relationships
+        // Intelligent filtering for cross-domain to prevent "Maximum text size exceeded"
+        const maxCrossDomainTables = 20; // Reduced from unlimited to prevent size issues
+        const maxCrossDomainRelationships = 30; // Reduced from 100 to prevent size issues
+        
+        // Prioritize relationships by importance (FK relationships are most important)
+        const prioritizedRelationships = relationshipAnalysis.crossDomain
+          .sort((a, b) => {
+            // Prioritize FK relationships
+            const aIsFk = a.sourceColumn.toLowerCase().includes('id') || a.targetColumn.toLowerCase().includes('id');
+            const bIsFk = b.sourceColumn.toLowerCase().includes('id') || b.targetColumn.toLowerCase().includes('id');
+            if (aIsFk && !bIsFk) return -1;
+            if (!aIsFk && bIsFk) return 1;
+            return 0;
+          })
+          .slice(0, maxCrossDomainRelationships);
+        
+        // Get tables involved in the prioritized cross-domain relationships
         const crossDomainTables = new Set<string>();
-        relationshipAnalysis.crossDomain.forEach(rel => {
+        prioritizedRelationships.forEach(rel => {
           crossDomainTables.add(rel.sourceTable);
           crossDomainTables.add(rel.targetTable);
         });
         
-        selectedTables = tables.filter(table => crossDomainTables.has(table.name));
-        selectedRelationships = relationshipAnalysis.crossDomain;
+        // Limit tables to prevent diagram size issues
+        const crossDomainTableArray = Array.from(crossDomainTables).slice(0, maxCrossDomainTables);
+        selectedTables = tables.filter(table => crossDomainTableArray.includes(table.name));
+        selectedRelationships = prioritizedRelationships;
         
+        console.log(`  Found ${relationshipAnalysis.crossDomain.length} total cross-domain relationships`);
+        console.log(`  Selected ${selectedRelationships.length} prioritized relationships`);
         console.log(`  Selected ${selectedTables.length} tables involved in cross-domain relationships`);
-        console.log(`  Found ${selectedRelationships.length} cross-domain relationships`);
+        
+        // Add warning if we had to limit the results
+        if (relationshipAnalysis.crossDomain.length > maxCrossDomainRelationships) {
+          console.log(`  ⚠️ Limited cross-domain view to ${maxCrossDomainRelationships} most important relationships`);
+        }
         
       } else if (domainConfig) {
-        const domainTables = tables.filter(table => 
-          domainConfig.tablePatterns.some(pattern => table.name.includes(pattern))
-        );
+        console.log(`🎯 Domain filtering for "${domainConfig.id}" with patterns: [${domainConfig.tablePatterns.join(', ')}]`);
+        
+        // Use precomputed domain groupings for consistency and efficiency
+        const domainTables = groupedTables[domainConfig.id] || [];
+        
+        console.log(`🔍 Domain table filtering results for "${domainConfig.id}" (using groupTablesByDomain):`);
+        console.log(`  Total input tables: ${tables.length}`);
+        console.log(`  Tables assigned to domain: ${domainTables.length}`);
+        console.log(`  Domain tables: [${domainTables.map(t => t.name).join(', ')}]`);
+        
         selectedTables = this.getMostConnectedTables(
           domainTables, 
           relationships, 
           options.maxTables || domainConfig.maxTables
         );
+        
+        console.log(`📊 After getMostConnectedTables for "${domainConfig.id}":`);
+        console.log(`  Selected tables: ${selectedTables.length}/${domainTables.length}`);
+        console.log(`  Selected table names: [${selectedTables.map(t => t.name).join(', ')}]`);
+        
         const tableNames = new Set(selectedTables.map(t => t.name));
         selectedRelationships = this.getMeaningfulRelationships(
           relationships, 
           tableNames, 
           options.maxRelationships || domainConfig.maxRelationships
         );
+        
+        console.log(`🔗 Relationship filtering for "${domainConfig.id}":`);
+        console.log(`  Selected relationships: ${selectedRelationships.length}`);
       } else {
         // Fallback to overview with increased limits
         console.log('🔄 Domain not found, falling back to general overview');
@@ -494,7 +535,6 @@ export class MermaidGeneratorService {
     } else {
       // Overview mode - show key tables from all domains
       console.log('📊 Overview mode - selecting key tables from all domains');
-      const groupedTables = this.groupTablesByDomain(tables);
       const overviewTables: TableData[] = [];
       
       // Take top tables from each domain (increased from 3 to 8 per domain)
@@ -630,36 +670,44 @@ export class MermaidGeneratorService {
       metadata: {
         tables_count: selectedTables.length,
         relationships_count: processedRelationships.size,
-        domain: options.domain,
-        isValid: validation.isValid,
-        validationErrors: validation.errors
+        domain: options.domain
       }
     };
   }
 
   // Generate diagrams for all domains
   generateAllDomainDiagrams(tables: TableData[], relationships: Relationship[] = []): Record<string, MermaidResponse> {
-    console.log(`🚀 generateAllDomainDiagrams called with:`);
+    const runId = Math.random().toString(36).substr(2, 9);
+    console.log(`🚀 generateAllDomainDiagrams called with [RUN-${runId}]:`);
     console.log(`  Tables: ${tables.length}`);
     console.log(`  Relationships: ${relationships.length}`);
+    console.log(`  Table names: ${tables.map(t => t.name).join(', ')}`);
+    
+    // Compute domain groupings once for efficiency and consistency
+    console.log(`🏷️ [RUN-${runId}] Computing domain groupings once for all diagrams...`);
+    const precomputedDomainGroups = this.groupTablesByDomain(tables);
+    console.log(`📊 [RUN-${runId}] Domain grouping summary:`);
+    Object.entries(precomputedDomainGroups).forEach(([domain, domainTables]) => {
+      console.log(`  ${domain}: ${domainTables.length} tables`);
+    });
     
     const results: Record<string, MermaidResponse> = {};
     
     // Generate overview
-    console.log('🔄 Generating overview domain...');
-    results['overview'] = this.generateMermaidDiagram(tables, relationships, { domain: 'overview' });
+    console.log(`🔄 [RUN-${runId}] Generating overview domain...`);
+    results['overview'] = this.generateMermaidDiagram(tables, relationships, { domain: 'overview' }, precomputedDomainGroups);
     
     // Generate domain-specific diagrams
     this.domainConfigs.forEach(config => {
-      console.log(`🔄 Generating ${config.id} domain...`);
+      console.log(`🔄 [RUN-${runId}] Generating ${config.id} domain...`);
       results[config.id] = this.generateMermaidDiagram(tables, relationships, { 
         domain: config.id,
         maxTables: config.maxTables,
         maxRelationships: config.maxRelationships
-      });
+      }, precomputedDomainGroups);
     });
     
-    console.log(`✅ Generated ${Object.keys(results).length} domain diagrams`);
+    console.log(`✅ [RUN-${runId}] Generated ${Object.keys(results).length} domain diagrams`);
     return results;
   }
 

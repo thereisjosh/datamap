@@ -218,6 +218,8 @@ export class ExcelParserService {
 
       // Initialize tables from TableMetadata sheet
       let createdTablesCount = 0;
+      const skippedTables = [];
+      
       for (const row of tableRows) {
         console.log('\n🔍 Processing table row:', row);
         
@@ -228,9 +230,13 @@ export class ExcelParserService {
         console.log(`  Found logicalTableName: "${logicalTableName}"`);
         console.log(`  Found dataKind: "${dataKind}"`);
         console.log(`  dataKind?.toLowerCase(): "${dataKind?.toLowerCase()}"`);
-        console.log(`  Condition check: logicalTableName && dataKind?.toLowerCase() === 'entity' = ${!!(logicalTableName && dataKind?.toLowerCase() === 'entity')}`);
+        const isEntity = dataKind?.toLowerCase() === 'entity';
+        const isStaticEntity = dataKind?.toLowerCase() === 'staticentity';
+        const shouldCreateTable = logicalTableName && (isEntity || isStaticEntity);
+        
+        console.log(`  Condition check: isEntity=${isEntity}, isStaticEntity=${isStaticEntity}, shouldCreateTable=${shouldCreateTable}`);
 
-        if (logicalTableName && dataKind?.toLowerCase() === 'entity') {
+        if (shouldCreateTable) {
           const tableName = logicalTableName.toString().trim();
           console.log(`  ✅ Creating table: "${tableName}"`);
           if (!tableMap.has(tableName)) {
@@ -243,9 +249,16 @@ export class ExcelParserService {
             console.log(`  ⚠️ Table "${tableName}" already exists, skipping`);
           }
         } else {
-          console.log(`  ❌ Skipping row - missing logicalTableName or dataKind !== 'entity'`);
+          const tableName = logicalTableName ? logicalTableName.toString().trim() : 'Unknown';
+          skippedTables.push({ tableName, dataKind });
+          console.log(`  ❌ Skipping row - missing logicalTableName or dataKind not in ['entity', 'staticEntity']`);
         }
       }
+      
+      console.log(`\n📋 Skipped tables summary:`);
+      skippedTables.forEach(({ tableName, dataKind }) => {
+        console.log(`  - ${tableName}: dataKind="${dataKind}"`);
+      });
       
       console.log(`\n📈 Total tables created from TableMetadata: ${createdTablesCount}`);
       console.log(`📈 Tables in tableMap: ${tableMap.size}`);
@@ -330,7 +343,8 @@ export class ExcelParserService {
             sourceColumn: columnName,
             targetTable: referencedTable,
             targetColumn: referencedColumn,
-            createdAt: new Date()
+            createdAt: new Date(),
+            projectId: null
           };
           
           console.log('Found relationship:', {
@@ -343,6 +357,36 @@ export class ExcelParserService {
           relationships.push(relationship);
         }
       }
+      
+      // Auto-create missing target tables for foreign key relationships
+      console.log(`\n🔧 Auto-creating missing target tables for relationships...`);
+      const missingTargetTables = new Set<string>();
+      
+      for (const relationship of relationships) {
+        if (!tableMap.has(relationship.targetTable)) {
+          missingTargetTables.add(relationship.targetTable);
+          console.log(`  ⚠️ Missing target table detected: "${relationship.targetTable}" (referenced by ${relationship.sourceTable}.${relationship.sourceColumn})`);
+        }
+      }
+      
+      let autoCreatedCount = 0;
+      for (const missingTableName of missingTargetTables) {
+        console.log(`  🆕 Auto-creating missing table: "${missingTableName}"`);
+        tableMap.set(missingTableName, {
+          name: missingTableName,
+          attributes: [
+            {
+              name: 'Id',
+              type: 'INTEGER',
+              isPrimaryKey: true,
+              isForeignKey: false
+            }
+          ]
+        });
+        autoCreatedCount++;
+      }
+      
+      console.log(`📈 Auto-created ${autoCreatedCount} missing target tables: [${Array.from(missingTargetTables).join(', ')}]`);
 
       // Convert table map to array
       tables = Array.from(tableMap.values());

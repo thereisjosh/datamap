@@ -6,6 +6,7 @@
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "noEmit": true,
     "module": "ESNext",
+    "target": "ES2019",
     "strict": true,
     "lib": ["esnext", "dom", "dom.iterable"],
     "jsx": "preserve",
@@ -15,6 +16,7 @@
     "moduleResolution": "bundler",
     "baseUrl": ".",
     "types": ["node", "vite/client"],
+    "downlevelIteration": true,
     "paths": {
       "@/*": ["./client/src/*"],
       "@shared/*": ["./shared/*"]

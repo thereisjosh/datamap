@@ -1,8 +1,32 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { createClient } from '../../../../lib/supabase'
-import { completeUserOnboarding, getUserOrganizations } from '../../../../lib/auth'
-import type { User } from '@supabase/supabase-js'
-import type { UserProfile, Organization, OrganizationMember } from '../../../../lib/auth'
+import { authClient } from '../../../../lib/auth.client'
+import type { User, Session } from '../../../../lib/auth.client'
+
+// Extended organization type with custom fields
+type Organization = {
+  id: string
+  name: string
+  slug?: string
+  metadata?: any
+  domain?: string
+  description?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+type OrganizationMember = {
+  id: string
+  organizationId: string
+  userId: string
+  role: string
+}
+
+type UserProfile = {
+  id: string
+  name: string
+  email: string
+  avatar_url?: string
+}
 
 interface AuthContextType {
   user: User | null
@@ -35,83 +59,131 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(null)
+  // Use BetterAuth React hooks for session and organization management
+  const { data: session, isPending, error, refetch } = authClient.useSession()
+  
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [activeOrganization, setActiveOrganizationState] = useState<Organization | null>(null)
+  
+  // Use BetterAuth organization hooks (if available, fallback to state)
   const [organizations, setOrganizations] = useState<{
     organization: Organization
     membership: OrganizationMember
   }[]>([])
-  const [activeOrganization, setActiveOrganizationState] = useState<Organization | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const supabase = createClient()
+  
+  // Derive user from session
+  const user = session?.user || null
+  const loading = isPending
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        loadUserProfile(session.user.id)
-      } else {
-        setLoading(false)
-      }
-    })
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null)
-      
-      if (session?.user) {
-        if (event === 'SIGNED_IN') {
-          await loadUserProfile(session.user.id)
-        }
-      } else {
-        setProfile(null)
-        setOrganizations([])
-        setActiveOrganizationState(null)
-        setLoading(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
+    // Handle session changes
+    if (session?.user) {
+      console.log('✅ Session detected, loading user profile:', session.user.email)
+      loadUserProfile(session.user.id).catch(console.error)
+    } else {
+      console.log('❌ No session, clearing user state')
+      setProfile(null)
+      setOrganizations([])
+      setActiveOrganizationState(null)
+    }
+  }, [session])
 
   const loadUserProfile = async (userId: string) => {
     try {
-      setLoading(true)
+      console.log('Loading user profile for:', userId)
       
-      // Get user profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
+      // Create profile from user data
+      setProfile({
+        id: userId,
+        name: user?.name || 'User',
+        email: user?.email || '',
+        avatar_url: user?.image || undefined,
+      })
 
-      if (profileError) {
-        console.error('Profile error:', profileError)
-        setLoading(false)
+      // Use BetterAuth organization APIs to get user organizations
+      await loadUserOrganizations()
+
+      console.log('✅ User profile loaded successfully')
+    } catch (error) {
+      console.error('❌ Error loading user profile:', error)
+    }
+  }
+
+  const loadUserOrganizations = async () => {
+    try {
+      console.log('🔍 Loading organizations for user:', user?.email)
+      
+      // Use our custom organization API that includes all fields
+      const response = await fetch('/api/organizations', {
+        credentials: 'include'
+      })
+      
+      console.log('🔍 API response status:', response.status)
+      
+      if (!response.ok) {
+        console.warn('❌ Failed to load organizations. Status:', response.status)
+        const errorText = await response.text()
+        console.warn('❌ Error response:', errorText)
+        setOrganizations([])
         return
       }
 
-      setProfile(profileData)
+      const responseData = await response.json()
+      console.log('🔍 Raw API response:', responseData)
+      
+      const { organizations: orgsData } = responseData
+      
+      // Debug: Log the custom API response
+      console.log('🔍 Custom API returned', orgsData?.length || 0, 'organizations')
+      console.log('🔍 Organizations data:', orgsData)
 
-      // Get user organizations
-      const orgs = await getUserOrganizations(userId)
-      setOrganizations(orgs)
-
-      // Set active organization (default to first one)
-      if (orgs.length > 0) {
-        const savedActiveOrgId = localStorage.getItem('activeOrganizationId')
-        const activeOrg = orgs.find(o => o.organization.id === savedActiveOrgId)?.organization || orgs[0].organization
-        setActiveOrganizationState(activeOrg)
+      if (!orgsData || !Array.isArray(orgsData)) {
+        console.warn('❌ Invalid organizations data structure:', orgsData)
+        setOrganizations([])
+        return
       }
 
+      // Transform custom API data to our format
+      const formattedOrgs = orgsData.map((orgItem: any) => {
+        console.log('🔍 Processing organization item:', orgItem)
+        console.log('🔍 Organization name:', orgItem.organization?.name, 'Role:', orgItem.membership?.role)
+        
+        return {
+          organization: {
+            id: orgItem.organization.id,
+            name: orgItem.organization.name,
+            domain: orgItem.organization.domain,
+            description: orgItem.organization.description,
+            createdAt: orgItem.organization.createdAt
+          },
+          membership: {
+            id: orgItem.membership.id,
+            organizationId: orgItem.organization.id,
+            userId: user?.id || '',
+            role: orgItem.membership.role
+          }
+        }
+      })
+
+      console.log('✅ Formatted organizations:', formattedOrgs)
+      console.log('✅ Organizations count:', formattedOrgs.length)
+      setOrganizations(formattedOrgs)
+
+      // Set active organization (default to first one)
+      if (formattedOrgs.length > 0) {
+        const savedActiveOrgId = localStorage.getItem('activeOrganizationId')
+        const activeOrg = formattedOrgs.find(o => o.organization.id === savedActiveOrgId)?.organization || formattedOrgs[0].organization
+        setActiveOrganizationState(activeOrg)
+        console.log('✅ Active organization set:', activeOrg.name)
+      } else {
+        console.warn('❌ No organizations found for user')
+        setActiveOrganizationState(null)
+      }
+      
+      console.log('✅ Organizations loaded via custom API:', formattedOrgs.length)
     } catch (error) {
-      console.error('Error loading user profile:', error)
-    } finally {
-      setLoading(false)
+      console.error('❌ Error loading organizations:', error)
+      setOrganizations([])
     }
   }
 
@@ -121,8 +193,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+  const signIn = async (email: string, password: string): Promise<void> => {
+    const { data, error } = await authClient.signIn.email({
       email,
       password,
     })
@@ -132,45 +204,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  const signUp = async (email: string, password: string, name: string) => {
-    const { data, error } = await supabase.auth.signUp({
+  const signUp = async (email: string, password: string, name: string): Promise<void> => {
+    const { data, error } = await authClient.signUp.email({
       email,
       password,
-      options: {
-        data: {
-          name: name,
-        },
-      },
+      name,
     })
 
     if (error) {
       throw new Error(error.message)
     }
 
-    // If user is immediately available (no email confirmation required)
-    if (data.user && !data.session) {
-      // User needs to confirm email
-      throw new Error('Please check your email for a confirmation link')
-    }
-
-    if (data.user && data.session) {
-      // Complete onboarding
-      try {
-        await completeUserOnboarding(
-          data.user.id,
-          email,
-          name,
-          data.user.user_metadata?.avatar_url
-        )
-      } catch (onboardingError) {
-        console.error('Onboarding error:', onboardingError)
-        // Don't throw here - user is already created
-      }
-    }
+    // BetterAuth organization plugin handles organization creation/assignment automatically
+    // No custom onboarding logic needed - organization membership is handled via invitation acceptance
+    console.log('✅ User registration completed via BetterAuth')
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
+    const { error } = await authClient.signOut()
     if (error) {
       throw new Error(error.message)
     }

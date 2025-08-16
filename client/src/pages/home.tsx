@@ -166,7 +166,7 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
     Object.values(domainResults).forEach((domain: any) => {
       if (domain.diagram) {
         const lines = domain.diagram.split('\n');
-        lines.forEach(line => {
+        lines.forEach((line: string) => {
           if (line.includes('--') && (line.includes('FK') || line.includes('Cross-Domain'))) {
             if (line.toLowerCase().includes(lowerQuery)) {
               results.relationships.push(line.trim());
@@ -219,10 +219,10 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
         });
         
         for (const [domainId, domainData] of sortedEntries) {
-          if (domainData && domainData.diagram) {
+          if (domainData && (domainData as any).diagram) {
             // Precise matching: look for table as entity definition, not just substring
             const entityPattern = new RegExp(`^\\s*${result}\\s*\\{`, 'm');
-            if (entityPattern.test(domainData.diagram)) {
+            if (entityPattern.test((domainData as any).diagram)) {
               targetDomain = domainId;
               console.log(`📊 Table "${result}" primary domain found: "${domainId}"`);
               break;
@@ -328,38 +328,47 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
           {/* Quick Actions */}
           <Card>
             <CardContent className="pt-6">
-              <div className="flex flex-col lg:flex-row gap-6">
-                {/* Left: Upload Section */}
-                <div className="flex-1">
-                  <h2 className="text-xl font-semibold mb-4">Create New ERD</h2>
-                  <Tabs
-                    value={activeTab}
-                    onValueChange={setActiveTab}
-                    className="w-full"
-                  >
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="upload">Upload File</TabsTrigger>
-                      <TabsTrigger value="metadata" disabled={tables.length === 0}>
-                        Review Data
-                      </TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="upload" className="mt-4">
-                      <UploadPanel
-                        onFileUpload={handleFileUpload}
-                        isLoading={isLoading}
-                        error={error}
-                        onError={handleError}
-                      />
-                    </TabsContent>
-                    <TabsContent value="metadata" className="mt-4">
-                      <MetadataPreview tables={tables} />
-                    </TabsContent>
-                  </Tabs>
+              <div className="grid lg:grid-cols-2 gap-8 h-[800px]">
+                {/* Left Column: Upload Section */}
+                <div className="flex flex-col">
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold mb-2">Create New ERD</h2>
+                    <p className="text-sm text-muted-foreground">Upload and process your data dictionary</p>
+                  </div>
+                  
+                  <div className="flex-1">
+                    <Tabs
+                      value={activeTab}
+                      onValueChange={setActiveTab}
+                      className="h-full flex flex-col"
+                    >
+                      <TabsList className="grid w-full grid-cols-2 mb-4">
+                        <TabsTrigger value="upload">Upload File</TabsTrigger>
+                        <TabsTrigger value="metadata" disabled={tables.length === 0}>
+                          Review Data
+                        </TabsTrigger>
+                      </TabsList>
+                      <div className="flex-1">
+                        <TabsContent value="upload" className="h-full">
+                          <UploadPanel
+                            onFileUpload={handleFileUpload}
+                            isLoading={isLoading}
+                            error={error}
+                            onError={handleError}
+                          />
+                        </TabsContent>
+                        <TabsContent value="metadata" className="h-full">
+                          <MetadataPreview tables={tables} />
+                        </TabsContent>
+                      </div>
+                    </Tabs>
+                  </div>
                 </div>
 
-                {/* Right: ERD Preview */}
-                <div className="flex-1">
-                  <div className="flex justify-between items-center mb-4">
+                {/* Right Column: ERD Preview with Proper Hierarchy */}
+                <div className="flex flex-col h-full">
+                  {/* Header Section - Fixed height */}
+                  <div className="flex justify-between items-center mb-6 pb-4 border-b border-border">
                     <h2 className="text-xl font-semibold">ERD Preview</h2>
                     {(tables.length > 0 || mermaidCode) && (
                       <Button
@@ -374,142 +383,151 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
                     )}
                   </div>
                   
-                  {/* Smart Search Component */}
+                  {/* Controls Section - Compact and grouped */}
                   {tables.length > 0 && (
-                    <div className="mb-4">
-                      <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                        Search Tables & Columns:
-                      </label>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                        <input
-                          type="text"
-                          placeholder="Search tables, columns, relationships..."
-                          value={searchQuery}
-                          onChange={(e) => handleSearch(e.target.value)}
-                          className="w-full pl-10 pr-10 py-2 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
-                        />
-                        {searchQuery && (
-                          <button
-                            onClick={handleClearSearch}
-                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
+                    <div className="mb-6 space-y-4">
+                      {/* Search Control */}
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                          Search Tables & Columns:
+                        </label>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                          <input
+                            type="text"
+                            placeholder="Search tables, columns, relationships..."
+                            value={searchQuery}
+                            onChange={(e) => handleSearch(e.target.value)}
+                            className="w-full pl-10 pr-10 py-2 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                          />
+                          {searchQuery && (
+                            <button
+                              onClick={handleClearSearch}
+                              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                        
+                        {/* Search Results */}
+                        {isSearchActive && (
+                          <div className="mt-2 max-h-48 overflow-y-auto border border-border rounded-md bg-background/95 backdrop-blur-sm">
+                            {searchResults.tables.length > 0 && (
+                              <div className="p-2 border-b border-border">
+                                <div className="text-xs font-medium text-muted-foreground mb-1">Tables ({searchResults.tables.length})</div>
+                                {searchResults.tables.slice(0, 5).map((table, index) => (
+                                  <div
+                                    key={`table-${index}`}
+                                    onClick={() => handleSearchResultClick('table', table)}
+                                    className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
+                                  >
+                                    <div className="w-2 h-2 bg-blue-500 rounded-sm"></div>
+                                    {table}
+                                  </div>
+                                ))}
+                                {searchResults.tables.length > 5 && (
+                                  <div className="px-2 py-1 text-xs text-muted-foreground">
+                                    +{searchResults.tables.length - 5} more tables...
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            {searchResults.columns.length > 0 && (
+                              <div className="p-2 border-b border-border">
+                                <div className="text-xs font-medium text-muted-foreground mb-1">Columns ({searchResults.columns.length})</div>
+                                {searchResults.columns.slice(0, 5).map((column, index) => (
+                                  <div
+                                    key={`column-${index}`}
+                                    onClick={() => handleSearchResultClick('column', column)}
+                                    className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
+                                  >
+                                    <div className="w-2 h-2 bg-green-500 rounded-sm"></div>
+                                    {column}
+                                  </div>
+                                ))}
+                                {searchResults.columns.length > 5 && (
+                                  <div className="px-2 py-1 text-xs text-muted-foreground">
+                                    +{searchResults.columns.length - 5} more columns...
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            {searchResults.relationships.length > 0 && (
+                              <div className="p-2">
+                                <div className="text-xs font-medium text-muted-foreground mb-1">Relationships ({searchResults.relationships.length})</div>
+                                {searchResults.relationships.slice(0, 3).map((rel, index) => (
+                                  <div
+                                    key={`rel-${index}`}
+                                    onClick={() => handleSearchResultClick('relationship', rel)}
+                                    className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
+                                  >
+                                    <div className="w-2 h-2 bg-purple-500 rounded-sm"></div>
+                                    <span className="truncate">{rel}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            
+                            {searchResults.tables.length === 0 && searchResults.columns.length === 0 && searchResults.relationships.length === 0 && (
+                              <div className="p-4 text-center text-muted-foreground text-sm">
+                                No results found for "{searchQuery}"
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                      
-                      {/* Search Results */}
-                      {isSearchActive && (
-                        <div className="mt-2 max-h-48 overflow-y-auto border border-border rounded-md bg-background/95 backdrop-blur-sm">
-                          {searchResults.tables.length > 0 && (
-                            <div className="p-2 border-b border-border">
-                              <div className="text-xs font-medium text-muted-foreground mb-1">Tables ({searchResults.tables.length})</div>
-                              {searchResults.tables.slice(0, 5).map((table, index) => (
-                                <div
-                                  key={`table-${index}`}
-                                  onClick={() => handleSearchResultClick('table', table)}
-                                  className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
-                                >
-                                  <div className="w-2 h-2 bg-blue-500 rounded-sm"></div>
-                                  {table}
-                                </div>
-                              ))}
-                              {searchResults.tables.length > 5 && (
-                                <div className="px-2 py-1 text-xs text-muted-foreground">
-                                  +{searchResults.tables.length - 5} more tables...
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          {searchResults.columns.length > 0 && (
-                            <div className="p-2 border-b border-border">
-                              <div className="text-xs font-medium text-muted-foreground mb-1">Columns ({searchResults.columns.length})</div>
-                              {searchResults.columns.slice(0, 5).map((column, index) => (
-                                <div
-                                  key={`column-${index}`}
-                                  onClick={() => handleSearchResultClick('column', column)}
-                                  className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
-                                >
-                                  <div className="w-2 h-2 bg-green-500 rounded-sm"></div>
-                                  {column}
-                                </div>
-                              ))}
-                              {searchResults.columns.length > 5 && (
-                                <div className="px-2 py-1 text-xs text-muted-foreground">
-                                  +{searchResults.columns.length - 5} more columns...
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          {searchResults.relationships.length > 0 && (
-                            <div className="p-2">
-                              <div className="text-xs font-medium text-muted-foreground mb-1">Relationships ({searchResults.relationships.length})</div>
-                              {searchResults.relationships.slice(0, 3).map((rel, index) => (
-                                <div
-                                  key={`rel-${index}`}
-                                  onClick={() => handleSearchResultClick('relationship', rel)}
-                                  className="px-2 py-1 text-sm hover:bg-muted cursor-pointer rounded flex items-center gap-2"
-                                >
-                                  <div className="w-2 h-2 bg-purple-500 rounded-sm"></div>
-                                  <span className="truncate">{rel}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          
-                          {searchResults.tables.length === 0 && searchResults.columns.length === 0 && searchResults.relationships.length === 0 && (
-                            <div className="p-4 text-center text-muted-foreground text-sm">
-                              No results found for "{searchQuery}"
-                            </div>
-                          )}
+
+                      {/* Domain Control */}
+                      {Object.keys(domainResults).length > 0 && (
+                        <div className="flex items-end gap-4">
+                          <div className="flex-1">
+                            <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                              Domain View:
+                            </label>
+                            <Select
+                              value={selectedDomain}
+                              onValueChange={handleDomainChange}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a domain" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(domainResults).map(([domain, result]: [string, any]) => (
+                                  <SelectItem key={domain} value={domain}>
+                                    <div className="flex flex-col">
+                                      <span className="font-medium capitalize">
+                                        {domain.replace('-', ' ')}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {result.metadata.tables_count} tables, {result.metadata.relationships_count} relationships
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       )}
                     </div>
                   )}
                   
-                  {/* Domain Selector */}
-                  {Object.keys(domainResults).length > 0 && (
-                    <div className="mb-4">
-                      <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                        Select Domain View:
-                      </label>
-                      <Select
-                        value={selectedDomain}
-                        onValueChange={handleDomainChange}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select a domain" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(domainResults).map(([domain, result]: [string, any]) => (
-                            <SelectItem key={domain} value={domain}>
-                              <div className="flex flex-col">
-                                <span className="font-medium capitalize">
-                                  {domain.replace('-', ' ')}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                  {result.metadata.tables_count} tables, {result.metadata.relationships_count} relationships
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
+                  {/* Main Content Section - Takes remaining space */}
+                  <div className="flex-1 min-h-[500px]">
+                    <ERDRenderer
+                      mermaidCode={mermaidCode}
+                      isDarkMode={isDarkMode}
+                      isLoading={isLoading}
+                      domain={selectedDomain}
+                      selectedTableFromSearch={pendingTableSelection}
+                      onTableSelectionComplete={handleTableSelectionComplete}
+                      onDomainSwitch={handleDomainSwitchForTable}
+                    />
+                  </div>
                 </div>
-                  <ERDRenderer
-                    mermaidCode={mermaidCode}
-                    isDarkMode={isDarkMode}
-                    isLoading={isLoading}
-                    domain={selectedDomain}
-                    selectedTableFromSearch={pendingTableSelection}
-                    onTableSelectionComplete={handleTableSelectionComplete}
-                    onDomainSwitch={handleDomainSwitchForTable}
-                  />
                 </div>
             </CardContent>
           </Card>

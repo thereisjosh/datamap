@@ -27,6 +27,7 @@ export interface ParseExcelResponse {
   tables: Table[];
   relationships: Relationship[];
   sessionId: string;
+  filename: string;
   metadata: {
     tables_count: number;
     relationships_count: number;
@@ -59,10 +60,40 @@ export interface MermaidOptions {
   direction?: string;
 }
 
+export interface ProjectCreateRequest {
+  name: string;
+  description?: string;
+  settings?: Record<string, any>;
+}
+
+export interface ProjectSaveRequest {
+  tables: Table[];
+  relationships: Relationship[];
+  mermaidCode: string;
+  filename?: string;
+}
+
+export interface ProjectResponse {
+  id: string;
+  name: string;
+  description?: string;
+  ownerId: string;
+  organizationId: string;
+  status: string;
+  settings: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  tables_count?: number;
+  relationships_count?: number;
+}
+
 export const api = {
-  async parseExcelFile(file: File): Promise<ParseExcelResponse> {
+  async parseExcelFile(file: File, projectId?: string): Promise<ParseExcelResponse> {
     const formData = new FormData();
     formData.append('file', file);
+    if (projectId) {
+      formData.append('projectId', projectId);
+    }
 
     const response = await fetch('/api/parse-excel', {
       method: 'POST',
@@ -123,5 +154,75 @@ export const api = {
   async healthCheck(): Promise<any> {
     const response = await apiRequest('GET', '/api/health');
     return response.json();
-  }
+  },
+
+  // Project API methods
+  async getProjects(): Promise<{ projects: ProjectResponse[] }> {
+    const response = await apiRequest('GET', '/api/projects');
+    return response.json();
+  },
+
+  async createProject(project: ProjectCreateRequest): Promise<{ project: ProjectResponse }> {
+    const response = await apiRequest('POST', '/api/projects', project);
+    return response.json();
+  },
+
+  async getProject(projectId: string): Promise<{ project: ProjectResponse }> {
+    const response = await apiRequest('GET', `/api/projects/${projectId}`);
+    return response.json();
+  },
+
+  async updateProject(projectId: string, updates: Partial<ProjectCreateRequest>): Promise<{ project: ProjectResponse }> {
+    const response = await apiRequest('PUT', `/api/projects/${projectId}`, updates);
+    return response.json();
+  },
+
+  async deleteProject(projectId: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiRequest('DELETE', `/api/projects/${projectId}`);
+    return response.json();
+  },
+
+  async duplicateProject(projectId: string): Promise<{ project: ProjectResponse }> {
+    const response = await apiRequest('POST', `/api/projects/${projectId}/duplicate`);
+    return response.json();
+  },
+
+  async saveProject(projectId: string, data: ProjectSaveRequest): Promise<{ success: boolean; message: string }> {
+    const response = await apiRequest('POST', `/api/projects/${projectId}/save`, data);
+    return response.json();
+  },
+
+  async getProjectData(projectId: string): Promise<{
+    project: ProjectResponse;
+    tables: Table[];
+    relationships: Relationship[];
+    mermaidCode: string;
+    metadata: {
+      tables_count: number;
+      relationships_count: number;
+    };
+  }> {
+    const response = await apiRequest('GET', `/api/projects/${projectId}/data`);
+    return response.json();
+  },
+
+  // Organization API methods
+  async updateOrganization(organizationId: string, updates: {
+    name?: string;
+    domain?: string;
+    description?: string;
+  }): Promise<{ organization: any }> {
+    const response = await apiRequest('PUT', `/api/organizations/${organizationId}`, updates);
+    return response.json();
+  },
+
+  // REMOVED: Legacy organization API methods
+  // Now using BetterAuth organization client directly:
+  // - authClient.organization.listMembers() instead of getOrganizationMembers()
+  // - authClient.organization.inviteMember() instead of sendInvitation()
+  // - authClient.organization.listInvitations() instead of getInvitations()
+  // - authClient.organization.cancelInvitation() instead of cancelInvitation()
+
+  // REMOVED: cancelInvitation() and resendInvitation()
+  // Now using BetterAuth organization client methods instead
 };

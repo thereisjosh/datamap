@@ -2,10 +2,16 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import multer, { type FileFilterCallback } from "multer";
 import cors from "cors";
+import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import { excelParserService } from "./services/excelParser";
 import { mermaidGeneratorService } from "./services/mermaidGenerator";
-import { generateMermaidRequestSchema } from "@shared/schema";
+import { generateMermaidRequestSchema, projectSchema, insertProjectSchema, insertProjectFileSchema, member, organization } from "@shared/schema";
+import { getAuth } from "./auth.ts";
+import { emailService } from "./services/emailService.ts";
+import { getDb } from "../lib/db.ts";
+import { eq, and, sql } from "drizzle-orm";
+import { registerOrganizationAPI } from "./organization-api";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -90,25 +96,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Store parsed data
-      await storage.clearTables();
-      await storage.clearRelationships();
+      // Get optional projectId from request body or query params (for logging/session tracking only)
+      const projectId = req.body.projectId || req.query.projectId || null;
+      
+      console.log(`📋 Parsed Excel data for project: ${projectId || 'no project'} - ${parseResult.tables.length} tables, ${parseResult.relationships.length} relationships`);
 
-      for (const table of parseResult.tables) {
-        await storage.createTable({
-          name: table.name,
-          attributes: table.attributes
-        });
-      }
-
-      for (const relationship of parseResult.relationships) {
-        await storage.createRelationship({
-          sourceTable: relationship.sourceTable,
-          sourceColumn: relationship.sourceColumn,
-          targetTable: relationship.targetTable,
-          targetColumn: relationship.targetColumn
-        });
-      }
+      // NOTE: We no longer store data to database during upload
+      // Data will only be stored when the user saves the project
+      // This prevents duplicate storage and ensures proper organization_id assignment
 
       // Update session status
       await storage.updateUploadSession(session.id, {
@@ -133,6 +128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tables: formattedTables,
         relationships: parseResult.relationships,
         sessionId: session.id,
+        filename: req.file.originalname, // Include actual filename for project save
         metadata: {
           tables_count: parseResult.tables.length,
           relationships_count: parseResult.relationships.length
@@ -177,7 +173,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sourceColumn: rel.sourceColumn,
         targetTable: rel.targetTable,
         targetColumn: rel.targetColumn,
-        createdAt: new Date()
+        createdAt: new Date(),
+        projectId: null
       }));
 
       // Generate Mermaid diagram
@@ -237,7 +234,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sourceColumn: rel.sourceColumn,
         targetTable: rel.targetTable,
         targetColumn: rel.targetColumn,
-        createdAt: new Date()
+        createdAt: new Date(),
+        projectId: null
       }));
 
       console.log('🔧 Formatted relationships for Mermaid generation:', formattedRelationships.length);
@@ -278,8 +276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/domain-config", async (req, res) => {
     try {
       res.json({
-        domains: mermaidGeneratorService.getDomainConfigs(),
-        colors: mermaidGeneratorService.getDomainColors()
+        domains: mermaidGeneratorService.getDomainConfigs()
       });
     } catch (error) {
       console.error('Domain config error:', error);
@@ -310,8 +307,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get parsed tables (for frontend integration)
   app.get("/api/tables", async (req, res) => {
     try {
-      const tables = await storage.getTables();
-      const relationships = await storage.getRelationships();
+      // Get user's organization for multi-tenant security
+      const auth = await getAuth();
+      let organizationId = 'default'; // Fallback for development
+      
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          const db = await getDb();
+          if (db) {
+            // Get user's first organization membership
+            const userMembership = await db.select({
+              organizationId: member.organizationId
+            })
+              .from(member)
+              .where(eq(member.userId, sessionData.user.id))
+              .limit(1);
+            
+            if (userMembership.length > 0) {
+              organizationId = userMembership[0].organizationId;
+            }
+          }
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed, using default organization for tables endpoint');
+      }
+
+      // Filter data by organizationId for security
+      const tables = await storage.getTables(organizationId);
+      const relationships = await storage.getRelationships(organizationId);
 
       // Format for frontend compatibility
       const formattedTables = tables.map(table => ({
@@ -364,6 +388,1037 @@ export async function registerRoutes(app: Express): Promise<Server> {
       metadata: { tables_count: 2, relationships_count: 1 }
     });
   });
+
+  // ====== PROJECT API ENDPOINTS ======
+
+  // Get all projects for the current user's organization
+  app.get("/api/projects", async (req, res) => {
+    console.log('📍 GET /api/projects called');
+    try {
+      // Extract user ID from BetterAuth session
+      const auth = await getAuth();
+      let userId = '9voeySCv7c2MPy0lRfn0iTPjCxlaW2FO'; // Real user ID as fallback
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed for project list, using fallback user');
+      }
+      console.log('Using default user ID for testing:', userId);
+
+      const projects = await storage.getProjectsByOrganization(userId);
+      console.log('Found projects:', projects.length);
+
+      // Enhance projects with actual table/relationship counts
+      const enhancedProjects = await Promise.all(
+        projects.map(async (project) => {
+          try {
+            const stats = await storage.getProjectStatistics(project.id);
+            return {
+              ...project,
+              tables_count: stats.tables_count,
+              relationships_count: stats.relationships_count
+            };
+          } catch (error) {
+            console.error(`Failed to get stats for project ${project.id}:`, error);
+            return {
+              ...project,
+              tables_count: 0,
+              relationships_count: 0
+            };
+          }
+        })
+      );
+
+      console.log('Enhanced projects with statistics:', enhancedProjects.map(p => ({
+        id: p.id,
+        name: p.name,
+        tables: p.tables_count,
+        relationships: p.relationships_count
+      })));
+      
+      res.json({ projects: enhancedProjects });
+    } catch (error) {
+      console.error('Get projects error:', error);
+      res.status(500).json({
+        error: "Failed to retrieve projects",
+        code: 500,
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Create a new project
+  app.post("/api/projects", async (req, res) => {
+    console.log('📍 POST /api/projects called');
+    try {
+      // Extract user ID from BetterAuth session
+      const auth = await getAuth();
+      let userId = '9voeySCv7c2MPy0lRfn0iTPjCxlaW2FO'; // Real user ID as fallback
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        console.log('Session data for project creation:', sessionData?.user?.id ? 'User found' : 'No user in session');
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+          console.log('Using authenticated user ID:', userId);
+        } else {
+          console.log('No authenticated user found, falling back to default-user');
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed for project creation:', authError.message);
+      }
+      console.log('Creating project for user:', userId);
+
+      const validatedData = projectSchema.parse(req.body);
+      console.log('Validated project data:', validatedData);
+      
+      // Get user's organizations
+      const db = await getDb();
+      const userOrganizations = await db.select({
+        organizationId: member.organizationId,
+        role: member.role
+      })
+      .from(member)
+      .where(eq(member.userId, userId));
+      
+      if (userOrganizations.length === 0) {
+        return res.status(403).json({ error: "You must be a member of an organization to create projects" });
+      }
+      
+      // Use the first organization or the one specified in the request
+      const organizationId = validatedData.organizationId || userOrganizations[0].organizationId;
+      
+      // Verify user has access to this organization
+      const hasAccess = userOrganizations.some(org => org.organizationId === organizationId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "You don't have access to this organization" });
+      }
+      
+      const project = await storage.createProject({
+        name: validatedData.name,
+        description: validatedData.description || null,
+        organizationId: organizationId,
+        ownerId: userId,
+        settings: validatedData.settings || {}
+      });
+
+      console.log('Created project:', project.id);
+      res.status(201).json({ project });
+    } catch (error) {
+      console.error('Create project error:', error);
+      res.status(500).json({
+        error: "Failed to create project",
+        code: 500,
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Get a specific project
+  app.get("/api/projects/:projectId", async (req, res) => {
+    try {
+      const auth = await getAuth();
+      let userId = 'default-user';
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed, using default user');
+      }
+
+      const project = await storage.getProject(req.params.projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      res.json({ project });
+    } catch (error) {
+      console.error('Get project error:', error);
+      res.status(500).json({
+        error: "Failed to retrieve project",
+        code: 500
+      });
+    }
+  });
+
+  // Get project data (tables, relationships, ERD)
+  app.get("/api/projects/:projectId/data", async (req, res) => {
+    console.log('📍 GET /api/projects/:projectId/data called for project:', req.params.projectId);
+    try {
+      // Extract user ID from BetterAuth session
+      const auth = await getAuth();
+      let userId = '9voeySCv7c2MPy0lRfn0iTPjCxlaW2FO'; // Real user ID as fallback
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed for project data, using fallback user');
+      }
+      console.log('Using default user for project data request');
+
+      const project = await storage.getProject(req.params.projectId, userId);
+      if (!project) {
+        console.log('Project not found:', req.params.projectId);
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      console.log('Found project:', project.name);
+
+      // Get project files (contains the actual ERD data)
+      const projectFiles = await storage.getProjectFiles(req.params.projectId);
+      console.log('Found project files:', projectFiles.length);
+
+      let tables = [];
+      let relationships = [];
+      let mermaidCode = '';
+
+      if (projectFiles.length > 0) {
+        // Use the most recent project file
+        const latestFile = projectFiles.sort((a, b) => 
+          new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+        )[0];
+
+        console.log('Using latest project file:', latestFile.id);
+        
+        // Extract data from the project file
+        if (latestFile.erdData && typeof latestFile.erdData === 'object') {
+          const erdData = latestFile.erdData as any;
+          tables = erdData.tables || [];
+          relationships = erdData.relationships || [];
+        }
+        
+        mermaidCode = latestFile.mermaidCode || '';
+      } else {
+        console.log('No project files found, checking legacy tables/relationships storage');
+        // Fallback to legacy storage if no project files exist
+        const storedTables = await storage.getTables();
+        const storedRelationships = await storage.getRelationships();
+        
+        // Filter by project ID if available
+        tables = storedTables.filter(t => t.projectId === req.params.projectId);
+        relationships = storedRelationships.filter(r => r.projectId === req.params.projectId);
+      }
+
+      console.log('Returning project data:', {
+        tables: tables.length,
+        relationships: relationships.length,
+        mermaidCode: mermaidCode.length
+      });
+
+      res.json({
+        project,
+        tables,
+        relationships,
+        mermaidCode,
+        metadata: {
+          tables_count: tables.length,
+          relationships_count: relationships.length
+        }
+      });
+    } catch (error) {
+      console.error('Get project data error:', error);
+      res.status(500).json({
+        error: "Failed to retrieve project data",
+        code: 500,
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Save project data (tables, relationships, ERD)
+  app.post("/api/projects/:projectId/save", async (req, res) => {
+    try {
+      const auth = await getAuth();
+      let userId = 'default-user';
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed for project save');
+      }
+
+      const { tables, relationships, mermaidCode, filename } = req.body;
+
+      // Get project to extract organizationId for multi-tenant security
+      const project = await storage.getProject(req.params.projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      // Try to update existing project file, or create new one if none exists
+      let projectFile = await storage.updateProjectFile(req.params.projectId, {
+        filename: filename || 'uploaded_data.xlsx',
+        fileData: null, // Could store original file data if needed
+        erdData: { tables, relationships },
+        mermaidCode,
+        version: '1'
+      });
+
+      // If no existing file found, create a new one
+      if (!projectFile) {
+        projectFile = await storage.saveProjectFile({
+          projectId: req.params.projectId,
+          filename: filename || 'uploaded_data.xlsx',
+          fileData: null, // Could store original file data if needed
+          erdData: { tables, relationships },
+          mermaidCode,
+          version: '1'
+        });
+      }
+
+      // Also store tables and relationships in the main tables for compatibility with organizationId
+      await storage.storeTables(tables, req.params.projectId, project.organizationId);
+      await storage.storeRelationships(relationships, req.params.projectId, project.organizationId);
+
+      res.json({ 
+        success: true, 
+        projectFile,
+        message: "Project saved successfully" 
+      });
+    } catch (error) {
+      console.error('Save project error:', error);
+      res.status(500).json({
+        error: "Failed to save project",
+        code: 500
+      });
+    }
+  });
+
+  // Update project metadata
+  app.put("/api/projects/:projectId", async (req, res) => {
+    try {
+      const auth = await getAuth();
+      let userId = 'default-user';
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed for project update');
+      }
+
+      const validatedData = projectSchema.parse(req.body);
+      
+      const project = await storage.updateProject(req.params.projectId, {
+        name: validatedData.name,
+        description: validatedData.description || null,
+        settings: validatedData.settings || {}
+      }, userId);
+
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      res.json({ project });
+    } catch (error) {
+      console.error('Update project error:', error);
+      res.status(500).json({
+        error: "Failed to update project",
+        code: 500
+      });
+    }
+  });
+
+  // Delete a project
+  app.delete("/api/projects/:projectId", async (req, res) => {
+    try {
+      const auth = await getAuth();
+      let userId = 'default-user';
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed for project delete');
+      }
+
+      const success = await storage.deleteProject(req.params.projectId, userId);
+      if (!success) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      res.json({ success: true, message: "Project deleted successfully" });
+    } catch (error) {
+      console.error('Delete project error:', error);
+      res.status(500).json({
+        error: "Failed to delete project",
+        code: 500
+      });
+    }
+  });
+
+  // Duplicate a project
+  app.post("/api/projects/:projectId/duplicate", async (req, res) => {
+    try {
+      const auth = await getAuth();
+      let userId = 'default-user';
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed for project duplicate');
+      }
+
+      const originalProject = await storage.getProject(req.params.projectId, userId);
+      if (!originalProject) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      // Create duplicate project with new name
+      const duplicateName = `${originalProject.name} (Copy)`;
+      const duplicateProject = await storage.createProject({
+        name: duplicateName,
+        description: originalProject.description,
+        organizationId: originalProject.organizationId,
+        ownerId: userId,
+        settings: originalProject.settings || {}
+      });
+
+      // Copy project files and data
+      const projectFiles = await storage.getProjectFiles(req.params.projectId);
+      if (projectFiles.length > 0) {
+        const latestFile = projectFiles.sort((a, b) => 
+          new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+        )[0];
+
+        await storage.saveProjectFile({
+          projectId: duplicateProject.id,
+          filename: latestFile.filename,
+          fileData: latestFile.fileData,
+          erdData: latestFile.erdData,
+          mermaidCode: latestFile.mermaidCode,
+          version: '1'
+        });
+
+        // Copy tables and relationships if they exist in erdData
+        if (latestFile.erdData && typeof latestFile.erdData === 'object') {
+          const erdData = latestFile.erdData as any;
+          if (erdData.tables) {
+            await storage.storeTables(erdData.tables, duplicateProject.id, originalProject.organizationId);
+          }
+          if (erdData.relationships) {
+            await storage.storeRelationships(erdData.relationships, duplicateProject.id, originalProject.organizationId);
+          }
+        }
+      }
+
+      res.json({ project: duplicateProject });
+    } catch (error) {
+      console.error('Duplicate project error:', error);
+      res.status(500).json({
+        error: "Failed to duplicate project",
+        code: 500
+      });
+    }
+  });
+
+  // ====== ORGANIZATION API ENDPOINTS ======
+  // REMOVED: Custom organization endpoints - replaced with BetterAuth organization plugin
+  // BetterAuth provides: createOrganization, listOrganizations, updateOrganization, 
+  // listMembers, addMember, removeMember, inviteMember, acceptInvitation
+
+  // REMOVED: Custom GET /api/organizations - replaced with BetterAuth organization.listOrganizations()
+
+  // REMOVED: Custom PUT /api/organizations/:id - replaced with BetterAuth organization.updateOrganization()
+
+  // ====== ORGANIZATION MEMBER API ENDPOINTS ======
+
+  // Organization members endpoint moved to organization-api.ts
+
+  // ====== INVITATION API ENDPOINTS ======
+
+  // Send invitation to join organization (custom implementation)
+  app.post("/api/organizations/:organizationId/invitations", async (req, res) => {
+    console.log('📍 POST /api/organizations/:organizationId/invitations called (Custom)');
+    try {
+      const auth = await getAuth();
+      let userId = '9voeySCv7c2MPy0lRfn0iTPjCxlaW2FO'; // Real user ID as fallback
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed for invitation, using fallback');
+      }
+
+      const { email, role = 'member' } = req.body;
+      const organizationId = req.params.organizationId;
+
+      // Validate input
+      if (!email || !email.includes('@')) {
+        return res.status(400).json({ error: "Valid email address is required" });
+      }
+
+      // Basic email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        return res.status(400).json({ error: "Invalid email format" });
+      }
+
+      // Check if user has permission to send invitations (admin or owner)
+      const db = await getDb();
+      if (!db) {
+        return res.status(500).json({ error: "Database unavailable" });
+      }
+      
+      // Query user's membership in the organization directly
+      const userMembership = await db.select()
+        .from(member)
+        .where(and(
+          eq(member.userId, userId),
+          eq(member.organizationId, organizationId)
+        ))
+        .limit(1);
+      
+      if (userMembership.length === 0 || (userMembership[0].role !== 'owner' && userMembership[0].role !== 'admin')) {
+        return res.status(403).json({ error: "Insufficient permissions to send invitations" });
+      }
+
+      // Create invitation using custom storage
+      const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      
+      const invitation = await storage.createInvitation({
+        id: randomUUID(),
+        organizationId,
+        email: email.toLowerCase().trim(),
+        role,
+        token,
+        inviterId: userId,
+        expiresAt,
+        status: 'pending'
+      });
+
+      if (!invitation) {
+        return res.status(500).json({ error: "Failed to create invitation" });
+      }
+
+      console.log(`✅ Custom invitation created for ${email} to join organization ${organizationId}`);
+      
+      // Send invitation email
+      try {
+        // Get organization details for email
+        const orgResult = await db.select()
+          .from(organization)
+          .where(eq(organization.id, organizationId))
+          .limit(1);
+          
+        if (orgResult.length > 0) {
+          let inviterName = 'ERDBuilder Team';
+          try {
+            const auth = await getAuth();
+            const sessionData = await auth.api.getSession({ headers: req.headers });
+            if (sessionData?.user?.name) {
+              inviterName = sessionData.user.name;
+            } else if (sessionData?.user?.email) {
+              inviterName = sessionData.user.email;
+            }
+          } catch (authError) {
+            console.log('Could not get inviter name, using default');
+          }
+          
+          const emailResult = await emailService.sendInvitationEmail({
+            email: invitation.email,
+            organizationName: orgResult[0].name,
+            inviterName,
+            role: invitation.role,
+            token: invitation.token,
+            expiresAt: invitation.expiresAt
+          });
+          
+          if (emailResult.success) {
+            console.log(`📧 Invitation email sent to ${email} (messageId: ${emailResult.messageId})`);
+          } else {
+            console.error(`📧 Failed to send invitation email: ${emailResult.error}`);
+          }
+        } else {
+          console.error('📧 Could not find organization for email template');
+        }
+      } catch (emailError) {
+        console.error('📧 Email service error:', emailError);
+        // Don't fail the invitation creation if email fails
+      }
+      
+      res.json({
+        success: true,
+        invitation: {
+          id: invitation.id,
+          email: invitation.email,
+          role: invitation.role,
+          status: 'pending',
+          expiresAt: invitation.expiresAt,
+          createdAt: invitation.createdAt
+        },
+        message: "Invitation sent successfully"
+      });
+
+    } catch (error) {
+      console.error('Custom send invitation error:', error);
+      res.status(500).json({
+        error: "Failed to send invitation",
+        code: 500,
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Get pending invitations for organization
+  // Organization invitations endpoint moved to organization-api.ts
+
+  // Resend invitation
+  app.post("/api/organizations/:organizationId/invitations/resend", async (req, res) => {
+    console.log('📍 POST /api/organizations/:organizationId/invitations/resend called');
+    try {
+      const auth = await getAuth();
+      let userId = '9voeySCv7c2MPy0lRfn0iTPjCxlaW2FO'; // Real user ID as fallback
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed for invitation resend');
+      }
+
+      const { email, role = 'viewer' } = req.body;
+      const organizationId = req.params.organizationId;
+
+      // Validate input
+      if (!email || !email.includes('@')) {
+        return res.status(400).json({ error: "Valid email address is required" });
+      }
+
+      // Check if user has permission to resend invitations (admin or owner)
+      const db = await getDb();
+      if (!db) {
+        return res.status(500).json({ error: "Database unavailable" });
+      }
+      
+      // Query user's membership in the organization directly
+      const userMembership = await db.select()
+        .from(member)
+        .where(and(
+          eq(member.userId, userId),
+          eq(member.organizationId, organizationId)
+        ))
+        .limit(1);
+      
+      if (userMembership.length === 0 || (userMembership[0].role !== 'owner' && userMembership[0].role !== 'admin')) {
+        return res.status(403).json({ error: "Insufficient permissions to resend invitations" });
+      }
+
+      // Simply send a new invitation (existing invitation will remain)
+      const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      
+      const invitation = await storage.createInvitation({
+        id: randomUUID(),
+        organizationId,
+        email: email.toLowerCase().trim(),
+        role,
+        token,
+        inviterId: userId,
+        expiresAt,
+        status: 'pending'
+      });
+
+      if (!invitation) {
+        return res.status(500).json({ error: "Failed to create invitation" });
+      }
+
+      // Send invitation email
+      try {
+        let inviterName = 'ERDBuilder Team';
+        try {
+          const auth = await getAuth();
+          const sessionData = await auth.api.getSession({ headers: req.headers });
+          if (sessionData?.user?.name) {
+            inviterName = sessionData.user.name;
+          } else if (sessionData?.user?.email) {
+            inviterName = sessionData.user.email;
+          }
+        } catch (authError) {
+          console.log('Could not get inviter name, using default');
+        }
+
+        const emailResult = await emailService.sendInvitationEmail({
+          email: invitation.email,
+          organizationName: userOrg.organization.name,
+          inviterName,
+          role: invitation.role,
+          token: invitation.token,
+          expiresAt: invitation.expiresAt
+        });
+
+        if (emailResult.success) {
+          console.log(`📧 Invitation resent to ${email} (messageId: ${emailResult.messageId})`);
+        } else {
+          console.error(`📧 Failed to resend invitation email: ${emailResult.error}`);
+        }
+      } catch (emailError) {
+        console.error('📧 Email service error on resend:', emailError);
+      }
+
+      console.log(`✅ Invitation resent to ${email}`);
+
+      res.status(201).json({
+        success: true,
+        invitation: {
+          id: invitation.id,
+          email: invitation.email,
+          role: invitation.role,
+          status: invitation.status,
+          expiresAt: invitation.expiresAt,
+          createdAt: invitation.createdAt,
+        },
+        message: "Invitation resent successfully"
+      });
+
+    } catch (error) {
+      console.error('Resend invitation error:', error);
+      res.status(500).json({
+        error: "Failed to resend invitation",
+        code: 500,
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Cancel invitation
+  app.delete("/api/organizations/:organizationId/invitations/:invitationId", async (req, res) => {
+    console.log('📍 DELETE /api/organizations/:organizationId/invitations/:invitationId called');
+    try {
+      const auth = await getAuth();
+      let userId = '9voeySCv7c2MPy0lRfn0iTPjCxlaW2FO'; // Real user ID as fallback
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        console.log('Auth extraction failed for invitation cancellation');
+      }
+
+      const { organizationId, invitationId } = req.params;
+
+      // Check if user has permission to cancel invitations
+      const db = await getDb();
+      if (!db) {
+        return res.status(500).json({ error: "Database unavailable" });
+      }
+      
+      // Query user's membership in the organization directly
+      const userMembership = await db.select()
+        .from(member)
+        .where(and(
+          eq(member.userId, userId),
+          eq(member.organizationId, organizationId)
+        ))
+        .limit(1);
+      
+      if (userMembership.length === 0 || (userMembership[0].role !== 'owner' && userMembership[0].role !== 'admin')) {
+        return res.status(403).json({ error: "Insufficient permissions to cancel invitations" });
+      }
+
+      const result = await storage.deleteInvitation(invitationId);
+      
+      if (!result.success) {
+        console.log(`❌ Failed to delete invitation ${invitationId}: ${result.error}`);
+        return res.status(404).json({ error: result.error || "Invitation not found" });
+      }
+
+      console.log(`✅ Invitation ${invitationId} cancelled successfully`);
+      res.json({ success: true, message: "Invitation cancelled successfully" });
+
+    } catch (error) {
+      console.error('Cancel invitation error:', error);
+      res.status(500).json({
+        error: "Failed to cancel invitation",
+        code: 500,
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // ====== PUBLIC INVITATION ENDPOINTS ======
+  
+  // Get invitation by token (public endpoint for invitation acceptance)
+  app.get("/api/invitations/:token", async (req, res) => {
+    console.log('📍 GET /api/invitations/:token called');
+    try {
+      const { token } = req.params;
+
+      // Get invitation by token
+      const invitation = await storage.getInvitationByToken(token);
+      
+      if (!invitation) {
+        return res.status(404).json({ error: "Invalid invitation" });
+      }
+
+      // Check if invitation is expired
+      if (new Date() > new Date(invitation.expiresAt)) {
+        return res.status(400).json({ error: "Invitation has expired" });
+      }
+
+      // Get organization name for display
+      const db = await getDb();
+      let organizationName = 'Unknown Organization';
+      if (db) {
+        try {
+          const orgResult = await db.select()
+            .from(organization)
+            .where(eq(organization.id, invitation.organizationId))
+            .limit(1);
+          if (orgResult.length > 0) {
+            organizationName = orgResult[0].name;
+          }
+        } catch (error) {
+          console.warn('Could not fetch organization name:', error);
+        }
+      }
+
+      // Return invitation data in format expected by frontend
+      res.json({
+        email: invitation.email,
+        organizationId: invitation.organizationId,
+        organizationName,
+        role: invitation.role,
+        token: invitation.token,
+        expiresAt: invitation.expiresAt,
+        status: invitation.status
+      });
+
+      console.log(`✅ Invitation lookup successful for ${invitation.email}`);
+
+    } catch (error) {
+      console.error('❌ Error looking up invitation:', error);
+      res.status(500).json({
+        error: "Failed to lookup invitation",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // NOTE: Custom invitation endpoints replaced with BetterAuth organization plugin APIs
+  // BetterAuth handles invitation acceptance via its built-in endpoints
+  
+  // Complete invitation acceptance (after user authentication)
+  app.post("/api/invitations/:token/accept", async (req, res) => {
+    console.log('📍 POST /api/invitations/:token/accept called');
+    try {
+      const { token } = req.params;
+      const auth = await getAuth();
+      
+      // Get authenticated user
+      let userId = null;
+      try {
+        const sessionData = await auth.api.getSession({ headers: req.headers });
+        if (sessionData?.user?.id) {
+          userId = sessionData.user.id;
+        }
+      } catch (authError) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      // Get invitation by token
+      const invitation = await storage.getInvitationByToken(token);
+      
+      if (!invitation) {
+        return res.status(404).json({ error: "Invitation not found" });
+      }
+
+      if (invitation.status !== 'pending') {
+        return res.status(400).json({ error: "Invitation has already been processed" });
+      }
+
+      if (new Date() > new Date(invitation.expiresAt)) {
+        return res.status(400).json({ error: "Invitation has expired" });
+      }
+
+      // Add user to organization membership
+      // Map 'member' role to 'editor' to match database constraints
+      const validRole = invitation.role === 'member' ? 'editor' : invitation.role;
+      console.log(`🔄 Adding user ${userId} to organization ${invitation.organizationId} with role ${validRole} (mapped from ${invitation.role})`);
+      
+      const membership = await storage.createOrganizationMembership(
+        userId, 
+        invitation.organizationId, 
+        validRole
+      );
+      
+      if (!membership) {
+        return res.status(500).json({ error: "Failed to create organization membership" });
+      }
+
+      // Update invitation status to accepted
+      const updated = await storage.updateInvitationStatus(invitation.id, 'accepted');
+      
+      if (!updated) {
+        return res.status(500).json({ error: "Failed to update invitation status" });
+      }
+
+      // Clean up invitation context if this was an invitation signup
+      const invitationUsers = (global as any).invitationUsers || new Map();
+      if (invitationUsers.has(userId)) {
+        console.log(`🧹 Cleaning up invitation context for user ${userId}`);
+        invitationUsers.delete(userId);
+      }
+
+      console.log(`✅ Invitation accepted for ${invitation.email} - User added with role: ${membership.role}`);
+
+      res.json({
+        success: true,
+        message: "Invitation accepted successfully",
+        organizationId: invitation.organizationId,
+        membership: {
+          id: membership.id,
+          role: membership.role,
+          joinedAt: membership.joinedAt
+        }
+      });
+
+    } catch (error) {
+      console.error('Complete invitation error:', error);
+      res.status(500).json({
+        error: "Failed to complete invitation acceptance",
+        code: 500,
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  /* DEPRECATED: BetterAuth organization plugin handles invitation context automatically
+  // Invitation signup context endpoint
+  app.post("/api/auth/invitation-signup", async (req, res) => {
+    console.log('📍 POST /api/auth/invitation-signup called');
+    try {
+      const { userId, invitationToken } = req.body;
+      
+      if (!userId || !invitationToken) {
+        return res.status(400).json({ error: "Missing userId or invitationToken" });
+      }
+
+      // Validate the invitation token
+      const invitation = await storage.getInvitationByToken(invitationToken);
+      if (!invitation) {
+        return res.status(404).json({ error: "Invalid invitation token" });
+      }
+
+      // Store the invitation context in a temporary cache or session
+      // This will be used by getUserOrganizations to skip default org creation
+      console.log(`🔗 Marking user ${userId} as invitation user for org ${invitation.organizationId}`);
+      
+      // For now, we'll use a simple in-memory store
+      // In production, you might want to use Redis or database storage
+      (global as any).invitationUsers = (global as any).invitationUsers || new Map();
+      (global as any).invitationUsers.set(userId, {
+        invitationToken,
+        organizationId: invitation.organizationId,
+        email: invitation.email,
+        role: invitation.role,
+        timestamp: Date.now()
+      });
+
+      res.json({ success: true, message: "Invitation context set" });
+    } catch (error) {
+      console.error('Invitation signup context error:', error);
+      res.status(500).json({
+        error: "Failed to set invitation context",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  */ // End of deprecated invitation signup context endpoint
+
+  // BetterAuth API routes - handle all auth-related requests
+  app.all("/api/auth/*", async (req, res) => {
+    try {
+      console.log(`🔐 Auth request: ${req.method} ${req.originalUrl}`);
+      console.log(`🔐 Auth request body:`, req.body);
+      console.log(`🔐 Auth request headers:`, req.headers);
+      
+      const auth = await getAuth();
+      
+      if (!auth) {
+        console.error('❌ Auth instance not available');
+        return res.status(500).json({ error: 'Authentication service unavailable' });
+      }
+      
+      // Create proper Web Request from Express request
+      const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      const url = `${protocol}://${req.headers.host}${req.originalUrl}`;
+      
+      // Handle request body properly
+      let body: string | null = null;
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        if (typeof req.body === 'object' && req.body !== null) {
+          body = JSON.stringify(req.body);
+        } else if (typeof req.body === 'string') {
+          body = req.body;
+        }
+      }
+      
+      console.log(`🔐 Creating request: ${req.method} ${url}`);
+      
+      const webRequest = new Request(url, {
+        method: req.method,
+        headers: req.headers as Record<string, string>,
+        body,
+      });
+
+      const response = await auth.handler(webRequest);
+      
+      if (!response) {
+        console.warn(`⚠️ No response from auth handler for: ${req.originalUrl}`);
+        return res.status(404).json({ error: 'Auth endpoint not found' });
+      }
+      
+      console.log(`✅ Auth response: ${response.status} for ${req.originalUrl}`);
+      
+      // Set status
+      res.status(response.status);
+      
+      // Set headers
+      response.headers.forEach((value: string, key: string) => {
+        res.setHeader(key, value);
+      });
+      
+      // Send body
+      if (response.body) {
+        const text = await response.text();
+        res.send(text);
+      } else {
+        res.end();
+      }
+    } catch (error) {
+      console.error('❌ Auth handler error:', error);
+      res.status(500).json({ 
+        error: 'Authentication error', 
+        details: error instanceof Error ? error.message : String(error),
+        path: req.originalUrl 
+      });
+    }
+  });
+
+  // Register organization API endpoints
+  registerOrganizationAPI(app);
 
   const httpServer = createServer(app);
   return httpServer;
