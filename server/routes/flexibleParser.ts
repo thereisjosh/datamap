@@ -113,11 +113,17 @@ router.post('/parse', upload.single('file'), async (req, res) => {
     const mappings: ColumnMappings = validationResult.data;
 
     console.log(`🔄 Parsing Excel with custom mappings: ${req.file.originalname}`);
-    console.log(`📋 Mappings:`, {
+    console.log(`📋 Complete Mappings:`, {
       tableSheet: mappings.tableSheet,
-      columnSheet: mappings.columnSheet,
       tableNameColumn: mappings.tableNameColumn,
-      columnNameColumn: mappings.columnNameColumn
+      tableTypeColumn: mappings.tableTypeColumn || '(not provided)',
+      columnSheet: mappings.columnSheet,
+      columnTableNameColumn: mappings.columnTableNameColumn,
+      columnNameColumn: mappings.columnNameColumn,
+      columnTypeColumn: mappings.columnTypeColumn,
+      primaryKeyColumn: mappings.primaryKeyColumn || '(not provided)',
+      foreignKeyTableColumn: mappings.foreignKeyTableColumn || '(not provided)',
+      foreignKeyColumnColumn: mappings.foreignKeyColumnColumn || '(not provided)'
     });
 
     const result = await flexibleExcelParser.parseWithMappings(req.file.buffer, mappings);

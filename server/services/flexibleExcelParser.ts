@@ -301,20 +301,33 @@ export class FlexibleExcelParser {
     const tableTypeIndex = mappings.tableTypeColumn ? headers.indexOf(mappings.tableTypeColumn) : -1;
     
     const tables: ParseResult['tables'] = [];
+    let processedRows = 0;
+    let skippedRows = 0;
+    let filteredOutByType = 0;
     
     // Process each data row
     for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
       const row = jsonData[i];
-      if (!row || !row[tableNameIndex]) continue;
+      processedRows++;
+      
+      if (!row || !row[tableNameIndex]) {
+        skippedRows++;
+        continue;
+      }
       
       const tableName = row[tableNameIndex].toString().trim();
-      if (!tableName) continue;
+      if (!tableName) {
+        skippedRows++;
+        continue;
+      }
       
       // Check table type filter if provided
       if (tableTypeIndex >= 0 && mappings.tableTypeColumn) {
         const tableType = row[tableTypeIndex]?.toString().toLowerCase();
-        // Only include entities (similar to original parser logic)
-        if (tableType && !['entity', 'staticentity', 'table'].includes(tableType)) {
+        // Only include entities (exact match to original parser logic)
+        if (tableType && !['entity', 'staticentity'].includes(tableType)) {
+          filteredOutByType++;
+          console.log(`  🔍 Filtered out table "${tableName}" with Data Kind: "${tableType}"`);
           continue;
         }
       }
@@ -324,6 +337,12 @@ export class FlexibleExcelParser {
         columns: [] // Will be populated later
       });
     }
+    
+    console.log(`📊 Table extraction summary:`);
+    console.log(`  Processed rows: ${processedRows}`);
+    console.log(`  Skipped rows (empty/invalid): ${skippedRows}`);
+    console.log(`  Filtered out by Data Kind: ${filteredOutByType}`);
+    console.log(`  Final tables included: ${tables.length}`);
     
     return tables;
   }
