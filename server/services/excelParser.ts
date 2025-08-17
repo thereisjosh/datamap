@@ -206,7 +206,8 @@ export class ExcelParserService {
 
       // Parse table metadata
       const tableRows: ExcelRow[] = XLSX.utils.sheet_to_json(tableMetadataSheet);
-      const tableMap = new Map<string, { name: string; attributes: Column[] }>();
+      const allTables: { name: string; attributes: Column[] }[] = []; // Store all table entries
+      const tableMap = new Map<string, { name: string; attributes: Column[] }>(); // For column lookup
 
       console.log(`📊 TableMetadata sheet contains ${tableRows.length} rows`);
       
@@ -244,15 +245,22 @@ export class ExcelParserService {
         if (shouldCreateTable) {
           const tableName = logicalTableName.toString().trim();
           console.log(`  ✅ Creating table: "${tableName}"`);
+          
+          // FIXED: Store ALL valid table entries, even if names are similar
+          // Domain-specific tables should be treated as separate entities
+          const tableEntry = {
+            name: tableName,
+            attributes: []
+          };
+          
+          allTables.push(tableEntry); // Store every valid table entry
+          
+          // Also keep in map for column lookup (use first occurrence for lookup)
           if (!tableMap.has(tableName)) {
-            tableMap.set(tableName, {
-              name: tableName,
-              attributes: []
-            });
-            createdTablesCount++;
-          } else {
-            console.log(`  ⚠️ Table "${tableName}" already exists, skipping`);
+            tableMap.set(tableName, tableEntry);
           }
+          
+          createdTablesCount++;
         } else {
           const tableName = logicalTableName ? logicalTableName.toString().trim() : 'Unknown';
           skippedTables.push({ tableName, dataKind });
@@ -269,9 +277,10 @@ export class ExcelParserService {
       console.log(`\n📊 HARDCODED PARSER - TableMetadata processing summary:`);
       console.log(`  Total rows in TableMetadata: ${tableRows.length}`);
       console.log(`  Processed rows: ${processedRowsCount}`);
-      console.log(`  Created tables: ${createdTablesCount}`);
+      console.log(`  Valid table entries: ${createdTablesCount} (should match flexible parser)`);
       console.log(`  Skipped rows: ${skippedRowsCount}`);
-      console.log(`  Tables in tableMap: ${tableMap.size}`);
+      console.log(`  Unique table names in tableMap: ${tableMap.size}`);
+      console.log(`  NOTE: Domain-specific tables with same names are now properly preserved`);
       console.log(`  Table names: [${Array.from(tableMap.keys()).join(', ')}]`);
 
       // Parse attribute metadata
@@ -383,7 +392,7 @@ export class ExcelParserService {
       let autoCreatedCount = 0;
       for (const missingTableName of missingTargetTables) {
         console.log(`  🆕 Auto-creating missing table: "${missingTableName}"`);
-        tableMap.set(missingTableName, {
+        const autoCreatedTable = {
           name: missingTableName,
           attributes: [
             {
@@ -393,20 +402,25 @@ export class ExcelParserService {
               isForeignKey: false
             }
           ]
-        });
+        };
+        
+        // Add to both allTables and tableMap
+        allTables.push(autoCreatedTable);
+        tableMap.set(missingTableName, autoCreatedTable);
         autoCreatedCount++;
       }
       
       console.log(`📈 HARDCODED PARSER - Auto-created ${autoCreatedCount} missing target tables: [${Array.from(missingTargetTables).join(', ')}]`);
-      console.log(`📈 HARDCODED PARSER - Tables before auto-creation: ${tableMap.size - autoCreatedCount}`);
-      console.log(`📈 HARDCODED PARSER - Tables after auto-creation: ${tableMap.size}`);
+      console.log(`📈 HARDCODED PARSER - Tables before auto-creation: ${allTables.length - autoCreatedCount}`);
+      console.log(`📈 HARDCODED PARSER - Tables after auto-creation: ${allTables.length}`);
 
-      // Convert table map to array
-      tables = Array.from(tableMap.values());
+      // Use all table entries instead of just unique ones
+      tables = allTables;
       
-      console.log(`\n🎯 Final table conversion results:`);
-      console.log(`  Tables in tableMap: ${tableMap.size}`);
-      console.log(`  Tables in array: ${tables.length}`);
+      console.log(`\n🎯 HARDCODED PARSER - Final table conversion results:`);
+      console.log(`  Unique table names in tableMap: ${tableMap.size}`);
+      console.log(`  Total table entries in array: ${tables.length} (should match flexible parser)`);
+      console.log(`  FIXED: Now preserves domain-specific tables instead of deduplicating`);
       console.log(`  Final table names: [${tables.map(t => t.name).join(', ')}]`);
       
       // Debug: Show each table structure
