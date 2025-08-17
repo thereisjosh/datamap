@@ -216,13 +216,6 @@ export const api = {
     return response.json();
   },
 
-  // REMOVED: Legacy organization API methods
-  // Now using BetterAuth organization client directly:
-  // - authClient.organization.listMembers() instead of getOrganizationMembers()
-  // - authClient.organization.inviteMember() instead of sendInvitation()
-  // - authClient.organization.listInvitations() instead of getInvitations()
-  // - authClient.organization.cancelInvitation() instead of cancelInvitation()
-
-  // REMOVED: cancelInvitation() and resendInvitation()
-  // Now using BetterAuth organization client methods instead
+  // Organization member management moved to custom API endpoints
+  // See server/organization-api.ts for current implementation
 };

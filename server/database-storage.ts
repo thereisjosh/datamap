@@ -2,7 +2,7 @@ import { getDb } from "../lib/db";
 import { eq, and, sql } from "drizzle-orm";
 import * as schema from "../shared/schema";
 const { organization, invitation: invitationTable, member } = schema;
-// REMOVED: import getUserOrganizations from deprecated lib/auth - BetterAuth handles organization operations
+// Organization operations handled by custom API - see server/organization-api.ts
 import { randomUUID } from "crypto";
 import type { IStorage } from "./storage";
 import type { 
@@ -552,8 +552,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  // REMOVED: Organization operations - now handled by BetterAuth organization plugin
-  // BetterAuth provides: createOrganization, listOrganizations, updateOrganization, etc.
+  // Organization operations moved to custom API endpoints
 
   // Invitation operations
   async createInvitation(invitation: any): Promise<any> {
@@ -745,6 +744,6 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // REMOVED: Organization membership operations - now handled by BetterAuth organization plugin
+  // Organization membership operations moved to custom API endpoints
   // BetterAuth provides: addMember, removeMember, updateMemberRole, etc.
 }

@@ -851,6 +851,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             
             zoomToScale(targetZoom, elementCenterX, elementCenterY);
             console.log(`✅ Centered table ${tableName} at zoom ${targetZoom}x${isComplexTable ? ' (complex table)' : ''}`);
+            
+            // Update lastClickPosition to ensure zoom controls center on this table
+            setLastClickPosition({ x: elementCenterX, y: elementCenterY });
+            console.log(`🎯 Updated lastClickPosition for zoom controls: (${elementCenterX}, ${elementCenterY})`);
           } else {
             console.log(`  ❌ Final coordinates are out of bounds: (${elementCenterX}, ${elementCenterY})`);
             console.log(`  🔄 Falling back to basic zoom without centering`);
@@ -1619,23 +1623,39 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Interactive control functions for custom pan-zoom
   const handleZoomIn = useCallback(() => {
     const newZoom = Math.min(10, currentZoom * 1.2);
-    // Use last click position if available, otherwise zoom to viewport center
+    // Use last click position if available, otherwise try selected table center, then viewport center
     if (lastClickPosition) {
       zoomToScale(newZoom, lastClickPosition.x, lastClickPosition.y);
+    } else if (selectedTable) {
+      // Fallback to selected table center when no last click position
+      const tableCenter = getTableCenterCoordinates(selectedTable);
+      if (tableCenter) {
+        zoomToScale(newZoom, tableCenter.x, tableCenter.y);
+      } else {
+        zoomToScale(newZoom);
+      }
     } else {
       zoomToScale(newZoom);
     }
-  }, [currentZoom, zoomToScale, lastClickPosition]);
+  }, [currentZoom, zoomToScale, lastClickPosition, selectedTable, getTableCenterCoordinates]);
 
   const handleZoomOut = useCallback(() => {
     const newZoom = Math.max(0.1, currentZoom * 0.8);
-    // Use last click position if available, otherwise zoom to viewport center
+    // Use last click position if available, otherwise try selected table center, then viewport center
     if (lastClickPosition) {
       zoomToScale(newZoom, lastClickPosition.x, lastClickPosition.y);
+    } else if (selectedTable) {
+      // Fallback to selected table center when no last click position
+      const tableCenter = getTableCenterCoordinates(selectedTable);
+      if (tableCenter) {
+        zoomToScale(newZoom, tableCenter.x, tableCenter.y);
+      } else {
+        zoomToScale(newZoom);
+      }
     } else {
       zoomToScale(newZoom);
     }
-  }, [currentZoom, zoomToScale, lastClickPosition]);
+  }, [currentZoom, zoomToScale, lastClickPosition, selectedTable, getTableCenterCoordinates]);
 
   const handleReset = useCallback(() => {
     if (!svgContainerRef.current) return;

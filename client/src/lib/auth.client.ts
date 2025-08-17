@@ -1,9 +1,8 @@
 import { createAuthClient } from "better-auth/react";
-import { organizationClient } from "better-auth/client/plugins";
 
 export const authClient = createAuthClient({
   baseURL: (typeof window !== 'undefined' && import.meta.env?.VITE_BETTER_AUTH_URL) || "http://localhost:3000/api/auth",
-  plugins: [organizationClient()],
+  plugins: [],
 });
 
 // Export types for better TypeScript support
@@ -33,12 +32,5 @@ export interface OrganizationMember {
   role: "owner" | "admin" | "editor" | "viewer";
 }
 
-// REMOVED: Custom organization API functions - replaced with BetterAuth organization plugin
-// BetterAuth provides:
-// - authClient.organization.listOrganizations() instead of getUserOrganizationsAPI()
-// - authClient.organization.createOrganization() for organization creation
-// - authClient.organization.inviteMember() for invitations
-// - authClient.organization.acceptInvitation() for invitation acceptance
-
-// REMOVED: completeUserOnboardingAPI() function
-// BetterAuth handles user onboarding automatically during signup with organization plugin
+// Organization management handled via custom API endpoints in server/organization-api.ts
+// Available at /api/organizations/*

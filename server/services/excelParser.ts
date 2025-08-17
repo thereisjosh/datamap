@@ -344,7 +344,8 @@ export class ExcelParserService {
             targetTable: referencedTable,
             targetColumn: referencedColumn,
             createdAt: new Date(),
-            projectId: null
+            projectId: null,
+            organizationId: null
           };
           
           console.log('Found relationship:', {

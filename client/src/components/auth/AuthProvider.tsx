@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { authClient } from '../../../../lib/auth.client'
-import type { User, Session } from '../../../../lib/auth.client'
+import { authClient } from '@/lib/auth.client'
+import type { User, Session } from '@/lib/auth.client'
 
 // Extended organization type with custom fields
 type Organization = {
@@ -37,11 +37,13 @@ interface AuthContextType {
   }[]
   activeOrganization: Organization | null
   loading: boolean
+  organizationsLoading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, name: string) => Promise<void>
   signOut: () => Promise<void>
   setActiveOrganization: (org: Organization) => void
   refreshProfile: () => Promise<void>
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -59,13 +61,14 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  // Use BetterAuth React hooks for session and organization management
+  // Use BetterAuth React hooks for session management
   const { data: session, isPending, error, refetch } = authClient.useSession()
   
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [activeOrganization, setActiveOrganizationState] = useState<Organization | null>(null)
+  const [organizationsLoading, setOrganizationsLoading] = useState<boolean>(false)
   
-  // Use BetterAuth organization hooks (if available, fallback to state)
+  // Organization state managed locally via custom API
   const [organizations, setOrganizations] = useState<{
     organization: Organization
     membership: OrganizationMember
@@ -100,7 +103,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         avatar_url: user?.image || undefined,
       })
 
-      // Use BetterAuth organization APIs to get user organizations
+      // Load user organizations via custom API
       await loadUserOrganizations()
 
       console.log('✅ User profile loaded successfully')
@@ -111,6 +114,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const loadUserOrganizations = async () => {
     try {
+      setOrganizationsLoading(true)
       console.log('🔍 Loading organizations for user:', user?.email)
       
       // Use our custom organization API that includes all fields
@@ -184,12 +188,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch (error) {
       console.error('❌ Error loading organizations:', error)
       setOrganizations([])
+    } finally {
+      setOrganizationsLoading(false)
     }
   }
 
   const refreshProfile = async () => {
-    if (user) {
-      await loadUserProfile(user.id)
+    try {
+      console.log('🔄 Refreshing profile data...')
+      // First refresh the BetterAuth session to get updated user data from database
+      await refetch()
+      console.log('✅ Session refreshed')
+      
+      // Then reload profile with fresh session data
+      if (user) {
+        await loadUserProfile(user.id)
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing profile:', error)
     }
   }
 
@@ -215,9 +231,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error(error.message)
     }
 
-    // BetterAuth organization plugin handles organization creation/assignment automatically
-    // No custom onboarding logic needed - organization membership is handled via invitation acceptance
-    console.log('✅ User registration completed via BetterAuth')
+    // User registration completed - organization setup handled via onboarding flow
+    console.log('✅ User registration completed')
   }
 
   const signOut = async () => {
@@ -241,11 +256,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     organizations,
     activeOrganization,
     loading,
+    organizationsLoading,
     signIn,
     signUp,
     signOut,
     setActiveOrganization,
     refreshProfile,
+    refreshUser: () => loadUserProfile(user?.id || ''),
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

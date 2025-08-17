@@ -16,6 +16,7 @@ import ProjectUpload from "@/pages/project-upload";
 import ProjectERD from "@/pages/project-erd";
 import ProjectPreview from "@/pages/project-preview";
 import AcceptInvitation from "@/pages/accept-invitation";
+import Onboarding from "@/pages/onboarding";
 import { useState } from "react";
 
 function Router() {
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/accept-invitation/:token">
         <AcceptInvitation isDarkMode={isDarkMode} />
       </Route>
+      <Route path="/onboarding" component={Onboarding} />
       
       {/* Protected routes */}
       <Route path="/projects">

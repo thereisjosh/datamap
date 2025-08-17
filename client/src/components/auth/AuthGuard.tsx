@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useLocation } from 'wouter'
 import { useAuth } from './AuthProvider'
 import { Loader2 } from 'lucide-react'
@@ -8,8 +8,9 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { user, loading, organizations, activeOrganization } = useAuth()
+  const { user, loading, organizations, activeOrganization, organizationsLoading } = useAuth()
   const [, setLocation] = useLocation()
+  const [hasCheckedOrganizations, setHasCheckedOrganizations] = useState(false)
 
   useEffect(() => {
     // If not loading and no user, redirect to welcome page
@@ -18,20 +19,37 @@ export function AuthGuard({ children }: AuthGuardProps) {
       return
     }
 
-    // If user exists but no organizations, there might be an onboarding issue
-    if (!loading && user && organizations.length === 0) {
-      console.warn('User authenticated but no organizations found')
-      // Could redirect to a setup page or show an error
+    // If user exists but no organizations, redirect to onboarding
+    // Only do this after organizations have finished loading to avoid race conditions
+    if (!loading && user && organizations.length === 0 && !organizationsLoading && !hasCheckedOrganizations) {
+      // Give a longer grace period for organizations to load after user login/refresh
+      const timer = setTimeout(() => {
+        // Double-check that organizations are still not loaded and not currently loading
+        if (organizations.length === 0 && !organizationsLoading) {
+          console.log('User authenticated but no organizations found after grace period, redirecting to onboarding')
+          setLocation('/onboarding')
+          setHasCheckedOrganizations(true)
+        }
+      }, 1500)
+      
+      return () => clearTimeout(timer)
     }
-  }, [loading, user, organizations.length, setLocation])
+    
+    // Reset the check flag when organizations are found
+    if (organizations.length > 0) {
+      setHasCheckedOrganizations(false)
+    }
+  }, [loading, user, organizations.length, organizationsLoading, setLocation, hasCheckedOrganizations])
 
-  // Show loading spinner while checking authentication
-  if (loading) {
+  // Show loading spinner while checking authentication or loading organizations
+  if (loading || (user && organizationsLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
+          <p className="text-sm text-muted-foreground">
+            {loading ? 'Loading...' : 'Loading organizations...'}
+          </p>
         </div>
       </div>
     )
@@ -42,15 +60,14 @@ export function AuthGuard({ children }: AuthGuardProps) {
     return null
   }
 
-  // If user has no organizations, show error state
+  // If user has no organizations, show loading state while useEffect handles redirect
+  // Remove direct setLocation call to prevent setState during render warning
   if (organizations.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="max-w-md text-center space-y-4">
-          <h2 className="text-xl font-semibold">Setup Required</h2>
-          <p className="text-muted-foreground">
-            There was an issue setting up your organization. Please sign out and try again.
-          </p>
+        <div className="flex flex-col items-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Setting up your organizations...</p>
         </div>
       </div>
     )

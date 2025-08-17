@@ -1,6 +1,6 @@
 import { type Table, type InsertTable, type Relationship, type InsertRelationship, type UploadSession, type InsertUploadSession, type Project, type InsertProject, type ProjectFile, type InsertProjectFile } from "@shared/schema";
 import { randomUUID } from "crypto";
-// REMOVED: import getUserOrganizations from deprecated lib/auth - BetterAuth handles organization operations
+// Organization operations handled by custom API - see server/organization-api.ts
 // TEMPORARY: Keep Organization type for backward compatibility during migration
 import type { Organization } from "../lib/auth";
 
@@ -39,7 +39,7 @@ export interface IStorage {
   clearProjectTables(projectId: string): Promise<void>;
   clearProjectRelationships(projectId: string): Promise<void>;
 
-  // REMOVED: Organization operations - now handled by BetterAuth organization plugin
+  // Organization operations moved to custom API endpoints
   
   // LEGACY: Invitation operations (will be migrated to BetterAuth)
   createInvitation(invitation: any): Promise<any>;
@@ -68,12 +68,14 @@ export class MemStorage implements IStorage {
   // Table operations
   async createTable(insertTable: InsertTable): Promise<Table> {
     const id = randomUUID();
-    const table: Table = { 
+    const table = { 
       ...insertTable, 
       id,
       createdAt: new Date(),
-      projectId: insertTable.projectId || null
-    };
+      projectId: insertTable.projectId || null,
+      organizationId: insertTable.organizationId || null,
+      attributes: Array.isArray(insertTable.attributes) ? insertTable.attributes : []
+    } as Table;
     this.tables.set(id, table);
     return table;
   }
@@ -103,7 +105,8 @@ export class MemStorage implements IStorage {
       ...insertRelationship, 
       id,
       createdAt: new Date(),
-      projectId: insertRelationship.projectId || null
+      projectId: insertRelationship.projectId || null,
+      organizationId: insertRelationship.organizationId || null
     };
     this.relationships.set(id, relationship);
     return relationship;
@@ -178,8 +181,8 @@ export class MemStorage implements IStorage {
   }
 
   async getProjectsByOrganization(userId: string): Promise<Project[]> {
-    // For now, return all projects owned by the user
-    // TODO: Implement proper organization-based filtering
+    // Simplified implementation: returns all projects owned by the user
+    // Organization-based filtering not yet implemented
     const userProjects = Array.from(this.projects.values()).filter(
       project => project.ownerId === userId
     );
@@ -261,7 +264,7 @@ export class MemStorage implements IStorage {
     
     // Get the most recent file (sorted by updatedAt)
     const latestFile = projectFiles.sort((a, b) => 
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
     )[0];
     
     // Update the file
@@ -352,7 +355,7 @@ export class MemStorage implements IStorage {
     };
   }
 
-  // REMOVED: Organization operations - now handled by BetterAuth organization plugin
+  // Organization operations moved to custom API endpoints
 
   // Invitation operations (in-memory fallback)
   async createInvitation(invitation: any): Promise<any> {
@@ -385,7 +388,7 @@ export class MemStorage implements IStorage {
     return { id: randomUUID(), userId, organizationId, role, joinedAt: new Date() };
   }
 
-  // REMOVED: Organization membership operations - now handled by BetterAuth organization plugin
+  // Organization membership operations moved to custom API endpoints
 }
 
 import { DatabaseStorage } from './database-storage';

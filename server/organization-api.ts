@@ -23,7 +23,7 @@ import { emailService } from "./services/emailService";
 
 /**
  * Custom Organization API - Industry Standard Multi-Tenant Implementation
- * Replaces BetterAuth organization plugin with reliable custom solution
+ * Custom organization management implementation for multi-tenant SaaS
  * Based on patterns from Auth0, Clerk, and successful SaaS platforms
  */
 
@@ -122,6 +122,139 @@ function requireOrganizationAccess(requiredRoles: string[] = PERMISSIONS.VIEW_OR
  */
 export function registerOrganizationAPI(app: Express) {
   const db = getDb();
+
+  // Create new organization
+  app.post('/api/organizations',
+    requireAuth,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const user = req.user!;
+        const { name, description } = req.body;
+
+        // Validate required fields
+        if (!name || name.trim().length === 0) {
+          return res.status(400).json({ error: 'Organization name is required' });
+        }
+
+        if (name.trim().length > 100) {
+          return res.status(400).json({ error: 'Organization name must be 100 characters or less' });
+        }
+
+        // Auto-derive domain from user's email
+        const userEmailDomain = user.email.split('@')[1].toLowerCase();
+        
+        // List of personal email providers - for these, we'll generate a unique domain
+        const personalEmailProviders = new Set([
+          'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 
+          'icloud.com', 'aol.com', 'protonmail.com', 'mail.com'
+        ]);
+        
+        let organizationDomain: string;
+        
+        if (personalEmailProviders.has(userEmailDomain)) {
+          // For personal email providers, generate domain from org name + random suffix
+          const baseDomain = name.toLowerCase()
+            .replace(/[^\w\s]/g, '')    // Remove special characters except spaces
+            .replace(/\s+/g, '')        // Remove all spaces
+            .substring(0, 20);         // Limit length
+          
+          // Add random suffix to ensure uniqueness
+          const randomSuffix = Math.random().toString(36).substring(2, 8);
+          organizationDomain = `${baseDomain}-${randomSuffix}.local`;
+        } else {
+          // Use the email domain for business emails
+          organizationDomain = userEmailDomain;
+        }
+        
+        // Generate slug from name
+        const slug = name.toLowerCase()
+          .replace(/[^\w\s-]/g, '') // Remove special characters
+          .replace(/\s+/g, '-')     // Replace spaces with hyphens
+          .replace(/-+/g, '-')      // Replace multiple hyphens with single
+          .trim();
+
+        // Check if slug is already taken
+        if (slug) {
+          const existingOrg = await (await getDb())
+            .select()
+            .from(organization)
+            .where(eq(organization.slug, slug))
+            .limit(1);
+
+          if (existingOrg.length > 0) {
+            return res.status(400).json({ 
+              error: 'An organization with this name already exists. Please choose a different name.' 
+            });
+          }
+        }
+
+        // Check if the derived domain is already taken
+        const existingDomain = await (await getDb())
+          .select()
+          .from(organization)
+          .where(eq(organization.domain, organizationDomain))
+          .limit(1);
+
+        if (existingDomain.length > 0) {
+          if (personalEmailProviders.has(userEmailDomain)) {
+            // For personal emails with conflict, generate a new random domain
+            const baseDomain = name.toLowerCase().replace(/[^\w]/g, '').substring(0, 15);
+            const timestamp = Date.now().toString(36);
+            organizationDomain = `${baseDomain}-${timestamp}.local`;
+          } else {
+            // For business emails, suggest joining existing organization
+            return res.status(400).json({ 
+              error: `An organization with the domain "${organizationDomain}" already exists. You may need to join the existing organization instead of creating a new one.`,
+              suggestJoin: true,
+              domain: organizationDomain
+            });
+          }
+        }
+
+        const db = await getDb();
+        const organizationId = randomUUID();
+
+        // Create organization
+        const newOrganization = await db
+          .insert(organization)
+          .values({
+            id: organizationId,
+            name: name.trim(),
+            slug,
+            description: description?.trim() || null,
+            domain: organizationDomain,
+            createdAt: new Date(),
+            metadata: null,
+            subscription_tier: 'free',
+            settings: {}
+          })
+          .returning();
+
+        // Add user as owner
+        const membership = await db
+          .insert(member)
+          .values({
+            id: randomUUID(),
+            organizationId,
+            userId: user.id,
+            role: ORGANIZATION_ROLES.OWNER,
+            createdAt: new Date(),
+          })
+          .returning();
+
+        console.log(`✅ Created organization "${name}" with owner ${user.email}`);
+
+        res.status(201).json({
+          organization: newOrganization[0],
+          membership: membership[0],
+          message: 'Organization created successfully'
+        });
+      } catch (error) {
+        console.error('Failed to create organization:', error);
+        res.status(500).json({ error: 'Failed to create organization' });
+      }
+    }
+  );
 
   // List organization members
   app.get('/api/organizations/:organizationId/members', 

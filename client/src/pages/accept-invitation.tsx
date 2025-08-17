@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRoute } from 'wouter';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { authClient } from '../../../lib/auth.client';
+import { authClient } from '@/lib/auth.client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -146,7 +146,7 @@ const AcceptInvitation = ({ isDarkMode = false }: AcceptInvitationProps) => {
 
     setAccepting(true);
     try {
-      // Register new user first - BetterAuth organization plugin handles invitation context automatically
+      // Register new user first - custom API handles invitation context
       await signUp(
         email.trim(),
         password,

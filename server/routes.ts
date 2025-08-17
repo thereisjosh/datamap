@@ -6,7 +6,7 @@ import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import { excelParserService } from "./services/excelParser";
 import { mermaidGeneratorService } from "./services/mermaidGenerator";
-import { generateMermaidRequestSchema, projectSchema, insertProjectSchema, insertProjectFileSchema, member, organization } from "@shared/schema";
+import { generateMermaidRequestSchema, projectSchema, insertProjectSchema, insertProjectFileSchema, member, organization, user } from "@shared/schema";
 import { getAuth } from "./auth.ts";
 import { emailService } from "./services/emailService.ts";
 import { getDb } from "../lib/db.ts";
@@ -174,7 +174,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetTable: rel.targetTable,
         targetColumn: rel.targetColumn,
         createdAt: new Date(),
-        projectId: null
+        projectId: null,
+        organizationId: null
       }));
 
       // Generate Mermaid diagram
@@ -235,7 +236,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetTable: rel.targetTable,
         targetColumn: rel.targetColumn,
         createdAt: new Date(),
-        projectId: null
+        projectId: null,
+        organizationId: null
       }));
 
       console.log('🔧 Formatted relationships for Mermaid generation:', formattedRelationships.length);
@@ -488,7 +490,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Use the first organization or the one specified in the request
-      const organizationId = validatedData.organizationId || userOrganizations[0].organizationId;
+      const organizationId = (validatedData as any).organizationId || userOrganizations[0].organizationId;
       
       // Verify user has access to this organization
       const hasAccess = userOrganizations.some(org => org.organizationId === organizationId);
@@ -825,13 +827,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ====== ORGANIZATION API ENDPOINTS ======
-  // REMOVED: Custom organization endpoints - replaced with BetterAuth organization plugin
-  // BetterAuth provides: createOrganization, listOrganizations, updateOrganization, 
-  // listMembers, addMember, removeMember, inviteMember, acceptInvitation
-
-  // REMOVED: Custom GET /api/organizations - replaced with BetterAuth organization.listOrganizations()
-
-  // REMOVED: Custom PUT /api/organizations/:id - replaced with BetterAuth organization.updateOrganization()
+  // Organization endpoints moved to custom API implementation
+  // See server/organization-api.ts for current organization management
 
   // ====== ORGANIZATION MEMBER API ENDPOINTS ======
 
@@ -1054,9 +1051,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('Could not get inviter name, using default');
         }
 
+        // Get organization name for email
+        const org = await db.select().from(organization).where(eq(organization.id, organizationId)).limit(1);
+        const organizationName = org[0]?.name || 'ERDBuilder';
+        
         const emailResult = await emailService.sendInvitationEmail({
           email: invitation.email,
-          organizationName: userOrg.organization.name,
+          organizationName,
           inviterName,
           role: invitation.role,
           token: invitation.token,
@@ -1212,8 +1213,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // NOTE: Custom invitation endpoints replaced with BetterAuth organization plugin APIs
-  // BetterAuth handles invitation acceptance via its built-in endpoints
+  // Custom invitation endpoints for organization management
+  // Handles invitation flows for multi-tenant organizations
   
   // Complete invitation acceptance (after user authentication)
   app.post("/api/invitations/:token/accept", async (req, res) => {
@@ -1304,48 +1305,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  /* DEPRECATED: BetterAuth organization plugin handles invitation context automatically
-  // Invitation signup context endpoint
-  app.post("/api/auth/invitation-signup", async (req, res) => {
-    console.log('📍 POST /api/auth/invitation-signup called');
-    try {
-      const { userId, invitationToken } = req.body;
-      
-      if (!userId || !invitationToken) {
-        return res.status(400).json({ error: "Missing userId or invitationToken" });
-      }
-
-      // Validate the invitation token
-      const invitation = await storage.getInvitationByToken(invitationToken);
-      if (!invitation) {
-        return res.status(404).json({ error: "Invalid invitation token" });
-      }
-
-      // Store the invitation context in a temporary cache or session
-      // This will be used by getUserOrganizations to skip default org creation
-      console.log(`🔗 Marking user ${userId} as invitation user for org ${invitation.organizationId}`);
-      
-      // For now, we'll use a simple in-memory store
-      // In production, you might want to use Redis or database storage
-      (global as any).invitationUsers = (global as any).invitationUsers || new Map();
-      (global as any).invitationUsers.set(userId, {
-        invitationToken,
-        organizationId: invitation.organizationId,
-        email: invitation.email,
-        role: invitation.role,
-        timestamp: Date.now()
-      });
-
-      res.json({ success: true, message: "Invitation context set" });
-    } catch (error) {
-      console.error('Invitation signup context error:', error);
-      res.status(500).json({
-        error: "Failed to set invitation context",
-        details: error instanceof Error ? error.message : String(error)
-      });
-    }
-  });
-  */ // End of deprecated invitation signup context endpoint
 
   // BetterAuth API routes - handle all auth-related requests
   app.all("/api/auth/*", async (req, res) => {
@@ -1413,6 +1372,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error: 'Authentication error', 
         details: error instanceof Error ? error.message : String(error),
         path: req.originalUrl 
+      });
+    }
+  });
+
+  // Profile update endpoint
+  app.put("/api/profile", async (req, res) => {
+    try {
+      const auth = await getAuth();
+      
+      // Get authenticated user
+      let sessionData;
+      try {
+        sessionData = await auth.api.getSession({ headers: req.headers });
+      } catch (authError) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      if (!sessionData?.user?.id) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const userId = sessionData.user.id;
+      const { name, email } = req.body;
+
+      // Validate input
+      if (!name || !email) {
+        return res.status(400).json({ error: "Name and email are required" });
+      }
+
+      // Email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: "Invalid email format" });
+      }
+
+      const db = await getDb();
+      if (!db) {
+        return res.status(500).json({ error: "Database connection failed" });
+      }
+
+      // Update user profile using better-auth's user table
+      const updatedUser = await db
+        .update(user)
+        .set({
+          name: name.trim(),
+          email: email.trim(),
+          updatedAt: new Date(),
+        })
+        .where(eq(user.id, userId))
+        .returning();
+
+      if (updatedUser.length === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      console.log(`✅ Profile updated for user ${email}: name="${name}"`);
+
+      res.json({
+        success: true,
+        message: "Profile updated successfully",
+        user: {
+          id: updatedUser[0].id,
+          name: updatedUser[0].name,
+          email: updatedUser[0].email,
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Profile update error:', error);
+      res.status(500).json({
+        error: "Failed to update profile",
+        details: error instanceof Error ? error.message : String(error)
       });
     }
   });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { authClient } from '../../lib/auth.client';
+import { authClient } from '@/lib/auth.client';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,14 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
   const [isDeletingOrg, setIsDeletingOrg] = useState(false);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
   const [isLoadingInvitations, setIsLoadingInvitations] = useState(false);
+  
+  // Change detection states
+  const [originalOrgValues, setOriginalOrgValues] = useState({
+    name: activeOrganization?.name || '',
+    domain: activeOrganization?.domain || '',
+    description: activeOrganization?.description || ''
+  });
+  const [hasOrgChanges, setHasOrgChanges] = useState(false);
 
   // Team members state (replacing mock data)
   const [teamMembers, setTeamMembers] = useState([]);
@@ -57,14 +65,31 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
       '(isAdmin:', isAdmin, ', isOwner:', isOwner + ')');
   }
 
-  // Update form state when activeOrganization changes
+  // Update form state and original values when activeOrganization changes
   useEffect(() => {
     if (activeOrganization) {
-      setOrgName(activeOrganization.name || '');
-      setOrgDomain(activeOrganization.domain || '');
-      setOrgDescription(activeOrganization.description || '');
+      const name = activeOrganization.name || '';
+      const domain = activeOrganization.domain || '';
+      const description = activeOrganization.description || '';
+      
+      setOrgName(name);
+      setOrgDomain(domain);
+      setOrgDescription(description);
+      setOriginalOrgValues({
+        name,
+        domain,
+        description
+      });
     }
   }, [activeOrganization?.id, activeOrganization?.name, activeOrganization?.domain, activeOrganization?.description]);
+
+  // Detect changes in organization form values
+  useEffect(() => {
+    const nameChanged = orgName.trim() !== originalOrgValues.name.trim();
+    const domainChanged = orgDomain.trim() !== originalOrgValues.domain.trim();
+    const descriptionChanged = orgDescription.trim() !== originalOrgValues.description.trim();
+    setHasOrgChanges(nameChanged || domainChanged || descriptionChanged);
+  }, [orgName, orgDomain, orgDescription, originalOrgValues]);
 
   // Load team members when component mounts or organization changes
   useEffect(() => {
@@ -75,7 +100,7 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
       try {
         console.log('Loading team members for organization:', activeOrganization.id);
         
-        // Use custom API directly (BetterAuth organization plugin has endpoint registration issues)
+        // Use custom organization API for member management
         let members = null;
         
         console.log('Loading members using custom API...');
@@ -209,12 +234,19 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
 
       const data = await response.json();
       
+      // Optimistic update: immediately update original values to match current form values
+      setOriginalOrgValues({
+        name: orgName.trim(),
+        domain: orgDomain.trim(),
+        description: orgDescription.trim()
+      });
+      
       toast({
         title: "Organization Updated",
         description: "Organization details have been updated successfully.",
       });
       
-      // Refresh profile to get updated organization data
+      // Background refresh to ensure data consistency
       await refreshProfile();
       
       // Update local form state with the response data to ensure UI reflects changes
@@ -624,7 +656,7 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
                 
                 {isAdmin && (
                   <div className="flex justify-end">
-                    <Button type="submit" disabled={isUpdatingOrg}>
+                    <Button type="submit" disabled={!hasOrgChanges || isUpdatingOrg}>
                       {isUpdatingOrg ? 'Updating...' : 'Update Organization'}
                     </Button>
                   </div>

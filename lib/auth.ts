@@ -1,5 +1,5 @@
-// DEPRECATED: Custom organization management replaced with BetterAuth organization plugin
-// All organization operations now handled by BetterAuth standard APIs
+// Legacy types and interfaces for backward compatibility
+// Organization management now handled by custom API endpoints
 
 // Legacy types kept for backward compatibility during migration
 export interface UserProfile {
@@ -24,14 +24,11 @@ export interface OrganizationMember {
   role: "owner" | "admin" | "editor" | "viewer";
 }
 
-// REMOVED: All custom organization management functions
-// BetterAuth organization plugin now handles:
-// - getUserOrganizations() → authClient.organization.listOrganizations()
-// - createDefaultOrganization() → BetterAuth handles with allowUserToCreateOrganization setting
-// - getDefaultOrganization() → No longer needed, BetterAuth manages organization creation
+// Organization management functions moved to custom API endpoints
+// See server/organization-api.ts for current implementation
 
-// REMOVED: getOrganizationMembers() function
-// BetterAuth organization plugin now handles member management via authClient.organization.listMembers()
+// Organization member management handled by custom API endpoints
+// See server/organization-api.ts for member operations
 
-// REMOVED: completeUserOnboarding() function
-// BetterAuth handles user onboarding automatically during signup
+// User onboarding handled during signup process
+// Custom organization setup handled by organization API

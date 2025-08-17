@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { authClient } from '@/lib/auth.client';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -34,6 +34,35 @@ const ProfileSettings = ({ isDarkMode = false, setIsDarkMode }: ProfileSettingsP
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  
+  // Change detection states
+  const [originalValues, setOriginalValues] = useState({
+    name: profile?.name || '',
+    email: user?.email || ''
+  });
+  const [hasProfileChanges, setHasProfileChanges] = useState(false);
+
+  // Sync form fields and original values with profile data when it changes
+  useEffect(() => {
+    if (profile?.name !== undefined) {
+      setName(profile.name);
+      setOriginalValues(prev => ({ ...prev, name: profile.name }));
+    }
+  }, [profile?.name]);
+
+  useEffect(() => {
+    if (user?.email !== undefined) {
+      setEmail(user.email);
+      setOriginalValues(prev => ({ ...prev, email: user.email }));
+    }
+  }, [user?.email]);
+
+  // Detect changes in form values
+  useEffect(() => {
+    const nameChanged = name.trim() !== originalValues.name.trim();
+    const emailChanged = email.trim() !== originalValues.email.trim();
+    setHasProfileChanges(nameChanged || emailChanged);
+  }, [name, email, originalValues]);
 
   const getUserInitials = () => {
     if (profile?.name) {
@@ -47,19 +76,46 @@ const ProfileSettings = ({ isDarkMode = false, setIsDarkMode }: ProfileSettingsP
     return user?.email?.slice(0, 2).toUpperCase() || '??';
   };
 
+  const handleResetProfile = () => {
+    setName(originalValues.name);
+    setEmail(originalValues.email);
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsUpdatingProfile(true);
     
     try {
-      // TODO: Implement profile update API call
-      console.log('Updating profile:', { name, email });
+      // Call the profile update API
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ name, email }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update profile');
+      }
+
+      const result = await response.json();
+      console.log('✅ Profile updated successfully:', result);
+      
+      // Optimistic update: immediately update original values to match current form values
+      setOriginalValues({
+        name: name.trim(),
+        email: email.trim()
+      });
       
       toast({
         title: "Profile Updated",
         description: "Your profile has been updated successfully.",
       });
       
+      // Background refresh to ensure data consistency
       await refreshProfile();
     } catch (error) {
       console.error('Profile update error:', error);
@@ -236,8 +292,16 @@ const ProfileSettings = ({ isDarkMode = false, setIsDarkMode }: ProfileSettingsP
                   </div>
                 </div>
                 
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={isUpdatingProfile}>
+                <div className="flex justify-end gap-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={handleResetProfile}
+                    disabled={!hasProfileChanges || isUpdatingProfile}
+                  >
+                    Reset
+                  </Button>
+                  <Button type="submit" disabled={!hasProfileChanges || isUpdatingProfile}>
                     {isUpdatingProfile ? 'Updating...' : 'Update Profile'}
                   </Button>
                 </div>

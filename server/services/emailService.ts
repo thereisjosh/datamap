@@ -195,7 +195,7 @@ export class EmailService {
 // Export singleton instance
 export const emailService = new EmailService();
 
-// Adapter function for BetterAuth organization plugin
+// Email service interface for organization invitations
 export interface BetterAuthInvitationData {
   email: string;
   organizationName: string;

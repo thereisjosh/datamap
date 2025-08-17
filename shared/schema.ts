@@ -23,8 +23,8 @@ export const session = pgTable("session", {
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  // BetterAuth Organization Plugin Required Fields
-  activeOrganizationId: uuid("active_organization_id").references(() => organization.id, { onDelete: "set null" }),
+  // Organization context fields for multi-tenant support
+  activeOrganizationId: text("active_organization_id").references(() => organization.id, { onDelete: "set null" }),
   activeTeamId: text("active_team_id"), // For future team support
 });
 
@@ -53,7 +53,7 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// BetterAuth Organization Management Tables (matching BetterAuth schema expectations)
+// Organization Management Tables for multi-tenant SaaS
 export const organization = pgTable("organization", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -72,7 +72,7 @@ export const member = pgTable("member", {
   id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: uuid("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  role: text("role").notNull().default("member"), // BetterAuth standard roles: 'owner', 'admin', 'member'
+  role: text("role").notNull().default("member"), // Standard organization roles: 'owner', 'admin', 'member'
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -224,7 +224,9 @@ export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type ProjectFile = typeof projectFiles.$inferSelect;
 export type InsertProjectFile = z.infer<typeof insertProjectFileSchema>;
-export type Table = typeof tables.$inferSelect;
+export type Table = typeof tables.$inferSelect & {
+  attributes: Column[];
+};
 export type InsertTable = z.infer<typeof insertTableSchema>;
 export type Column = z.infer<typeof columnSchema>;
 export type TableData = z.infer<typeof tableSchema>;
@@ -238,7 +240,9 @@ export type GenerateMermaidRequest = z.infer<typeof generateMermaidRequestSchema
 // Type definitions
 export type User = typeof user.$inferSelect;
 export type Session = typeof session.$inferSelect;
-export type Organization = typeof organization.$inferSelect;
+export type Organization = typeof organization.$inferSelect & {
+  subscription_tier: string;
+};
 export type OrganizationMember = typeof member.$inferSelect;
 export type Invitation = typeof invitation.$inferSelect;
 export type InsertInvitation = typeof invitation.$inferInsert;
