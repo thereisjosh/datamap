@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import UnifiedSearchComponent from '@/components/search/UnifiedSearchComponent';
+import { ChatPanel } from '@/components/erd/ChatPanel';
 import { useToast } from '@/hooks/use-toast';
 import { api, type ProjectResponse, type Table, type Relationship } from '@/lib/api';
 import { 
@@ -19,7 +20,8 @@ import {
   X,
   Upload,
   Edit3,
-  Save
+  Save,
+  Bot
 } from 'lucide-react';
 import { useLocation, useRoute } from 'wouter';
 
@@ -50,6 +52,9 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [pendingTableSelection, setPendingTableSelection] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Chat state
+  const [isChatOpen, setIsChatOpen] = useState(false);
   
   // Project data state
   const [project, setProject] = useState<ProjectResponse | null>(null);
@@ -477,6 +482,47 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
     });
   };
 
+  // Chat handlers
+  const handleChatToggle = () => {
+    setIsChatOpen(!isChatOpen);
+  };
+
+  const handleSQLGenerated = (sql: string) => {
+    toast({
+      title: "SQL Generated",
+      description: "SQL query has been generated and copied to clipboard.",
+    });
+  };
+
+  const handleTableMentioned = (tables: string[]) => {
+    // Find the first table and highlight it
+    if (tables.length > 0) {
+      const tableName = tables[0];
+      const targetDomain = findDomainForTable(tableName);
+      
+      if (targetDomain && targetDomain !== selectedDomain) {
+        handleDomainSwitchForTable(targetDomain, tableName);
+      } else {
+        setPendingTableSelection(tableName);
+      }
+    }
+  };
+
+  const handleRelationshipClick = (sourceTable: string, targetTable: string) => {
+    // Find domain that contains both tables or fallback to the source table's domain
+    const sourceDomain = findDomainForTable(sourceTable);
+    const targetDomain = findDomainForTable(targetTable);
+    
+    // Prefer domain that contains both tables, otherwise use source table's domain
+    const finalDomain = sourceDomain === targetDomain ? sourceDomain : sourceDomain;
+    
+    if (finalDomain && finalDomain !== selectedDomain) {
+      handleDomainSwitchForTable(finalDomain, sourceTable);
+    } else {
+      setPendingTableSelection(sourceTable);
+    }
+  };
+
   // Loading state
   if (isLoading) {
     return (
@@ -544,6 +590,10 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
           </div>
           
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleChatToggle}>
+              <Bot className="h-4 w-4 mr-1" />
+              AI Assistant
+            </Button>
             <Button variant="outline" size="sm" onClick={handleShareProject}>
               <Share className="h-4 w-4 mr-1" />
               Share
@@ -566,7 +616,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         <div className="grid lg:grid-cols-4 gap-8">
           {/* Left Sidebar - Controls */}
           <div className="lg:col-span-1">
-            <div className="space-y-6 sticky top-8">
+            <div className="space-y-6 sticky top-8 z-10">
               {/* Search */}
               <Card>
                 <CardHeader className="pb-4">
@@ -633,7 +683,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
             </div>
           </div>
 
-          {/* Main Content - ERD */}
+          {/* Main Content - ERD Diagram */}
           <div className="lg:col-span-3">
             <Card>
               <CardContent className="p-6">
@@ -654,6 +704,19 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
           </div>
         </div>
       </main>
+
+      {/* Floating Chat Widget - Fixed to Viewport */}
+      <ChatPanel
+        mermaidCode={domainResults[selectedDomain]?.diagram || mermaidCode}
+        projectId={projectId}
+        isDarkMode={isDarkMode}
+        isOpen={isChatOpen}
+        onToggle={handleChatToggle}
+        onSQLGenerated={handleSQLGenerated}
+        onTableMentioned={handleTableMentioned}
+        onRelationshipClick={handleRelationshipClick}
+        currentDomain={selectedDomain}
+      />
     </div>
   );
 };
