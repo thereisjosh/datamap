@@ -110,9 +110,15 @@ export const ERDChat: React.FC<ERDChatProps> = ({
   }, []);
 
   // Handle scroll events to track user position
-  const handleScroll = useCallback(() => {
+  const handleScroll = useCallback((e: React.UIEvent) => {
+    e.stopPropagation(); // Prevent event bubbling to document
     checkIfAtBottom();
   }, [checkIfAtBottom]);
+
+  // Handle wheel events to prevent viewport scrolling
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.stopPropagation(); // Prevent wheel events from bubbling to document
+  }, []);
 
   // Smart auto-scroll: only scroll if user is at bottom or explicitly enabled
   useEffect(() => {
@@ -130,6 +136,13 @@ export const ERDChat: React.FC<ERDChatProps> = ({
       }
     }
   }, [messages.length, checkIfAtBottom]);
+
+  // Enable focus management for keyboard navigation
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.setAttribute('tabindex', '-1');
+    }
+  }, []);
 
   // Focus input when expanded
   useEffect(() => {
@@ -297,7 +310,14 @@ export const ERDChat: React.FC<ERDChatProps> = ({
         <div 
           ref={messagesContainerRef}
           className="flex-1 space-y-4 overflow-y-auto min-h-0 px-1"
+          style={{
+            overscrollBehavior: 'contain',
+            touchAction: 'pan-y',
+            WebkitOverflowScrolling: 'touch',
+            scrollBehavior: 'smooth'
+          }}
           onScroll={handleScroll}
+          onWheel={handleWheel}
         >
           {messages.map((message) => (
             <ChatMessage

@@ -82,7 +82,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                       md:w-[420px] md:h-[600px] md:bottom-4 md:right-4
                       sm:w-[calc(100vw-32px)] sm:h-[70vh] sm:bottom-4 sm:right-4 sm:left-4
                       animate-in slide-in-from-bottom-4 duration-300">
-        <Card className="h-full flex flex-col shadow-2xl border-2 bg-background">
+        <Card 
+          className="h-full flex flex-col shadow-2xl border-2 bg-background"
+          style={{
+            overscrollBehavior: 'contain',
+            touchAction: 'pan-y'
+          }}
+        >
         {/* Header */}
         <CardHeader className="pb-2 flex-shrink-0">
           <div className="flex items-center justify-between">
