@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,9 +33,25 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   className = '',
   currentDomain = 'overview'
 }) => {
+  const chatWidgetRef = useRef<HTMLDivElement>(null);
+
   const handleClose = () => {
     onToggle?.();
   };
+
+  // Targeted click-outside detection using refs instead of global overlay
+  const handleClickOutside = useCallback((e: MouseEvent) => {
+    if (chatWidgetRef.current && !chatWidgetRef.current.contains(e.target as Node)) {
+      onToggle?.();
+    }
+  }, [onToggle]);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen, handleClickOutside]);
 
   // Handle Escape key to close chat widget
   useEffect(() => {
@@ -68,20 +84,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   // Chat Widget Modal (expanded state)
   return (
-    <>
-      {/* Click-outside detector (invisible) */}
-      <div 
-        className="fixed inset-0 z-[998] pointer-events-auto"
-        onClick={onToggle}
-      />
-      
-      {/* Chat Widget Container */}
-      <div className="fixed bottom-6 right-6 z-[1000] 
-                      w-[480px] h-[700px] max-h-[calc(100vh-3rem)]
-                      lg:w-[480px] lg:h-[700px] lg:bottom-6 lg:right-6
-                      md:w-[420px] md:h-[600px] md:bottom-4 md:right-4
-                      sm:w-[calc(100vw-32px)] sm:h-[70vh] sm:bottom-4 sm:right-4 sm:left-4
-                      animate-in slide-in-from-bottom-4 duration-300">
+    <div 
+      ref={chatWidgetRef}
+      className="fixed bottom-6 right-6 z-[1000] 
+                 w-[480px] h-[700px] max-h-[calc(100vh-3rem)]
+                 lg:w-[480px] lg:h-[700px] lg:bottom-6 lg:right-6
+                 md:w-[420px] md:h-[600px] md:bottom-4 md:right-4
+                 sm:w-[calc(100vw-32px)] sm:h-[70vh] sm:bottom-4 sm:right-4 sm:left-4
+                 animate-in slide-in-from-bottom-4 duration-300"
+      style={{ pointerEvents: 'auto' }}
+    >
         <Card 
           className="h-full flex flex-col shadow-2xl border-2 bg-background"
           style={{
@@ -135,7 +147,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           />
         </CardContent>
         </Card>
-      </div>
-    </>
+    </div>
   );
 };

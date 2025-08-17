@@ -73,6 +73,7 @@ export const ERDChat: React.FC<ERDChatProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -115,10 +116,46 @@ export const ERDChat: React.FC<ERDChatProps> = ({
     checkIfAtBottom();
   }, [checkIfAtBottom]);
 
-  // Handle wheel events to prevent viewport scrolling
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.stopPropagation(); // Prevent wheel events from bubbling to document
-  }, []);
+  // Document-level wheel event capture to handle chat scrolling before any interference
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleWheelCapture = (e: WheelEvent) => {
+      // Check if the wheel event is targeting our chat container
+      if (!container.contains(e.target as Node)) return;
+
+      const { deltaY } = e;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      
+      // Check if we're at scroll boundaries
+      const isAtTop = scrollTop <= 0;
+      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1;
+      
+      // Only prevent page scroll when chat would overflow its boundaries
+      if ((isAtTop && deltaY < 0) || (isAtBottom && deltaY > 0)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      
+      // Allow natural browser scrolling within chat, just prevent bubbling to page
+      e.stopPropagation();
+      
+      // Update our scroll position tracking (let browser handle the actual scrolling)
+      setTimeout(() => checkIfAtBottom(), 0);
+    };
+
+    // Attach to document with capture phase to intercept before any other handlers
+    document.addEventListener('wheel', handleWheelCapture, { 
+      passive: false,
+      capture: true 
+    });
+    
+    return () => {
+      document.removeEventListener('wheel', handleWheelCapture, { capture: true });
+    };
+  }, [checkIfAtBottom]);
 
   // Smart auto-scroll: only scroll if user is at bottom or explicitly enabled
   useEffect(() => {
@@ -204,6 +241,15 @@ export const ERDChat: React.FC<ERDChatProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Handle hover events for scroll indicators
+  const handleMouseEnter = useCallback(() => {
+    setShowScrollIndicator(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setShowScrollIndicator(false);
+  }, []);
+
   const suggestedQuestions = getSuggestedQuestions();
 
   if (!isLLMAvailable) {
@@ -228,8 +274,35 @@ export const ERDChat: React.FC<ERDChatProps> = ({
   }
 
   return (
-    <Card className={className}>
-      <CardHeader className="pb-3">
+    <>
+      <style>{`
+        .chat-scrollbar-hidden::-webkit-scrollbar {
+          display: none;
+        }
+        .chat-scrollbar-hidden {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .chat-scrollbar-visible::-webkit-scrollbar {
+          width: 8px;
+        }
+        .chat-scrollbar-visible::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .chat-scrollbar-visible::-webkit-scrollbar-thumb {
+          background-color: rgba(156, 163, 175, 0.5);
+          border-radius: 4px;
+        }
+        .chat-scrollbar-visible::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(156, 163, 175, 0.8);
+        }
+        .chat-scrollbar-visible {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+        }
+      `}</style>
+      <Card className={className}>
+        <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
@@ -309,7 +382,9 @@ export const ERDChat: React.FC<ERDChatProps> = ({
         {/* Messages */}
         <div 
           ref={messagesContainerRef}
-          className="flex-1 space-y-4 overflow-y-auto min-h-0 px-1"
+          className={`flex-1 space-y-4 overflow-y-auto min-h-0 px-1 transition-all duration-200 ${
+            showScrollIndicator ? 'chat-scrollbar-visible' : 'chat-scrollbar-hidden'
+          }`}
           style={{
             overscrollBehavior: 'contain',
             touchAction: 'pan-y',
@@ -317,7 +392,8 @@ export const ERDChat: React.FC<ERDChatProps> = ({
             scrollBehavior: 'smooth'
           }}
           onScroll={handleScroll}
-          onWheel={handleWheel}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
         >
           {messages.map((message) => (
             <ChatMessage
@@ -406,5 +482,6 @@ export const ERDChat: React.FC<ERDChatProps> = ({
         </form>
       </CardContent>
     </Card>
+    </>
   );
 };
