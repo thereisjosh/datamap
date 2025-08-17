@@ -58,9 +58,34 @@ export const useERDChat = ({
   onTableMentioned,
   currentDomain = 'overview'
 }: UseERDChatProps): UseERDChatReturn => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Generate storage key for project+domain scoped persistence
+  const getStorageKey = useCallback(() => {
+    return `erd-chat-${projectId}-${currentDomain}`;
+  }, [projectId, currentDomain]);
+
+  // Initialize state with persistent storage
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const storageKey = `erd-chat-${projectId}-${currentDomain}`;
+      const stored = sessionStorage.getItem(storageKey);
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.warn('Failed to load stored chat messages:', error);
+      return [];
+    }
+  });
+
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const storageKey = `erd-chat-${projectId}-${currentDomain}`;
+      return sessionStorage.getItem(`${storageKey}-session`) || null;
+    } catch (error) {
+      return null;
+    }
+  });
   const [error, setError] = useState<string | null>(null);
   const [isLLMAvailable, setIsLLMAvailable] = useState(true);
   const [lastDomain, setLastDomain] = useState<string>(currentDomain);
@@ -77,23 +102,72 @@ export const useERDChat = ({
     checkLLMAvailability();
   }, []);
 
-  // Track domain changes and add system messages
+  // Auto-save messages to sessionStorage
   useEffect(() => {
-    if (currentDomain !== lastDomain && messages.length > 0) {
-      const systemMessage: ChatMessage = {
-        id: Math.random().toString(36).substr(2, 9),
-        role: 'system',
-        content: `🔄 **Domain Context Changed**\n\nSwitched from "${lastDomain.replace('-', ' ')}" to "${currentDomain.replace('-', ' ')}" domain.\n\nThe AI assistant now has access to ${currentDomain === 'overview' ? 'the complete schema' : `tables and relationships specific to the ${currentDomain.replace('-', ' ')} domain`}.`,
-        timestamp: new Date(),
-        metadata: {
-          messageType: 'general'
+    if (typeof window === 'undefined') return;
+    try {
+      const storageKey = getStorageKey();
+      sessionStorage.setItem(storageKey, JSON.stringify(messages));
+    } catch (error) {
+      console.warn('Failed to save chat messages:', error);
+    }
+  }, [messages, getStorageKey]);
+
+  // Auto-save sessionId to sessionStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const storageKey = getStorageKey();
+      if (sessionId) {
+        sessionStorage.setItem(`${storageKey}-session`, sessionId);
+      } else {
+        sessionStorage.removeItem(`${storageKey}-session`);
+      }
+    } catch (error) {
+      console.warn('Failed to save session ID:', error);
+    }
+  }, [sessionId, getStorageKey]);
+
+  // Handle domain changes: load stored messages for new domain
+  useEffect(() => {
+    if (currentDomain !== lastDomain) {
+      // Load messages for the new domain
+      if (typeof window !== 'undefined') {
+        try {
+          const newStorageKey = `erd-chat-${projectId}-${currentDomain}`;
+          const storedMessages = sessionStorage.getItem(newStorageKey);
+          const storedSessionId = sessionStorage.getItem(`${newStorageKey}-session`);
+          
+          const parsedMessages = storedMessages ? JSON.parse(storedMessages) : [];
+          
+          // If there are existing messages for this domain, load them
+          setMessages(parsedMessages);
+          setSessionId(storedSessionId);
+          
+          // Add domain switch notification only if we had previous messages and now switching domains
+          if (lastDomain && parsedMessages.length === 0 && messages.length > 0) {
+            const systemMessage: ChatMessage = {
+              id: Math.random().toString(36).substr(2, 9),
+              role: 'system',
+              content: `🔄 **Domain Context Changed**\n\nSwitched from "${lastDomain.replace('-', ' ')}" to "${currentDomain.replace('-', ' ')}" domain.\n\nThe AI assistant now has access to ${currentDomain === 'overview' ? 'the complete schema' : `tables and relationships specific to the ${currentDomain.replace('-', ' ')} domain`}.`,
+              timestamp: new Date(),
+              metadata: {
+                messageType: 'general'
+              }
+            };
+            
+            setMessages([systemMessage]);
+          }
+        } catch (error) {
+          console.warn('Failed to load messages for new domain:', error);
+          setMessages([]);
+          setSessionId(null);
         }
-      };
+      }
       
-      setMessages(prev => [...prev, systemMessage]);
       setLastDomain(currentDomain);
     }
-  }, [currentDomain, lastDomain, messages.length]);
+  }, [currentDomain, lastDomain, projectId]);
 
   const checkLLMAvailability = async () => {
     try {

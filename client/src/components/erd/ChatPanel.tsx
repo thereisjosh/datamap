@@ -76,8 +76,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       />
       
       {/* Chat Widget Container */}
-      <div className="fixed bottom-6 right-6 z-[1000] w-[380px] h-[600px] max-h-[calc(100vh-3rem)] 
-                      sm:w-[320px] sm:h-[500px] sm:bottom-4 sm:right-4
+      <div className="fixed bottom-6 right-6 z-[1000] 
+                      w-[480px] h-[700px] max-h-[calc(100vh-3rem)]
+                      lg:w-[480px] lg:h-[700px] lg:bottom-6 lg:right-6
+                      md:w-[420px] md:h-[600px] md:bottom-4 md:right-4
+                      sm:w-[calc(100vw-32px)] sm:h-[70vh] sm:bottom-4 sm:right-4 sm:left-4
                       animate-in slide-in-from-bottom-4 duration-300">
         <Card className="h-full flex flex-col shadow-2xl border-2 bg-background">
         {/* Header */}

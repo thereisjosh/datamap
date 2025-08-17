@@ -153,9 +153,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       )}
 
       {/* Message content */}
-      <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
+      <div className={`max-w-[85%] ${isUser ? 'order-first' : ''}`}>
         <Card className={`${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted/50'}`}>
-          <CardContent className="p-3">
+          <CardContent className="p-4">
             {/* Message header (only for assistant) */}
             {!isUser && (
               <div className="flex items-center justify-between mb-2">
@@ -181,7 +181,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             )}
 
             {/* Message content */}
-            <div className={`prose prose-sm max-w-none ${isUser ? 'prose-invert' : ''}`}>
+            <div className={`prose prose-sm max-w-none ${isUser ? 'prose-invert' : ''} leading-relaxed`}>
               {isLoading ? (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />

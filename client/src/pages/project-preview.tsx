@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { api, type ProjectResponse, type Table, type Relationship } from '@/lib/api';
+import { ChatPanel } from '@/components/erd/ChatPanel';
 import { 
   ArrowLeft, 
   Search, 
@@ -15,7 +16,8 @@ import {
   Share, 
   Settings,
   Maximize,
-  Home
+  Home,
+  Bot
 } from 'lucide-react';
 import { useLocation, useRoute } from 'wouter';
 
@@ -47,6 +49,9 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
   const [pendingTableSelection, setPendingTableSelection] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showControls, setShowControls] = useState(true);
+  
+  // Chat state
+  const [isChatOpen, setIsChatOpen] = useState(false);
   
   // Project data state
   const [project, setProject] = useState<ProjectResponse | null>(null);
@@ -461,6 +466,47 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
     setShowControls(!showControls);
   };
 
+  // Chat handlers
+  const handleChatToggle = () => {
+    setIsChatOpen(!isChatOpen);
+  };
+
+  const handleSQLGenerated = (sql: string) => {
+    toast({
+      title: "SQL Generated",
+      description: "SQL query has been generated and copied to clipboard.",
+    });
+  };
+
+  const handleTableMentioned = (tables: string[]) => {
+    // Find the first table and highlight it
+    if (tables.length > 0) {
+      const tableName = tables[0];
+      const targetDomain = findDomainForTable(tableName);
+      
+      if (targetDomain && targetDomain !== selectedDomain) {
+        handleDomainSwitchForTable(targetDomain, tableName);
+      } else {
+        setPendingTableSelection(tableName);
+      }
+    }
+  };
+
+  const handleRelationshipClick = (sourceTable: string, targetTable: string) => {
+    // Find domain that contains both tables or fallback to the source table's domain
+    const sourceDomain = findDomainForTable(sourceTable);
+    const targetDomain = findDomainForTable(targetTable);
+    
+    // Prefer domain that contains both tables, otherwise use source table's domain
+    const finalDomain = sourceDomain === targetDomain ? sourceDomain : sourceDomain;
+    
+    if (finalDomain && finalDomain !== selectedDomain) {
+      handleDomainSwitchForTable(finalDomain, sourceTable);
+    } else {
+      setPendingTableSelection(sourceTable);
+    }
+  };
+
   // Loading state
   if (isLoading) {
     return (
@@ -689,6 +735,9 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
 
             {/* Actions */}
             <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={handleChatToggle}>
+                <Bot className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="sm" onClick={handleShareProject}>
                 <Share className="h-4 w-4" />
               </Button>
@@ -728,6 +777,19 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
           domainResults={domainResults}
         />
       </div>
+
+      {/* Floating Chat Widget - Fixed to Viewport */}
+      <ChatPanel
+        mermaidCode={domainResults[selectedDomain]?.diagram || mermaidCode}
+        projectId={projectId}
+        isDarkMode={isDarkMode}
+        isOpen={isChatOpen}
+        onToggle={handleChatToggle}
+        onSQLGenerated={handleSQLGenerated}
+        onTableMentioned={handleTableMentioned}
+        onRelationshipClick={handleRelationshipClick}
+        currentDomain={selectedDomain}
+      />
     </div>
   );
 };

@@ -215,7 +215,7 @@ export const ERDChat: React.FC<ERDChatProps> = ({
                 <Lightbulb className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium text-muted-foreground">Quick Start</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {PRESET_QUESTIONS.map((preset, index) => {
                   const Icon = preset.icon;
                   return (
@@ -225,13 +225,13 @@ export const ERDChat: React.FC<ERDChatProps> = ({
                       size="sm"
                       onClick={() => handlePresetQuestion(preset.question, preset.type)}
                       disabled={isLoading}
-                      className="justify-start text-left h-auto p-3"
+                      className="justify-start text-left h-auto p-3 min-h-[60px]"
                     >
-                      <div className="flex items-start gap-2">
+                      <div className="flex items-start gap-2 w-full">
                         <Icon className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <div className="font-medium text-xs">{preset.label}</div>
-                          <div className="text-xs text-muted-foreground line-clamp-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-xs truncate">{preset.label}</div>
+                          <div className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                             {preset.question}
                           </div>
                         </div>
@@ -255,7 +255,7 @@ export const ERDChat: React.FC<ERDChatProps> = ({
         )}
 
         {/* Messages */}
-        <div className="space-y-4 max-h-96 overflow-y-auto">
+        <div className="flex-1 space-y-4 overflow-y-auto min-h-0 px-1">
           {messages.map((message) => (
             <ChatMessage
               key={message.id}
