@@ -73,7 +73,6 @@ export const ERDChat: React.FC<ERDChatProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
-  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -241,14 +240,6 @@ export const ERDChat: React.FC<ERDChatProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Handle hover events for scroll indicators
-  const handleMouseEnter = useCallback(() => {
-    setShowScrollIndicator(true);
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    setShowScrollIndicator(false);
-  }, []);
 
   const suggestedQuestions = getSuggestedQuestions();
 
@@ -276,29 +267,22 @@ export const ERDChat: React.FC<ERDChatProps> = ({
   return (
     <>
       <style>{`
-        .chat-scrollbar-hidden::-webkit-scrollbar {
-          display: none;
+        .chat-messages-container {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
         }
-        .chat-scrollbar-hidden {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        .chat-scrollbar-visible::-webkit-scrollbar {
+        .chat-messages-container::-webkit-scrollbar {
           width: 8px;
         }
-        .chat-scrollbar-visible::-webkit-scrollbar-track {
+        .chat-messages-container::-webkit-scrollbar-track {
           background: transparent;
         }
-        .chat-scrollbar-visible::-webkit-scrollbar-thumb {
+        .chat-messages-container::-webkit-scrollbar-thumb {
           background-color: rgba(156, 163, 175, 0.5);
           border-radius: 4px;
         }
-        .chat-scrollbar-visible::-webkit-scrollbar-thumb:hover {
+        .chat-messages-container::-webkit-scrollbar-thumb:hover {
           background-color: rgba(156, 163, 175, 0.8);
-        }
-        .chat-scrollbar-visible {
-          scrollbar-width: thin;
-          scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
         }
       `}</style>
       <Card className={className}>
@@ -370,7 +354,7 @@ export const ERDChat: React.FC<ERDChatProps> = ({
         )}
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="flex-1 flex flex-col space-y-4 min-h-0">
         {/* Error display */}
         {error && (
           <Alert variant="destructive">
@@ -382,18 +366,15 @@ export const ERDChat: React.FC<ERDChatProps> = ({
         {/* Messages */}
         <div 
           ref={messagesContainerRef}
-          className={`flex-1 space-y-4 overflow-y-auto min-h-0 px-1 transition-all duration-200 ${
-            showScrollIndicator ? 'chat-scrollbar-visible' : 'chat-scrollbar-hidden'
-          }`}
+          className="chat-messages-container flex-1 space-y-4 overflow-y-auto min-h-0 px-1"
           style={{
             overscrollBehavior: 'contain',
             touchAction: 'pan-y',
             WebkitOverflowScrolling: 'touch',
-            scrollBehavior: 'smooth'
+            scrollBehavior: 'smooth',
+            height: 0  // Force height constraint for flexbox
           }}
           onScroll={handleScroll}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
         >
           {messages.map((message) => (
             <ChatMessage
