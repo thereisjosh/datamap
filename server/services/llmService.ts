@@ -326,27 +326,34 @@ export class LLMService {
    * Build prompt for general questions about ERD
    */
   private buildQuestionPrompt(question: string, context: ERDContext): string {
+    const conversationContext = this.serializeConversationHistory(context.conversationHistory);
+    
     return `You are an expert database architect and ERD specialist. Help users understand their database schema by answering questions clearly and providing practical examples.
 
 SCHEMA CONTEXT:
 ${this.serializeERDContext(context)}
 
-USER QUESTION: ${question}
+${conversationContext ? `CONVERSATION HISTORY:
+${conversationContext}
+
+` : ''}CURRENT USER QUESTION: ${question}
 
 INSTRUCTIONS:
-1. Provide a clear, helpful answer that explains the database concepts
-2. If relevant, include SQL examples using proper formatting with \`\`\`sql code blocks
-3. Focus on practical implications and best practices
-4. If you detect relationships between tables mentioned in the question, explain them clearly
-5. If the question involves data retrieval, provide the SQL query needed
+1. Consider the conversation history to provide contextual, follow-up responses
+2. Build upon previous exchanges when answering clarification questions
+3. Provide clear, helpful answers that explain database concepts
+4. If relevant, include SQL examples using proper formatting with \`\`\`sql code blocks
+5. Focus on practical implications and best practices
+6. If you detect relationships between tables mentioned in the question, explain them clearly
+7. If the question involves data retrieval, provide the SQL query needed
 
 RESPONSE FORMAT:
-- Start with a direct answer to the question
+- Start with a direct answer that acknowledges conversation context when relevant
 - Provide technical details and context
 - Include SQL examples when relevant (use \`\`\`sql blocks)
 - End with any recommendations or best practices
 
-Remember: This is a ${context.domainContext || 'general'} schema. Keep explanations practical and actionable.`;
+Remember: This is a ${context.domainContext || 'general'} schema. Keep explanations practical and actionable. Be conversational and build upon previous messages when appropriate.`;
   }
 
   /**
@@ -502,6 +509,24 @@ RESPONSE FORMAT:
     }
 
     return output;
+  }
+
+  /**
+   * Serialize conversation history for LLM context
+   */
+  private serializeConversationHistory(messages?: any[]): string {
+    if (!messages || messages.length === 0) return '';
+
+    const recentMessages = messages.slice(-8); // Last 8 messages for context
+    let output = '';
+
+    for (const message of recentMessages) {
+      const role = message.role === 'user' ? 'User' : 'Assistant';
+      const content = message.content.substring(0, 300); // Limit length
+      output += `${role}: ${content}\n`;
+    }
+
+    return output.trim();
   }
 
   /**

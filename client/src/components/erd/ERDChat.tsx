@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,8 @@ import {
   AlertCircle,
   Lightbulb,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  ChevronDown
 } from 'lucide-react';
 
 interface ERDChatProps {
@@ -70,8 +71,11 @@ export const ERDChat: React.FC<ERDChatProps> = ({
 }) => {
   const [input, setInput] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const {
     messages,
@@ -93,10 +97,39 @@ export const ERDChat: React.FC<ERDChatProps> = ({
     currentDomain
   });
 
-  // Auto-scroll to bottom when new messages arrive
+  // Check if user is at bottom of scroll area
+  const checkIfAtBottom = useCallback(() => {
+    if (!messagesContainerRef.current) return true;
+    
+    const container = messagesContainerRef.current;
+    const threshold = 50; // 50px threshold for "at bottom"
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+    
+    setIsAtBottom(isNearBottom);
+    return isNearBottom;
+  }, []);
+
+  // Handle scroll events to track user position
+  const handleScroll = useCallback(() => {
+    checkIfAtBottom();
+  }, [checkIfAtBottom]);
+
+  // Smart auto-scroll: only scroll if user is at bottom or explicitly enabled
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (shouldAutoScroll && isAtBottom && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, shouldAutoScroll, isAtBottom]);
+
+  // Reset auto-scroll when new messages arrive and user was at bottom
+  useEffect(() => {
+    if (messages.length > 0) {
+      const wasAtBottom = checkIfAtBottom();
+      if (wasAtBottom) {
+        setShouldAutoScroll(true);
+      }
+    }
+  }, [messages.length, checkIfAtBottom]);
 
   // Focus input when expanded
   useEffect(() => {
@@ -150,6 +183,12 @@ export const ERDChat: React.FC<ERDChatProps> = ({
   const handleClearChat = () => {
     clearChat();
     setInput('');
+  };
+
+  const scrollToBottom = () => {
+    setShouldAutoScroll(true);
+    setIsAtBottom(true);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const suggestedQuestions = getSuggestedQuestions();
@@ -255,7 +294,11 @@ export const ERDChat: React.FC<ERDChatProps> = ({
         )}
 
         {/* Messages */}
-        <div className="flex-1 space-y-4 overflow-y-auto min-h-0 px-1">
+        <div 
+          ref={messagesContainerRef}
+          className="flex-1 space-y-4 overflow-y-auto min-h-0 px-1"
+          onScroll={handleScroll}
+        >
           {messages.map((message) => (
             <ChatMessage
               key={message.id}
@@ -267,6 +310,21 @@ export const ERDChat: React.FC<ERDChatProps> = ({
           ))}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Scroll to Bottom Button */}
+        {!isAtBottom && messages.length > 2 && (
+          <div className="flex justify-center py-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={scrollToBottom}
+              className="flex items-center gap-2 rounded-full h-8 px-3"
+            >
+              <ChevronDown className="h-3 w-3" />
+              <span className="text-xs">New messages</span>
+            </Button>
+          </div>
+        )}
 
         {/* Suggested Questions (after conversation starts) */}
         {messages.length > 0 && suggestedQuestions.length > 0 && !isLoading && (

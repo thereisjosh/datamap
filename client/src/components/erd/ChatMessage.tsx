@@ -215,7 +215,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               title="Generated SQL"
               showActions={true}
               confidence={message.metadata?.confidence}
-              onExecute={onSQLCopy}
             />
           </div>
         )}

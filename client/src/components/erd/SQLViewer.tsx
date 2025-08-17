@@ -8,8 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Copy, 
   Check, 
-  Download, 
-  Play, 
   AlertCircle, 
   TrendingUp,
   Info
@@ -26,7 +24,6 @@ interface SQLViewerProps {
   title?: string;
   isDarkMode?: boolean;
   showActions?: boolean;
-  onExecute?: (sql: string) => void;
 }
 
 export const SQLViewer: React.FC<SQLViewerProps> = ({
@@ -38,8 +35,7 @@ export const SQLViewer: React.FC<SQLViewerProps> = ({
   warnings = [],
   title = "Generated SQL",
   isDarkMode = false,
-  showActions = true,
-  onExecute
+  showActions = true
 }) => {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -54,22 +50,6 @@ export const SQLViewer: React.FC<SQLViewerProps> = ({
     });
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([sql], { type: 'text/sql' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'query.sql';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    toast({
-      title: "Downloaded",
-      description: "SQL query saved as query.sql",
-    });
-  };
 
   const getPerformanceBadge = () => {
     if (!performance) return null;
@@ -182,27 +162,6 @@ export const SQLViewer: React.FC<SQLViewerProps> = ({
               </Button>
             </CopyToClipboard>
             
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleDownload}
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Download
-            </Button>
-            
-            {onExecute && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => onExecute(sql)}
-                className="flex items-center gap-2"
-              >
-                <Play className="h-4 w-4" />
-                Execute
-              </Button>
-            )}
           </div>
         )}
 

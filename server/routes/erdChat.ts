@@ -51,15 +51,6 @@ router.post('/chat', async (req: Request, res: Response) => {
     // Parse ERD from Mermaid code
     const parsedERD = erdAnalyzer.parseMermaidERD(chatRequest.mermaidCode);
     
-    // Build context for LLM
-    const erdContext = {
-      tables: parsedERD.tables,
-      relationships: parsedERD.relationships,
-      patterns: parsedERD.patterns,
-      userQuestion: chatRequest.message,
-      domainContext: 'general'
-    };
-
     // Get or create chat session
     let sessionId = chatRequest.sessionId || randomUUID();
     let session = chatSessions.get(sessionId);
@@ -85,7 +76,20 @@ router.post('/chat', async (req: Request, res: Response) => {
     };
     session.messages.push(userMessage);
 
-    // Generate LLM response
+    // Get recent conversation history for context (last 10 messages)
+    const recentMessages = session.messages.slice(-10);
+
+    // Build context for LLM with conversation history
+    const erdContext = {
+      tables: parsedERD.tables,
+      relationships: parsedERD.relationships,
+      patterns: parsedERD.patterns,
+      userQuestion: chatRequest.message,
+      domainContext: 'general',
+      conversationHistory: recentMessages
+    };
+
+    // Generate LLM response with conversation context
     const llmResponse = await llmService.answerQuestion(chatRequest.message, erdContext);
 
     // Create assistant message
