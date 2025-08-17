@@ -2,7 +2,7 @@ import React, { useEffect, useState, memo, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Download, Copy, AlertCircle, ZoomIn, ZoomOut, RotateCcw, Move, Maximize2 } from 'lucide-react';
+import { Download, Copy, AlertCircle, ZoomIn, ZoomOut, RotateCcw, Move } from 'lucide-react';
 import './ERDRenderer.css';
 
 interface ERDRendererProps {
@@ -2358,7 +2358,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 </div>
               </div>
 
-              {/* Zoom Controls */}
+              {/* Combined Controls: Zoom + Navigation + Pan */}
               <div className="flex gap-1">
                 <Button
                   variant="ghost"
@@ -2378,10 +2378,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 >
                   <ZoomOut className="h-4 w-4" />
                 </Button>
-              </div>
-              
-              {/* Navigation Controls */}
-              <div className="flex gap-1">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -2392,34 +2388,15 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                   <RotateCcw className="h-4 w-4" />
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant={isPanEnabled ? "default" : "ghost"}
                   size="sm"
-                  onClick={handleFit}
-                  title="Fit to Screen (F)"
+                  onClick={handleTogglePan}
+                  title="Toggle Pan Mode (Space)"
                   className="h-8 w-8 p-0"
                 >
-                  <Maximize2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDomainFocus}
-                  title="Focus on Domain"
-                  className="h-8 w-8 p-0"
-                >
-                  🏷️
+                  <Move className="h-4 w-4" />
                 </Button>
               </div>
-              
-              <Button
-                variant={isPanEnabled ? "default" : "ghost"}
-                size="sm"
-                onClick={handleTogglePan}
-                title="Toggle Pan Mode (Space)"
-                className="h-8 w-8 p-0"
-              >
-                <Move className="h-4 w-4" />
-              </Button>
 
               {/* Selection Info */}
               {selectedTable && (

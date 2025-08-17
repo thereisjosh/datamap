@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Separator } from '@/components/ui/separator';
 import { ChatMessage } from './ChatMessage';
 import { useERDChat } from '@/hooks/useERDChat';
@@ -18,7 +19,8 @@ import {
   Lightbulb,
   Sparkles,
   RefreshCw,
-  ChevronDown
+  ChevronDown,
+  MessageSquarePlus
 } from 'lucide-react';
 
 interface ERDChatProps {
@@ -59,7 +61,7 @@ const PRESET_QUESTIONS = [
   }
 ];
 
-export const ERDChat: React.FC<ERDChatProps> = ({
+export const ERDChat = forwardRef<any, ERDChatProps>(({
   mermaidCode,
   projectId,
   isDarkMode = false,
@@ -68,11 +70,12 @@ export const ERDChat: React.FC<ERDChatProps> = ({
   onRelationshipClick,
   className = '',
   currentDomain = 'overview'
-}) => {
+}, ref) => {
   const [input, setInput] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const [showClearConfirmation, setShowClearConfirmation] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -229,17 +232,72 @@ export const ERDChat: React.FC<ERDChatProps> = ({
     sendMessage(question);
   };
 
-  const handleClearChat = () => {
+  const handleClearChatInternal = () => {
+    setShowClearConfirmation(true);
+  };
+
+  const confirmClearChat = () => {
+    clearChat();
+    setInput('');
+    setShowClearConfirmation(false);
+  };
+
+  const cancelClearChat = () => {
+    setShowClearConfirmation(false);
+  };
+
+  const handleNewChatInternal = () => {
     clearChat();
     setInput('');
   };
 
-  const scrollToBottom = () => {
-    setShouldAutoScroll(true);
-    setIsAtBottom(true);
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Helper function to get conversation age
+  const getConversationAge = () => {
+    if (messages.length === 0) return null;
+    
+    const firstMessage = messages[0];
+    const startTime = new Date(firstMessage.timestamp);
+    const now = new Date();
+    const diffMinutes = Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60));
+    
+    if (diffMinutes < 1) return 'Just started';
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
   };
 
+  const scrollToBottom = () => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      // Force scroll to absolute bottom with extra offset
+      container.scrollTop = container.scrollHeight + 100;
+      // Update state immediately
+      setIsAtBottom(true);
+      setShouldAutoScroll(true);
+      // Force recheck after scroll completes
+      setTimeout(() => {
+        checkIfAtBottom();
+      }, 100);
+    }
+  };
+
+
+
+  // Expose methods to parent component
+  useImperativeHandle(ref, () => ({
+    handleNewChat: () => {
+      console.log('handleNewChat called from ChatPanel');
+      handleNewChatInternal();
+    },
+    handleClearChat: () => {
+      console.log('handleClearChat called from ChatPanel');
+      handleClearChatInternal();
+    }
+  }));
 
   const suggestedQuestions = getSuggestedQuestions();
 
@@ -286,75 +344,42 @@ export const ERDChat: React.FC<ERDChatProps> = ({
         }
       `}</style>
       <Card className={className}>
-        <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="h-5 w-5" />
-              ERD Assistant
-            </CardTitle>
-            <CardDescription>
-              Ask questions about your database schema
-            </CardDescription>
-          </div>
-          
-          {sessionId && messages.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">
-                {messages.length} messages
-              </Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearChat}
-                className="h-8 w-8 p-0"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Preset Questions */}
+        {/* Preset Questions - Only when no messages */}
         {messages.length === 0 && (
-          <>
-            <Separator className="my-3" />
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Lightbulb className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium text-muted-foreground">Quick Start</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {PRESET_QUESTIONS.map((preset, index) => {
-                  const Icon = preset.icon;
-                  return (
-                    <Button
-                      key={index}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePresetQuestion(preset.question, preset.type)}
-                      disabled={isLoading}
-                      className="justify-start text-left h-auto p-3 min-h-[60px]"
-                    >
-                      <div className="flex items-start gap-2 w-full">
-                        <Icon className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-xs truncate">{preset.label}</div>
-                          <div className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                            {preset.question}
-                          </div>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2 mb-3">
+              <Lightbulb className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">Quick Start</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {PRESET_QUESTIONS.map((preset, index) => {
+                const Icon = preset.icon;
+                return (
+                  <Button
+                    key={index}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePresetQuestion(preset.question, preset.type)}
+                    disabled={isLoading}
+                    className="justify-start text-left h-auto p-3 min-h-[60px]"
+                  >
+                    <div className="flex items-start gap-2 w-full">
+                      <Icon className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-xs truncate">{preset.label}</div>
+                        <div className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                          {preset.question}
                         </div>
                       </div>
-                    </Button>
-                  );
-                })}
-              </div>
+                    </div>
+                  </Button>
+                );
+              })}
             </div>
-          </>
+          </CardHeader>
         )}
-      </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col space-y-4 min-h-0">
+      <CardContent className="h-full flex flex-col relative">
         {/* Error display */}
         {error && (
           <Alert variant="destructive">
@@ -366,13 +391,13 @@ export const ERDChat: React.FC<ERDChatProps> = ({
         {/* Messages */}
         <div 
           ref={messagesContainerRef}
-          className="chat-messages-container flex-1 space-y-4 overflow-y-auto min-h-0 px-1"
+          className="chat-messages-container flex-1 space-y-4 overflow-y-auto overflow-hidden px-1"
           style={{
             overscrollBehavior: 'contain',
             touchAction: 'pan-y',
             WebkitOverflowScrolling: 'touch',
             scrollBehavior: 'smooth',
-            height: 0  // Force height constraint for flexbox
+            minHeight: 0
           }}
           onScroll={handleScroll}
         >
@@ -388,17 +413,17 @@ export const ERDChat: React.FC<ERDChatProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Scroll to Bottom Button */}
+        {/* Floating Scroll to Bottom Button - Industry Standard */}
         {!isAtBottom && messages.length > 2 && (
-          <div className="flex justify-center py-2">
+          <div className="absolute bottom-20 right-4 z-10">
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={scrollToBottom}
-              className="flex items-center gap-2 rounded-full h-8 px-3"
+              className="rounded-full h-10 w-10 p-0 shadow-xl bg-white/80 dark:bg-gray-800/80 hover:bg-white/90 dark:hover:bg-gray-800/90 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50"
+              title="Scroll to bottom"
             >
-              <ChevronDown className="h-3 w-3" />
-              <span className="text-xs">New messages</span>
+              <ChevronDown className="h-4 w-4 text-gray-700 dark:text-gray-300" />
             </Button>
           </div>
         )}
@@ -427,7 +452,7 @@ export const ERDChat: React.FC<ERDChatProps> = ({
         )}
 
         {/* Input form */}
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-3 flex-shrink-0 mt-auto">
           <div className="relative">
             <TextareaAutosize
               ref={inputRef}
@@ -461,8 +486,35 @@ export const ERDChat: React.FC<ERDChatProps> = ({
             )}
           </div>
         </form>
+
+        {/* Clear Chat Confirmation Dialog - Inside Chat Container */}
+        {showClearConfirmation && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-background border rounded-lg shadow-lg p-6 max-w-md mx-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <h2 className="text-lg font-semibold">Clear Conversation</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Are you sure you want to clear this conversation? This will permanently delete {messages.length} messages and cannot be undone.
+                  </p>
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button variant="outline" onClick={cancelClearChat}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    onClick={confirmClearChat}
+                  >
+                    Clear Chat
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
     </>
   );
-};
+});
