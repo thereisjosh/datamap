@@ -136,14 +136,19 @@ export class FlexibleExcelParser {
       const result: ParseResult = {
         tables: [],
         relationships: [],
-        errors: validation.warnings, // Start with warnings
+        errors: [...validation.warnings], // Start with warnings
         summary: { tablesFound: 0, columnsFound: 0, relationshipsFound: 0 }
       };
       
       // Parse tables
-      const tables = await this.extractTables(workbook, mappings);
+      const { tables, duplicatesFound } = await this.extractTables(workbook, mappings);
       result.tables = tables;
       result.summary.tablesFound = tables.length;
+      
+      // Add warnings for data quality issues
+      if (duplicatesFound.length > 0) {
+        result.errors.push(`Data quality warning: Found duplicate table names in Excel: ${duplicatesFound.join(', ')}`);
+      }
       
       // Parse columns and relationships
       const { columns, relationships } = await this.extractColumnsAndRelationships(workbook, mappings, tables);
@@ -283,7 +288,7 @@ export class FlexibleExcelParser {
   /**
    * Extract table definitions from the specified sheet
    */
-  private async extractTables(workbook: XLSX.WorkBook, mappings: ColumnMappings): Promise<ParseResult['tables']> {
+  private async extractTables(workbook: XLSX.WorkBook, mappings: ColumnMappings): Promise<{ tables: ParseResult['tables'], duplicatesFound: string[] }> {
     const worksheet = workbook.Sheets[mappings.tableSheet];
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
     
@@ -301,9 +306,12 @@ export class FlexibleExcelParser {
     const tableTypeIndex = mappings.tableTypeColumn ? headers.indexOf(mappings.tableTypeColumn) : -1;
     
     const tables: ParseResult['tables'] = [];
+    const tableMap = new Map<string, boolean>(); // Track table names for deduplication
+    const duplicatesFound: string[] = [];
     let processedRows = 0;
     let skippedRows = 0;
     let filteredOutByType = 0;
+    let duplicateCount = 0;
     
     // Process each data row
     for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
@@ -332,6 +340,16 @@ export class FlexibleExcelParser {
         }
       }
       
+      // Check for duplicates (match hardcoded parser behavior)
+      if (tableMap.has(tableName)) {
+        duplicateCount++;
+        duplicatesFound.push(tableName);
+        console.log(`  ⚠️ Duplicate table "${tableName}" found, skipping (matches hardcoded parser behavior)`);
+        continue;
+      }
+      
+      // Mark table as processed and add to results
+      tableMap.set(tableName, true);
       tables.push({
         name: tableName,
         columns: [] // Will be populated later
@@ -342,9 +360,10 @@ export class FlexibleExcelParser {
     console.log(`  Processed rows: ${processedRows}`);
     console.log(`  Skipped rows (empty/invalid): ${skippedRows}`);
     console.log(`  Filtered out by Data Kind: ${filteredOutByType}`);
+    console.log(`  Duplicate tables skipped: ${duplicateCount}`);
     console.log(`  Final tables included: ${tables.length}`);
     
-    return tables;
+    return { tables, duplicatesFound };
   }
   
   /**
