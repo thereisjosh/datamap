@@ -12,6 +12,7 @@ import { emailService } from "./services/emailService.ts";
 import { getDb } from "../lib/db.ts";
 import { eq, and, sql } from "drizzle-orm";
 import { registerOrganizationAPI } from "./organization-api";
+import flexibleParserRouter from "./routes/flexibleParser";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -36,6 +37,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     origin: true, // Allow all origins in development
     credentials: true,
   }));
+
+  // Mount flexible parser routes
+  app.use("/api/flexible-parser", flexibleParserRouter);
 
   // Health check endpoint
   app.get("/api/health", async (req, res) => {

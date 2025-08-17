@@ -17,6 +17,7 @@ import ProjectERD from "@/pages/project-erd";
 import ProjectPreview from "@/pages/project-preview";
 import AcceptInvitation from "@/pages/accept-invitation";
 import Onboarding from "@/pages/onboarding";
+import FlexibleParser from "@/pages/flexible-parser";
 import { useState } from "react";
 
 function Router() {
@@ -71,6 +72,11 @@ function Router() {
       <Route path="/settings/organization">
         <AuthGuard>
           <OrganizationSettings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+        </AuthGuard>
+      </Route>
+      <Route path="/flexible-parser">
+        <AuthGuard>
+          <FlexibleParser isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
         </AuthGuard>
       </Route>
       

@@ -1,4 +1,5 @@
 import { apiRequest } from './queryClient';
+import type { ExcelAnalysis, ColumnMappings, ParseResult } from '@/components/excel/types';
 
 export interface Column {
   name: string;
@@ -218,4 +219,55 @@ export const api = {
 
   // Organization member management moved to custom API endpoints
   // See server/organization-api.ts for current implementation
+
+  // Flexible Excel Parser API methods
+  async analyzeExcelStructure(file: File): Promise<ExcelAnalysis> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch('/api/flexible-parser/analyze', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to analyze Excel file');
+    }
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to analyze Excel file');
+    }
+
+    return result.data;
+  },
+
+  async parseExcelWithMappings(file: File, mappings: ColumnMappings): Promise<ParseResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('mapping', JSON.stringify(mappings));
+
+    const response = await fetch('/api/flexible-parser/parse', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to parse Excel file');
+    }
+
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to parse Excel file');
+    }
+
+    return result.data;
+  },
+
+  async checkFlexibleParserHealth(): Promise<{ success: boolean; message: string; timestamp: string }> {
+    const response = await apiRequest('GET', '/api/flexible-parser/health');
+    return response.json();
+  },
 };
