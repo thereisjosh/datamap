@@ -218,9 +218,14 @@ export class ExcelParserService {
 
       // Initialize tables from TableMetadata sheet
       let createdTablesCount = 0;
+      let processedRowsCount = 0;
+      let skippedRowsCount = 0;
       const skippedTables = [];
       
+      console.log(`📊 HARDCODED PARSER: Processing ${tableRows.length} rows from TableMetadata`);
+      
       for (const row of tableRows) {
+        processedRowsCount++;
         console.log('\n🔍 Processing table row:', row);
         
         // Use sheet-specific column mapping for TableMetadata
@@ -251,6 +256,7 @@ export class ExcelParserService {
         } else {
           const tableName = logicalTableName ? logicalTableName.toString().trim() : 'Unknown';
           skippedTables.push({ tableName, dataKind });
+          skippedRowsCount++;
           console.log(`  ❌ Skipping row - missing logicalTableName or dataKind not in ['entity', 'staticEntity']`);
         }
       }
@@ -260,9 +266,13 @@ export class ExcelParserService {
         console.log(`  - ${tableName}: dataKind="${dataKind}"`);
       });
       
-      console.log(`\n📈 Total tables created from TableMetadata: ${createdTablesCount}`);
-      console.log(`📈 Tables in tableMap: ${tableMap.size}`);
-      console.log(`📈 Table names: [${Array.from(tableMap.keys()).join(', ')}]`);
+      console.log(`\n📊 HARDCODED PARSER - TableMetadata processing summary:`);
+      console.log(`  Total rows in TableMetadata: ${tableRows.length}`);
+      console.log(`  Processed rows: ${processedRowsCount}`);
+      console.log(`  Created tables: ${createdTablesCount}`);
+      console.log(`  Skipped rows: ${skippedRowsCount}`);
+      console.log(`  Tables in tableMap: ${tableMap.size}`);
+      console.log(`  Table names: [${Array.from(tableMap.keys()).join(', ')}]`);
 
       // Parse attribute metadata
       const attributeRows: ExcelRow[] = XLSX.utils.sheet_to_json(attributeMetadataSheet);
@@ -387,7 +397,9 @@ export class ExcelParserService {
         autoCreatedCount++;
       }
       
-      console.log(`📈 Auto-created ${autoCreatedCount} missing target tables: [${Array.from(missingTargetTables).join(', ')}]`);
+      console.log(`📈 HARDCODED PARSER - Auto-created ${autoCreatedCount} missing target tables: [${Array.from(missingTargetTables).join(', ')}]`);
+      console.log(`📈 HARDCODED PARSER - Tables before auto-creation: ${tableMap.size - autoCreatedCount}`);
+      console.log(`📈 HARDCODED PARSER - Tables after auto-creation: ${tableMap.size}`);
 
       // Convert table map to array
       tables = Array.from(tableMap.values());
@@ -432,8 +444,8 @@ export class ExcelParserService {
       errors.push(`Failed to parse Excel file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    console.log(`\n🏁 Final parsing results:`);
-    console.log(`  Tables: ${tables.length}`);
+    console.log(`\n🏁 HARDCODED PARSER - Final parsing results:`);
+    console.log(`  Final Tables: ${tables.length}`);
     console.log(`  Relationships: ${relationships.length}`);
     console.log(`  Errors: ${errors.length}`);
     if (errors.length > 0) {
