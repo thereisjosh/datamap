@@ -40,7 +40,7 @@ export class EmailService {
     this.config = {
       fromEmail: config?.fromEmail || 'onboarding@resend.dev', // Use Resend's default domain
       appUrl: config?.appUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-      appName: config?.appName || process.env.NEXT_PUBLIC_APP_NAME || 'ERDBuilder',
+      appName: config?.appName || process.env.NEXT_PUBLIC_APP_NAME || 'ERDify',
       ...config
     };
 

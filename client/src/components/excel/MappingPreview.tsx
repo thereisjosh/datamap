@@ -104,10 +104,6 @@ const MappingPreview: React.FC<MappingPreviewProps> = ({
           </div>
         </div>
 
-        <Button variant="outline" onClick={onEditMappings} className="w-full">
-          <Edit className="h-4 w-4 mr-2" />
-          Edit Mappings
-        </Button>
       </CardContent>
     </Card>
   );
@@ -286,25 +282,6 @@ const MappingPreview: React.FC<MappingPreviewProps> = ({
         {renderRelationshipsPreview()}
       </div>
 
-      {/* Actions */}
-      <div className="flex flex-col sm:flex-row gap-3 justify-between items-center p-4 bg-muted/30 rounded-lg">
-        <div className="flex items-center gap-2">
-          <CheckCircle className="h-5 w-5 text-green-600" />
-          <span className="font-medium">Ready to generate ERD</span>
-        </div>
-        
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onEditMappings}>
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Mappings
-          </Button>
-          
-          <Button onClick={onConfirm} className="min-w-32">
-            <Eye className="h-4 w-4 mr-2" />
-            Generate ERD
-          </Button>
-        </div>
-      </div>
     </div>
   );
 };

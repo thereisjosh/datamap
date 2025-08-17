@@ -262,7 +262,7 @@ const AcceptInvitation = ({ isDarkMode = false }: AcceptInvitationProps) => {
           </div>
           <CardTitle>You're Invited!</CardTitle>
           <CardDescription>
-            Join {invitation.organizationName || 'an organization'} on ERDBuilder
+            Join {invitation.organizationName || 'an organization'} on ERDify
           </CardDescription>
         </CardHeader>
         
@@ -428,7 +428,7 @@ const AcceptInvitation = ({ isDarkMode = false }: AcceptInvitationProps) => {
 
           <div className="text-center">
             <p className="text-xs text-muted-foreground">
-              By accepting this invitation, you agree to ERDBuilder's terms of service
+              By accepting this invitation, you agree to ERDify's terms of service
             </p>
           </div>
         </CardContent>

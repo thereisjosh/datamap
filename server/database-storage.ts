@@ -485,6 +485,116 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // Transaction-safe replace operations for project data
+  async replaceProjectTables(tables: any[], projectId: string, organizationId?: string): Promise<void> {
+    const db = await getDb();
+    if (!db) {
+      throw new Error('Database connection not available');
+    }
+
+    // Use transaction for atomic operation
+    await db.transaction(async (tx) => {
+      // Clear existing tables for this project
+      await tx.delete(schema.tables).where(eq(schema.tables.projectId, projectId));
+      
+      // Insert new tables
+      for (const table of tables) {
+        const insertTable: InsertTable = {
+          name: table.name,
+          attributes: table.attributes || table.columns,
+          projectId: projectId,
+          organizationId: organizationId || null,
+        };
+        await tx.insert(schema.tables).values({
+          id: randomUUID(),
+          name: insertTable.name,
+          attributes: insertTable.attributes,
+          projectId: insertTable.projectId,
+          organizationId: insertTable.organizationId,
+        });
+      }
+    });
+    
+    console.log(`Replaced ${tables.length} tables for project: ${projectId}`);
+  }
+
+  async replaceProjectRelationships(relationships: any[], projectId: string, organizationId?: string): Promise<void> {
+    const db = await getDb();
+    if (!db) {
+      throw new Error('Database connection not available');
+    }
+
+    // Use transaction for atomic operation
+    await db.transaction(async (tx) => {
+      // Clear existing relationships for this project
+      await tx.delete(schema.relationships).where(eq(schema.relationships.projectId, projectId));
+      
+      // Insert new relationships
+      for (const relationship of relationships) {
+        const insertRelationship: InsertRelationship = {
+          sourceTable: relationship.sourceTable,
+          sourceColumn: relationship.sourceColumn,
+          targetTable: relationship.targetTable,
+          targetColumn: relationship.targetColumn,
+          projectId: projectId,
+          organizationId: organizationId || null,
+        };
+        await tx.insert(schema.relationships).values({
+          id: randomUUID(),
+          sourceTable: insertRelationship.sourceTable,
+          sourceColumn: insertRelationship.sourceColumn,
+          targetTable: insertRelationship.targetTable,
+          targetColumn: insertRelationship.targetColumn,
+          projectId: insertRelationship.projectId,
+          organizationId: insertRelationship.organizationId,
+        });
+      }
+    });
+    
+    console.log(`Replaced ${relationships.length} relationships for project: ${projectId}`);
+  }
+
+  // Combined transaction-safe replace operation for both tables and relationships
+  async replaceProjectData(tables: any[], relationships: any[], projectId: string, organizationId?: string): Promise<void> {
+    const db = await getDb();
+    if (!db) {
+      throw new Error('Database connection not available');
+    }
+
+    // Use single transaction for atomic operation
+    await db.transaction(async (tx) => {
+      // Clear existing data for this project
+      await tx.delete(schema.tables).where(eq(schema.tables.projectId, projectId));
+      await tx.delete(schema.relationships).where(eq(schema.relationships.projectId, projectId));
+      
+      // Insert new tables
+      for (const table of tables) {
+        await tx.insert(schema.tables).values({
+          id: randomUUID(),
+          name: table.name,
+          attributes: table.attributes || table.columns,
+          projectId: projectId,
+          organizationId: organizationId || null,
+        });
+      }
+      
+      // Insert new relationships
+      for (const relationship of relationships) {
+        await tx.insert(schema.relationships).values({
+          id: randomUUID(),
+          sourceTable: relationship.sourceTable,
+          sourceColumn: relationship.sourceColumn,
+          targetTable: relationship.targetTable,
+          targetColumn: relationship.targetColumn,
+          projectId: projectId,
+          organizationId: organizationId || null,
+        });
+      }
+    });
+    
+    console.log(`Replaced project data: ${tables.length} tables, ${relationships.length} relationships for project: ${projectId}`);
+  }
+
   async clearProjectTables(projectId: string): Promise<void> {
     const db = await getDb();
     if (!db) return;

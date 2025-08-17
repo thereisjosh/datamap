@@ -472,8 +472,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else {
           console.log('No authenticated user found, falling back to default-user');
         }
-      } catch (authError) {
-        console.log('Auth extraction failed for project creation:', authError.message);
+      } catch (authError: any) {
+        console.log('Auth extraction failed for project creation:', authError?.message || 'Unknown auth error');
       }
       console.log('Creating project for user:', userId);
 
@@ -482,6 +482,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get user's organizations
       const db = await getDb();
+      if (!db) {
+        return res.status(500).json({ error: "Database connection not available" });
+      }
+      
       const userOrganizations = await db.select({
         organizationId: member.organizationId,
         role: member.role
@@ -680,9 +684,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Also store tables and relationships in the main tables for compatibility with organizationId
-      await storage.storeTables(tables, req.params.projectId, project.organizationId);
-      await storage.storeRelationships(relationships, req.params.projectId, project.organizationId);
+      // Replace tables and relationships in the main tables for compatibility with organizationId
+      // Use transaction-safe replace operation to avoid duplicates
+      if (storage.replaceProjectData) {
+        await storage.replaceProjectData(tables, relationships, req.params.projectId, project.organizationId);
+      } else {
+        // Fallback to clear then store for storage implementations without replaceProjectData
+        await storage.clearProjectTables(req.params.projectId);
+        await storage.clearProjectRelationships(req.params.projectId);
+        await storage.storeTables(tables, req.params.projectId, project.organizationId);
+        await storage.storeRelationships(relationships, req.params.projectId, project.organizationId);
+      }
 
       res.json({ 
         success: true, 
@@ -802,8 +814,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.saveProjectFile({
           projectId: duplicateProject.id,
           filename: latestFile.filename,
-          fileData: latestFile.fileData,
-          erdData: latestFile.erdData,
+          fileData: latestFile.fileData as any,
+          erdData: latestFile.erdData as any,
           mermaidCode: latestFile.mermaidCode,
           version: '1'
         });
@@ -811,11 +823,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Copy tables and relationships if they exist in erdData
         if (latestFile.erdData && typeof latestFile.erdData === 'object') {
           const erdData = latestFile.erdData as any;
-          if (erdData.tables) {
-            await storage.storeTables(erdData.tables, duplicateProject.id, originalProject.organizationId);
-          }
-          if (erdData.relationships) {
-            await storage.storeRelationships(erdData.relationships, duplicateProject.id, originalProject.organizationId);
+          const tables = erdData.tables || [];
+          const relationships = erdData.relationships || [];
+          
+          if (tables.length > 0 || relationships.length > 0) {
+            // Use transaction-safe replace operation for project duplication
+            if (storage.replaceProjectData) {
+              await storage.replaceProjectData(tables, relationships, duplicateProject.id, originalProject.organizationId);
+            } else {
+              // Fallback to separate operations
+              if (tables.length > 0) {
+                await storage.storeTables(tables, duplicateProject.id, originalProject.organizationId);
+              }
+              if (relationships.length > 0) {
+                await storage.storeRelationships(relationships, duplicateProject.id, originalProject.organizationId);
+              }
+            }
           }
         }
       }
@@ -918,7 +941,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .limit(1);
           
         if (orgResult.length > 0) {
-          let inviterName = 'ERDBuilder Team';
+          let inviterName = 'ERDify Team';
           try {
             const auth = await getAuth();
             const sessionData = await auth.api.getSession({ headers: req.headers });
@@ -1042,7 +1065,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Send invitation email
       try {
-        let inviterName = 'ERDBuilder Team';
+        let inviterName = 'ERDify Team';
         try {
           const auth = await getAuth();
           const sessionData = await auth.api.getSession({ headers: req.headers });
@@ -1057,7 +1080,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Get organization name for email
         const org = await db.select().from(organization).where(eq(organization.id, organizationId)).limit(1);
-        const organizationName = org[0]?.name || 'ERDBuilder';
+        const organizationName = org[0]?.name || 'ERDify';
         
         const emailResult = await emailService.sendInvitationEmail({
           email: invitation.email,

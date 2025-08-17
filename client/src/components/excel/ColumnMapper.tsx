@@ -44,7 +44,6 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
   suggestions,
   className = ""
 }) => {
-  const [currentStep, setCurrentStep] = useState<'table' | 'column'>('table');
 
   // Update mappings with suggestions when component mounts
   useEffect(() => {
@@ -223,34 +222,6 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
 
   return (
     <div className={`space-y-6 ${className}`}>
-      {/* Progress Steps */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-            currentStep === 'table' ? 'bg-blue-600 text-white' : 
-            mappings.tableSheet && mappings.tableNameColumn ? 'bg-green-600 text-white' : 'bg-muted text-muted-foreground'
-          }`}>
-            1
-          </div>
-          <span className={`text-sm font-medium ${currentStep === 'table' ? 'text-foreground' : 'text-muted-foreground'}`}>
-            Table Mapping
-          </span>
-        </div>
-        
-        <div className="h-px bg-border flex-1"></div>
-        
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-            currentStep === 'column' ? 'bg-blue-600 text-white' : 
-            validation.canProceed ? 'bg-green-600 text-white' : 'bg-muted text-muted-foreground'
-          }`}>
-            2
-          </div>
-          <span className={`text-sm font-medium ${currentStep === 'column' ? 'text-foreground' : 'text-muted-foreground'}`}>
-            Column Mapping
-          </span>
-        </div>
-      </div>
 
       {/* Suggestions Alert */}
       {suggestions && suggestions.confidence > 0.5 && (
@@ -262,12 +233,12 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
         </Alert>
       )}
 
-      {/* Step 1: Table Mapping */}
-      <Card className={currentStep === 'table' ? 'ring-2 ring-blue-500' : ''}>
+      {/* Table Mapping */}
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Table className="h-5 w-5 text-blue-600" />
-            Step 1: Table Mapping
+            Table Mapping
           </CardTitle>
           <CardDescription>
             Configure which sheet contains your table definitions and which column contains table names.
@@ -312,12 +283,12 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
         </CardContent>
       </Card>
 
-      {/* Step 2: Column Mapping */}
-      <Card className={currentStep === 'column' ? 'ring-2 ring-blue-500' : ''}>
+      {/* Column Mapping */}
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Columns className="h-5 w-5 text-green-600" />
-            Step 2: Column Mapping
+            Column Mapping
           </CardTitle>
           <CardDescription>
             Configure which sheet contains your column definitions and map the required fields.
@@ -436,23 +407,6 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
         </Card>
       )}
 
-      {/* Navigation */}
-      <div className="flex justify-between">
-        <Button
-          variant="outline"
-          onClick={() => setCurrentStep('table')}
-          disabled={currentStep === 'table'}
-        >
-          Previous: Table Mapping
-        </Button>
-        
-        <Button
-          onClick={() => setCurrentStep('column')}
-          disabled={!mappings.tableSheet || !mappings.tableNameColumn}
-        >
-          Next: Column Mapping
-        </Button>
-      </div>
     </div>
   );
 };

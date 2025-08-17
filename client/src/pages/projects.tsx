@@ -268,13 +268,37 @@ const Projects = ({ isDarkMode = false, setIsDarkMode }: ProjectsProps) => {
       
       // Refresh projects list
       await loadProjects();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Project deletion error:', error);
-      toast({
-        title: "Deletion Failed",
-        description: "Failed to delete project. Please try again.",
-        variant: "destructive",
-      });
+      
+      // Handle 404 (project not found) - treat as successful deletion for UI cleanup
+      // The apiRequest function throws errors in format "404: error message"
+      const is404Error = error?.response?.status === 404 || 
+                        error?.status === 404 || 
+                        (error?.message && error.message.startsWith('404:')) ||
+                        (error?.message && error.message.includes('not found')) ||
+                        (error?.message && error.message.includes('Project not found'));
+      
+      if (is404Error) {
+        
+        // Project doesn't exist in database, remove it from UI
+        toast({
+          title: "Project Removed",
+          description: `"${projectName}" was already deleted from the database and has been removed from your project list.`,
+        });
+        
+        // Optimistically remove from local state and refresh
+        await loadProjects();
+      } else {
+        // Handle actual errors (network issues, server errors, etc.)
+        const errorMessage = error?.message || error?.response?.data?.error || 'Failed to delete project. Please try again.';
+        
+        toast({
+          title: "Deletion Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     }
   };
 

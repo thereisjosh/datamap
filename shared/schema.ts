@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, jsonb, boolean, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, jsonb, boolean, timestamp, uuid, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -74,7 +74,14 @@ export const member = pgTable("member", {
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   role: text("role").notNull().default("member"), // Standard organization roles: 'owner', 'admin', 'member'
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  // Multi-tenant membership optimization indexes
+  orgUserIdx: index("member_org_user_idx").on(table.organizationId, table.userId),
+  userOrgIdx: index("member_user_org_idx").on(table.userId, table.organizationId),
+  orgRoleIdx: index("member_org_role_idx").on(table.organizationId, table.role),
+  userIdx: index("member_user_idx").on(table.userId),
+  orgIdx: index("member_org_idx").on(table.organizationId),
+}));
 
 export const invitation = pgTable("invitation", {
   id: text("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -88,7 +95,15 @@ export const invitation = pgTable("invitation", {
   token: text("token").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  // Invitation management optimization indexes
+  orgStatusIdx: index("invitation_org_status_idx").on(table.organizationId, table.status),
+  emailStatusIdx: index("invitation_email_status_idx").on(table.email, table.status),
+  tokenIdx: index("invitation_token_idx").on(table.token),
+  expiresAtIdx: index("invitation_expires_at_idx").on(table.expiresAt),
+  orgIdx: index("invitation_org_idx").on(table.organizationId),
+  inviterIdx: index("invitation_inviter_idx").on(table.inviterId),
+}));
 
 // Project Management Tables
 export const projects = pgTable("projects", {
@@ -101,7 +116,16 @@ export const projects = pgTable("projects", {
   settings: jsonb("settings").default(sql`'{}'::jsonb`), // Theme, layout preferences, etc.
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  // Multi-tenant optimization indexes
+  orgOwnerIdx: index("projects_org_owner_idx").on(table.organizationId, table.ownerId),
+  orgStatusIdx: index("projects_org_status_idx").on(table.organizationId, table.status),
+  ownerIdx: index("projects_owner_idx").on(table.ownerId),
+  orgIdx: index("projects_org_idx").on(table.organizationId),
+  statusIdx: index("projects_status_idx").on(table.status),
+  createdAtIdx: index("projects_created_at_idx").on(table.createdAt),
+  updatedAtIdx: index("projects_updated_at_idx").on(table.updatedAt),
+}));
 
 export const projectFiles = pgTable("project_files", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -113,7 +137,13 @@ export const projectFiles = pgTable("project_files", {
   version: text("version").notNull().default("1"), // For versioning ERD changes
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  // File management optimization indexes
+  projectIdx: index("project_files_project_idx").on(table.projectId),
+  projectVersionIdx: index("project_files_project_version_idx").on(table.projectId, table.version),
+  createdAtIdx: index("project_files_created_at_idx").on(table.createdAt),
+  updatedAtIdx: index("project_files_updated_at_idx").on(table.updatedAt),
+}));
 
 // ERD Application Tables (Legacy - will be migrated to project-based)
 export const tables = pgTable("tables", {
@@ -123,7 +153,13 @@ export const tables = pgTable("tables", {
   projectId: uuid("projectId").references(() => projects.id, { onDelete: "cascade" }),
   organizationId: uuid("organizationId").references(() => organization.id, { onDelete: "cascade" }),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  // Multi-tenant optimization indexes
+  orgProjectIdx: index("tables_org_project_idx").on(table.organizationId, table.projectId),
+  projectIdx: index("tables_project_idx").on(table.projectId),
+  orgIdx: index("tables_org_idx").on(table.organizationId),
+  createdAtIdx: index("tables_created_at_idx").on(table.createdAt),
+}));
 
 export const relationships = pgTable("relationships", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -134,7 +170,15 @@ export const relationships = pgTable("relationships", {
   projectId: uuid("projectId").references(() => projects.id, { onDelete: "cascade" }),
   organizationId: uuid("organizationId").references(() => organization.id, { onDelete: "cascade" }),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  // Multi-tenant optimization indexes
+  orgProjectIdx: index("relationships_org_project_idx").on(table.organizationId, table.projectId),
+  projectIdx: index("relationships_project_idx").on(table.projectId),
+  orgIdx: index("relationships_org_idx").on(table.organizationId),
+  sourceTableIdx: index("relationships_source_table_idx").on(table.sourceTable),
+  targetTableIdx: index("relationships_target_table_idx").on(table.targetTable),
+  createdAtIdx: index("relationships_created_at_idx").on(table.createdAt),
+}));
 
 export const uploadSessions = pgTable("upload_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

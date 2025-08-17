@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +14,9 @@ import {
   Eye, 
   CheckCircle,
   ArrowLeft,
-  Sparkles
+  Sparkles,
+  AlertCircle,
+  Clock
 } from 'lucide-react';
 
 // Import our custom components
@@ -90,41 +92,59 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
     uploading: false
   });
 
+  // Helper function to determine if a step is completed
+  const isStepCompleted = (stepId: FlexibleParserStep['id']): boolean => {
+    switch (stepId) {
+      case 'upload':
+        return !!excelAnalysis;
+      case 'analyze':
+        return !!excelAnalysis && ['map', 'preview', 'result'].includes(currentStepId);
+      case 'map':
+        return stepValidation.canProceed && ['preview', 'result'].includes(currentStepId);
+      case 'preview':
+        return !!parseResult && currentStepId === 'result';
+      case 'result':
+        return !!parseResult && currentStepId === 'result';
+      default:
+        return false;
+    }
+  };
+
   // Define steps
   const steps: FlexibleParserStep[] = [
     {
       id: 'upload',
       title: 'Upload Excel',
       description: 'Upload your Excel data dictionary file',
-      completed: !!excelAnalysis,
+      completed: isStepCompleted('upload'),
       current: currentStepId === 'upload'
     },
     {
       id: 'analyze',
       title: 'Explore Structure',
       description: 'Review your Excel file structure',
-      completed: !!excelAnalysis && currentStepId !== 'upload' && currentStepId !== 'analyze',
+      completed: isStepCompleted('analyze'),
       current: currentStepId === 'analyze'
     },
     {
       id: 'map',
       title: 'Map Columns',
       description: 'Configure column mappings',
-      completed: stepValidation.canProceed && currentStepId !== 'upload' && currentStepId !== 'analyze' && currentStepId !== 'map',
+      completed: isStepCompleted('map'),
       current: currentStepId === 'map'
     },
     {
       id: 'preview',
       title: 'Preview & Confirm',
       description: 'Review detected tables and relationships',
-      completed: !!parseResult && currentStepId === 'result',
+      completed: isStepCompleted('preview'),
       current: currentStepId === 'preview'
     },
     {
       id: 'result',
       title: 'View ERD',
       description: 'Explore your generated ERD',
-      completed: false,
+      completed: isStepCompleted('result'),
       current: currentStepId === 'result'
     }
   ];
@@ -225,9 +245,231 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
     });
   }, []);
 
-  // Calculate progress
+  // Action button handlers
+  const handleViewFullERD = useCallback(() => {
+    if (!parseResult) return;
+    
+    // Generate Mermaid code from parse result
+    const tables = parseResult.tables;
+    const relationships = parseResult.relationships || [];
+    
+    // Create a simple Mermaid ERD
+    let mermaidCode = 'erDiagram\n';
+    
+    // Add tables with their columns
+    tables.forEach(table => {
+      mermaidCode += `    ${table.name} {\n`;
+      if (table.columns && Array.isArray(table.columns)) {
+        table.columns.forEach(column => {
+          const columnType = column.type || 'string';
+          const keyInfo = column.isPrimaryKey ? ' PK' : column.isForeignKey ? ' FK' : '';
+          mermaidCode += `        ${columnType} ${column.name}${keyInfo}\n`;
+        });
+      }
+      mermaidCode += '    }\n';
+    });
+    
+    // Add relationships
+    relationships.forEach(rel => {
+      mermaidCode += `    ${rel.sourceTable} ||--o{ ${rel.targetTable} : "${rel.sourceColumn} -> ${rel.targetColumn}"\n`;
+    });
+    
+    // Navigate to ERD viewer with the generated code
+    // For now, we'll copy to clipboard and show a message
+    navigator.clipboard.writeText(mermaidCode).then(() => {
+      toast({
+        title: "Mermaid Code Copied",
+        description: "The ERD code has been copied to your clipboard. You can paste it into a Mermaid viewer.",
+      });
+    }).catch(() => {
+      // Fallback: show code in a modal or alert
+      alert(`Mermaid ERD Code:\n\n${mermaidCode}`);
+    });
+  }, [parseResult, toast]);
+
+  const handleSaveToProject = useCallback(async () => {
+    if (!parseResult) return;
+    
+    try {
+      // For now, create a new project with the parsed data
+      const projectData = {
+        name: `Parsed ERD - ${fileUpload.file?.name || 'Unknown'}`,
+        description: `Generated from Excel file using flexible parser`,
+        tables: parseResult.tables,
+        relationships: parseResult.relationships || []
+      };
+      
+      // Save as a new project (this would need to integrate with the project creation API)
+      toast({
+        title: "Save Feature",
+        description: "Project saving functionality will be implemented to integrate with the main project system.",
+        variant: "default",
+      });
+      
+      // TODO: Implement actual project creation/saving
+      // const newProject = await api.createProject(projectData);
+      // Navigate to the project or show success message
+      
+    } catch (error) {
+      toast({
+        title: "Save Failed",
+        description: "Failed to save project. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [parseResult, fileUpload.file, toast]);
+
+  // Unified navigation system
+  const stepOrder: FlexibleParserStep['id'][] = ['upload', 'analyze', 'map', 'preview', 'result'];
+  
+  const canGoToPrevious = (): boolean => {
+    const currentIndex = stepOrder.indexOf(currentStepId);
+    return currentIndex > 0;
+  };
+  
+  const canGoToNext = (): boolean => {
+    switch (currentStepId) {
+      case 'upload':
+        return !!excelAnalysis;
+      case 'analyze':
+        return !!excelAnalysis;
+      case 'map':
+        return stepValidation.canProceed;
+      case 'preview':
+        return !!parseResult;
+      case 'result':
+        return false; // Final step
+      default:
+        return false;
+    }
+  };
+  
+  const handlePrevious = useCallback(() => {
+    const currentIndex = stepOrder.indexOf(currentStepId);
+    if (currentIndex > 0) {
+      setCurrentStepId(stepOrder[currentIndex - 1]);
+    }
+  }, [currentStepId]);
+  
+  const handleNext = useCallback(() => {
+    const currentIndex = stepOrder.indexOf(currentStepId);
+    if (currentIndex < stepOrder.length - 1) {
+      const nextStep = stepOrder[currentIndex + 1];
+      
+      // Handle special navigation logic
+      if (currentStepId === 'map' && nextStep === 'preview') {
+        handleProceedToPreview();
+      } else if (currentStepId === 'preview' && nextStep === 'result') {
+        handleGenerateERD();
+      } else {
+        setCurrentStepId(nextStep);
+      }
+    }
+  }, [currentStepId, handleProceedToPreview, handleGenerateERD]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only handle keyboard navigation if not typing in input fields
+      if (event.target instanceof HTMLInputElement || 
+          event.target instanceof HTMLTextAreaElement || 
+          event.target instanceof HTMLSelectElement) {
+        return;
+      }
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          if (canGoToPrevious()) {
+            event.preventDefault();
+            handlePrevious();
+          }
+          break;
+        case 'ArrowRight':
+        case 'Enter':
+          if (canGoToNext() && !loading.parsing) {
+            event.preventDefault();
+            handleNext();
+          }
+          break;
+        case 'Escape':
+          if (currentStepId !== 'upload') {
+            event.preventDefault();
+            handleStartOver();
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canGoToPrevious, canGoToNext, handlePrevious, handleNext, handleStartOver, currentStepId, loading.parsing]);
+
+  // Calculate progress based on current step and completion status
+  const calculateProgress = (): number => {
+    const stepOrder = ['upload', 'analyze', 'map', 'preview', 'result'];
+    const currentStepIndex = stepOrder.indexOf(currentStepId);
+    const completedSteps = steps.filter(step => step.completed).length;
+    
+    // Base progress on current step position (even if not completed)
+    const baseProgress = ((currentStepIndex + 1) / stepOrder.length) * 100;
+    
+    // Bonus for completing steps beyond current position
+    const completionBonus = (completedSteps / stepOrder.length) * 10;
+    
+    return Math.min(100, baseProgress + completionBonus);
+  };
+  
   const completedSteps = steps.filter(step => step.completed).length;
-  const progress = (completedSteps / steps.length) * 100;
+  const progress = calculateProgress();
+
+  // Unified navigation component
+  const renderNavigationButtons = () => {
+    if (currentStepId === 'upload') return null; // No navigation needed on upload step
+    
+    return (
+      <div className="flex justify-between mt-6 pt-4 border-t">
+        <Button 
+          variant="outline" 
+          onClick={handlePrevious}
+          disabled={!canGoToPrevious()}
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Previous
+        </Button>
+        
+        <div className="flex gap-2">
+          {currentStepId !== 'result' && (
+            <Button 
+              onClick={handleNext}
+              disabled={!canGoToNext() || loading.parsing}
+            >
+              {currentStepId === 'map' && loading.parsing ? (
+                "Parsing..."
+              ) : currentStepId === 'map' ? (
+                <>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Preview Results
+                </>
+              ) : currentStepId === 'preview' ? (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Generate ERD
+                </>
+              ) : (
+                "Next"
+              )}
+            </Button>
+          )}
+          
+          {currentStepId === 'result' && (
+            <Button variant="outline" onClick={handleStartOver}>
+              Upload New File
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // Render file upload component
   const renderFileUpload = () => (
@@ -304,6 +546,11 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
           <p className="text-muted-foreground">
             Parse any Excel data dictionary format with our intelligent column mapping system
           </p>
+          
+          {/* Keyboard shortcuts hint */}
+          <div className="text-xs text-muted-foreground mt-2">
+            💡 <strong>Keyboard shortcuts:</strong> ← → to navigate steps, Enter to proceed, Esc to start over
+          </div>
         </div>
 
         {/* Progress */}
@@ -316,22 +563,58 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
           </div>
           <Progress value={progress} className="w-full mb-4" />
           
-          {/* Step indicators */}
+          {/* Step indicators with validation status */}
           <div className="flex items-center justify-between">
-            {steps.map((step, index) => (
-              <div key={step.id} className="flex flex-col items-center">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  step.completed ? 'bg-green-600 text-white' :
-                  step.current ? 'bg-blue-600 text-white' :
-                  'bg-muted text-muted-foreground'
-                }`}>
-                  {step.completed ? <CheckCircle className="h-4 w-4" /> : index + 1}
+            {steps.map((step, index) => {
+              const getStepStatus = () => {
+                if (step.completed) return 'completed';
+                if (step.current) {
+                  // Check validation for current step
+                  if (step.id === 'map' && stepValidation.errors.length > 0) return 'error';
+                  if (step.id === 'map' && stepValidation.warnings.length > 0) return 'warning';
+                  if (loading.analyzing || loading.parsing) return 'loading';
+                  return 'current';
+                }
+                return 'pending';
+              };
+
+              const status = getStepStatus();
+              
+              return (
+                <div key={step.id} className="flex flex-col items-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                    status === 'completed' ? 'bg-green-600 text-white' :
+                    status === 'current' ? 'bg-blue-600 text-white' :
+                    status === 'error' ? 'bg-red-600 text-white' :
+                    status === 'warning' ? 'bg-yellow-600 text-white' :
+                    status === 'loading' ? 'bg-blue-600 text-white animate-pulse' :
+                    'bg-muted text-muted-foreground'
+                  }`}>
+                    {status === 'completed' ? <CheckCircle className="h-4 w-4" /> :
+                     status === 'error' ? <AlertCircle className="h-4 w-4" /> :
+                     status === 'warning' ? <AlertCircle className="h-4 w-4" /> :
+                     status === 'loading' ? <Clock className="h-4 w-4" /> :
+                     index + 1}
+                  </div>
+                  <span className={`text-xs mt-1 transition-colors ${
+                    step.current ? 'text-foreground font-medium' : 'text-muted-foreground'
+                  }`}>
+                    {step.title}
+                  </span>
+                  {/* Validation indicator */}
+                  {step.current && step.id === 'map' && stepValidation.errors.length > 0 && (
+                    <span className="text-xs text-red-600 mt-1">
+                      {stepValidation.errors.length} error{stepValidation.errors.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {step.current && step.id === 'map' && stepValidation.warnings.length > 0 && stepValidation.errors.length === 0 && (
+                    <span className="text-xs text-yellow-600 mt-1">
+                      {stepValidation.warnings.length} warning{stepValidation.warnings.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
                 </div>
-                <span className={`text-xs mt-1 ${step.current ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                  {step.title}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -351,12 +634,7 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
               
               <SheetExplorer sheets={excelAnalysis.sheets} />
               
-              <div className="flex justify-end">
-                <Button onClick={handleProceedToMapping}>
-                  <Settings className="h-4 w-4 mr-2" />
-                  Configure Mappings
-                </Button>
-              </div>
+              {renderNavigationButtons()}
             </div>
           )}
 
@@ -364,10 +642,6 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-medium">Column Mapping</h2>
-                <Button variant="outline" onClick={() => setCurrentStepId('analyze')}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Analysis
-                </Button>
               </div>
               
               <ColumnMapper
@@ -378,21 +652,7 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
                 suggestions={excelAnalysis.analysis}
               />
               
-              <div className="flex justify-end">
-                <Button 
-                  onClick={handleProceedToPreview}
-                  disabled={!stepValidation.canProceed || loading.parsing}
-                >
-                  {loading.parsing ? (
-                    "Parsing..."
-                  ) : (
-                    <>
-                      <Eye className="h-4 w-4 mr-2" />
-                      Preview Results
-                    </>
-                  )}
-                </Button>
-              </div>
+              {renderNavigationButtons()}
             </div>
           )}
 
@@ -400,10 +660,6 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-medium">Preview & Confirm</h2>
-                <Button variant="outline" onClick={() => setCurrentStepId('map')}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Edit Mappings
-                </Button>
               </div>
               
               <MappingPreview
@@ -412,6 +668,8 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
                 onEditMappings={handleEditMappings}
                 onConfirm={handleGenerateERD}
               />
+              
+              {renderNavigationButtons()}
             </div>
           )}
 
@@ -419,16 +677,33 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-medium">Your ERD</h2>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setCurrentStepId('preview')}>
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to Preview
-                  </Button>
-                  <Button variant="outline" onClick={handleStartOver}>
-                    Upload New File
-                  </Button>
-                </div>
               </div>
+              
+              {/* Success message with action buttons - moved to top */}
+              <Card className="bg-green-50 border-green-200">
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <span className="text-green-700 font-medium">
+                      ERD Generated Successfully!
+                    </span>
+                  </div>
+                  <p className="text-sm text-green-600 mb-4">
+                    Your Excel data dictionary has been parsed using custom mappings. 
+                    You can now view the full ERD visualization or integrate this with your project.
+                  </p>
+                  
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleViewFullERD}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      View Full ERD
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleSaveToProject}>
+                      Save to Project
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
               
               {/* Use existing MetadataPreview component to show results */}
               <MetadataPreview 
@@ -436,21 +711,7 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
                 errors={parseResult.errors}
               />
               
-              {/* Success message */}
-              <Card className="bg-green-50 border-green-200">
-                <CardContent className="pt-4">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    <span className="text-green-700 font-medium">
-                      ERD Generated Successfully!
-                    </span>
-                  </div>
-                  <p className="text-sm text-green-600 mt-1">
-                    Your Excel data dictionary has been parsed using custom mappings. 
-                    You can now integrate this with the main ERD generation flow.
-                  </p>
-                </CardContent>
-              </Card>
+              {renderNavigationButtons()}
             </div>
           )}
         </div>

@@ -38,6 +38,11 @@ export interface IStorage {
   storeRelationships(relationships: any[], projectId?: string, organizationId?: string): Promise<void>;
   clearProjectTables(projectId: string): Promise<void>;
   clearProjectRelationships(projectId: string): Promise<void>;
+  
+  // Transaction-safe replace operations
+  replaceProjectTables?(tables: any[], projectId: string, organizationId?: string): Promise<void>;
+  replaceProjectRelationships?(relationships: any[], projectId: string, organizationId?: string): Promise<void>;
+  replaceProjectData?(tables: any[], relationships: any[], projectId: string, organizationId?: string): Promise<void>;
 
   // Organization operations moved to custom API endpoints
   
@@ -317,6 +322,36 @@ export class MemStorage implements IStorage {
       r => r.projectId === projectId
     );
     projectRelationships.forEach(r => this.relationships.delete(r.id));
+  }
+
+  // Transaction-safe replace operations (MemStorage implementations)
+  async replaceProjectTables(tables: any[], projectId: string, organizationId?: string): Promise<void> {
+    // Clear existing tables for this project
+    await this.clearProjectTables(projectId);
+    
+    // Store new tables
+    await this.storeTables(tables, projectId, organizationId);
+    console.log(`Replaced ${tables.length} tables for project: ${projectId}`);
+  }
+
+  async replaceProjectRelationships(relationships: any[], projectId: string, organizationId?: string): Promise<void> {
+    // Clear existing relationships for this project
+    await this.clearProjectRelationships(projectId);
+    
+    // Store new relationships
+    await this.storeRelationships(relationships, projectId, organizationId);
+    console.log(`Replaced ${relationships.length} relationships for project: ${projectId}`);
+  }
+
+  async replaceProjectData(tables: any[], relationships: any[], projectId: string, organizationId?: string): Promise<void> {
+    // Clear existing data for this project
+    await this.clearProjectTables(projectId);
+    await this.clearProjectRelationships(projectId);
+    
+    // Store new data
+    await this.storeTables(tables, projectId, organizationId);
+    await this.storeRelationships(relationships, projectId, organizationId);
+    console.log(`Replaced project data: ${tables.length} tables, ${relationships.length} relationships for project: ${projectId}`);
   }
 
   // Get project statistics (table/relationship counts)
