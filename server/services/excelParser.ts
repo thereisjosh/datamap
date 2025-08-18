@@ -1,4 +1,4 @@
-import * as ExcelJS from 'exceljs';
+import ExcelJS from 'exceljs';
 import { type TableData, type Column, type Relationship, tableSchema, relationshipSchema } from '@shared/schema';
 
 interface ExcelRow {

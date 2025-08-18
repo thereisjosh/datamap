@@ -1,4 +1,4 @@
-import * as ExcelJS from 'exceljs';
+import ExcelJS from 'exceljs';
 
 // TypeScript interfaces for flexible parser
 export interface ExcelSheet {
