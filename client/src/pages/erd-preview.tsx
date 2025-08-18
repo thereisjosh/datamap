@@ -213,7 +213,7 @@ const ERDPreview = () => {
                   {tables.length} tables found
                   {Object.keys(domainResults).length > 0 && domainResults[selectedDomain] && (
                     <span className="ml-2">
-                      • <span className="capitalize font-medium">{selectedDomain.replace('-', ' ')}</span> domain 
+                      • <span className="font-medium">{domainResults[selectedDomain]?.displayName || selectedDomain.replace('-', ' ')}</span> domain 
                       ({domainResults[selectedDomain].metadata.tables_count} tables, {domainResults[selectedDomain].metadata.relationships_count} relationships)
                     </span>
                   )}
@@ -330,8 +330,8 @@ const ERDPreview = () => {
                       {Object.entries(domainResults).map(([domain, result]: [string, any]) => (
                         <SelectItem key={domain} value={domain}>
                           <div className="flex flex-col">
-                            <span className="font-medium capitalize">
-                              {domain.replace('-', ' ')}
+                            <span className="font-medium">
+                              {result?.displayName || domain.replace('-', ' ')}
                             </span>
                             <span className="text-xs text-muted-foreground">
                               {result.metadata.tables_count} tables, {result.metadata.relationships_count} relationships
@@ -378,7 +378,7 @@ const ERDPreview = () => {
               <h2 className="text-lg font-semibold">Generated Mermaid Code</h2>
               {Object.keys(domainResults).length > 0 && domainResults[selectedDomain] && (
                 <span className="text-sm text-muted-foreground">
-                  <span className="capitalize font-medium">{selectedDomain.replace('-', ' ')}</span> domain
+                  <span className="font-medium">{domainResults[selectedDomain]?.displayName || selectedDomain.replace('-', ' ')}</span> domain
                 </span>
               )}
             </div>

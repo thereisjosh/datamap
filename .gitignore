@@ -15,7 +15,9 @@ vite.config.ts.*
 # Logs
 logs
 *.log
+*.log.txt
 npm-debug.log*
+npm_run_logs.txt
 yarn-debug.log*
 yarn-error.log*
 
@@ -44,3 +46,7 @@ temp/
 # OS generated files
 Thumbs.db
 ehthumbs.db
+
+# Investigation and debug files
+llmenhancement.md
+*.investigation.md

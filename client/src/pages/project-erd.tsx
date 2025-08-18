@@ -662,8 +662,8 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
                       {Object.entries(domainResults).map(([domain, result]: [string, any]) => (
                         <SelectItem key={domain} value={domain}>
                           <div className="flex flex-col">
-                            <span className="font-medium capitalize">
-                              {domain.replace('-', ' ')}
+                            <span className="font-medium">
+                              {result?.displayName || domain.replace('-', ' ')}
                             </span>
                             <span className="text-xs text-muted-foreground">
                               {result.metadata.tables_count} tables, {result.metadata.relationships_count} relationships

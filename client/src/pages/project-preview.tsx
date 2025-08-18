@@ -595,7 +595,8 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
                     <div className="p-2 border-b border-border">
                       <div className="text-xs font-medium text-muted-foreground mb-1">Tables</div>
                       {searchResults.tables.map((tableEntry, index) => {
-                        const domainText = tableEntry.domain?.replace('-', ' ') || 'overview';
+                        const domainText = (tableEntry.domain && domainResults[tableEntry.domain]?.displayName) || 
+                                          tableEntry.domain?.replace('-', ' ') || 'overview';
                         
                         return (
                           <div
@@ -704,8 +705,8 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
               <SelectTrigger className="w-64 h-8">
                 <SelectValue placeholder={isDomainLoading ? "Loading..." : "Select domain"}>
                   {selectedDomain && (
-                    <span className="capitalize truncate">
-                      {selectedDomain.replace('-', ' ')}
+                    <span className="truncate">
+                      {domainResults[selectedDomain]?.displayName || selectedDomain.replace('-', ' ')}
                     </span>
                   )}
                 </SelectValue>
@@ -714,8 +715,8 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
                 {Object.entries(domainResults).map(([domain, result]: [string, any]) => (
                   <SelectItem key={domain} value={domain}>
                     <div className="flex flex-col">
-                      <span className="font-medium capitalize">
-                        {domain.replace('-', ' ')}
+                      <span className="font-medium">
+                        {result?.displayName || domain.replace('-', ' ')}
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {result.metadata?.tables_count || 0} tables, {result.metadata?.relationships_count || 0} relationships

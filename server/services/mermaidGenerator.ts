@@ -1,4 +1,6 @@
 import { type TableData, type Relationship } from '@shared/schema';
+import { domainAnalyzer, type TableCluster } from './domainAnalyzer';
+import { advancedDomainAnalyzer, type AdvancedTableCluster } from './advancedDomainAnalyzer';
 
 interface MermaidOptions {
   theme?: string;
@@ -10,6 +12,7 @@ interface MermaidOptions {
 
 interface MermaidResponse {
   diagram: string;
+  displayName?: string;
   metadata: {
     tables_count: number;
     relationships_count: number;
@@ -160,7 +163,38 @@ export class MermaidGeneratorService {
     return false;
   }
 
-  // Industry-standard domain grouping following DDD bounded context principles
+  // ADVANCED: Relationship-driven domain grouping with business intelligence
+  private groupTablesByRelationships(tables: TableData[], relationships: Relationship[]): { 
+    grouped: Record<string, TableData[]>, 
+    displayNames: Record<string, string> 
+  } {
+    console.log(`🔗 Advanced relationship-driven domain discovery for ${tables.length} tables`);
+    
+    // Use the advanced domain analyzer with Louvain algorithm
+    const discoveredDomains = advancedDomainAnalyzer.discoverDomains(tables, relationships);
+    
+    // Convert to the expected format
+    const grouped: Record<string, TableData[]> = {};
+    const displayNames: Record<string, string> = {};
+    
+    discoveredDomains.forEach(domain => {
+      grouped[domain.id] = domain.tables;
+      displayNames[domain.id] = domain.name; // Store the business-friendly display name
+      console.log(`✨ Advanced domain: "${domain.name}" (${domain.tables.length} tables, cohesion: ${domain.cohesionScore.toFixed(2)})`);
+      console.log(`   Type: ${domain.businessClassification.domainType} (confidence: ${domain.businessClassification.confidence.toFixed(2)})`);
+      
+      if (domain.tables.length <= 15) {
+        console.log(`   Tables: [${Array.from(domain.tableNames).join(', ')}]`);
+      } else {
+        const tableList = Array.from(domain.tableNames);
+        console.log(`   Tables: [${tableList.slice(0, 8).join(', ')}, ... +${tableList.length - 8} more]`);
+      }
+    });
+
+    return { grouped, displayNames };
+  }
+
+  // LEGACY: Industry-standard domain grouping following DDD bounded context principles
   private groupTablesByDomain(tables: TableData[]): Record<string, TableData[]> {
     console.log(`🏷️ Industry-standard domain grouping for ${tables.length} tables`);
     console.log(`  Following DDD bounded context patterns used by Netflix/Amazon/Google`);
@@ -451,6 +485,7 @@ export class MermaidGeneratorService {
     
     if (options.domain && options.domain !== 'overview') {
       const domainConfig = this.domainConfigs.find(d => d.id === options.domain);
+      const isDynamicDomain = !domainConfig && groupedTables[options.domain];
       
       if (options.domain === 'cross-domain') {
         // Special handling for cross-domain connections view with intelligent limiting
@@ -495,13 +530,20 @@ export class MermaidGeneratorService {
           console.log(`  ⚠️ Limited cross-domain view to ${maxCrossDomainRelationships} most important relationships`);
         }
         
-      } else if (domainConfig) {
-        console.log(`🎯 Domain filtering for "${domainConfig.id}" with patterns: [${domainConfig.tablePatterns.join(', ')}]`);
+      } else if (domainConfig || isDynamicDomain) {
+        const domainId = options.domain!;
+        const domainName = domainConfig?.name || domainId;
+        
+        if (domainConfig) {
+          console.log(`🎯 Legacy domain filtering for "${domainId}" with patterns: [${domainConfig.tablePatterns.join(', ')}]`);
+        } else {
+          console.log(`🎯 Dynamic domain filtering for discovered domain: "${domainId}"`);
+        }
         
         // Use precomputed domain groupings for consistency and efficiency
-        const domainTables = groupedTables[domainConfig.id] || [];
+        const domainTables = groupedTables[domainId] || [];
         
-        console.log(`🔍 Domain table filtering results for "${domainConfig.id}" (using groupTablesByDomain):`);
+        console.log(`🔍 Domain table filtering results for "${domainId}" (using relationship-driven discovery):`);
         console.log(`  Total input tables: ${tables.length}`);
         console.log(`  Tables assigned to domain: ${domainTables.length}`);
         console.log(`  Domain tables: [${domainTables.map(t => t.name).join(', ')}]`);
@@ -509,10 +551,10 @@ export class MermaidGeneratorService {
         selectedTables = this.getMostConnectedTables(
           domainTables, 
           relationships, 
-          options.maxTables || domainConfig.maxTables
+          options.maxTables || domainConfig?.maxTables || 50
         );
         
-        console.log(`📊 After getMostConnectedTables for "${domainConfig.id}":`);
+        console.log(`📊 After getMostConnectedTables for "${domainId}":`);
         console.log(`  Selected tables: ${selectedTables.length}/${domainTables.length}`);
         console.log(`  Selected table names: [${selectedTables.map(t => t.name).join(', ')}]`);
         
@@ -520,10 +562,10 @@ export class MermaidGeneratorService {
         selectedRelationships = this.getMeaningfulRelationships(
           relationships, 
           tableNames, 
-          options.maxRelationships || domainConfig.maxRelationships
+          options.maxRelationships || domainConfig?.maxRelationships || 100
         );
         
-        console.log(`🔗 Relationship filtering for "${domainConfig.id}":`);
+        console.log(`🔗 Relationship filtering for "${domainId}":`);
         console.log(`  Selected relationships: ${selectedRelationships.length}`);
       } else {
         // Fallback to overview with increased limits
@@ -537,13 +579,15 @@ export class MermaidGeneratorService {
       console.log('📊 Overview mode - selecting key tables from all domains');
       const overviewTables: TableData[] = [];
       
-      // Take top tables from each domain (increased from 3 to 8 per domain)
-      this.domainConfigs.forEach(config => {
-        const domainTables = groupedTables[config.id] || [];
-        console.log(`  Domain ${config.id}: ${domainTables.length} tables`);
-        const topTables = this.getMostConnectedTables(domainTables, relationships, 8);
-        console.log(`    Selected ${topTables.length} top tables: ${topTables.map(t => t.name).join(', ')}`);
-        overviewTables.push(...topTables);
+      // Take top tables from each discovered domain (increased from 3 to 8 per domain)
+      Object.keys(groupedTables).forEach(domainId => {
+        const domainTables = groupedTables[domainId] || [];
+        if (domainTables.length > 0) {
+          console.log(`  Domain ${domainId}: ${domainTables.length} tables`);
+          const topTables = this.getMostConnectedTables(domainTables, relationships, 8);
+          console.log(`    Selected ${topTables.length} top tables: ${topTables.map(t => t.name).join(', ')}`);
+          overviewTables.push(...topTables);
+        }
       });
       
       // If we don't have enough tables from domains, add some from the most connected overall
@@ -684,27 +728,44 @@ export class MermaidGeneratorService {
     console.log(`  Table names: ${tables.map(t => t.name).join(', ')}`);
     
     // Compute domain groupings once for efficiency and consistency
-    console.log(`🏷️ [RUN-${runId}] Computing domain groupings once for all diagrams...`);
-    const precomputedDomainGroups = this.groupTablesByDomain(tables);
+    console.log(`🏷️ [RUN-${runId}] Computing advanced relationship-driven domain groupings once for all diagrams...`);
+    const domainData = this.groupTablesByRelationships(tables, relationships);
+    const precomputedDomainGroups = domainData.grouped;
+    const displayNames = domainData.displayNames;
+    
     console.log(`📊 [RUN-${runId}] Domain grouping summary:`);
     Object.entries(precomputedDomainGroups).forEach(([domain, domainTables]) => {
-      console.log(`  ${domain}: ${domainTables.length} tables`);
+      const displayName = displayNames[domain] || domain;
+      console.log(`  ${domain} ("${displayName}"): ${domainTables.length} tables`);
     });
     
     const results: Record<string, MermaidResponse> = {};
     
     // Generate overview
     console.log(`🔄 [RUN-${runId}] Generating overview domain...`);
-    results['overview'] = this.generateMermaidDiagram(tables, relationships, { domain: 'overview' }, precomputedDomainGroups);
+    const overviewResult = this.generateMermaidDiagram(tables, relationships, { domain: 'overview' }, precomputedDomainGroups);
+    results['overview'] = {
+      ...overviewResult,
+      displayName: 'Overview' // Add display name for overview
+    };
     
-    // Generate domain-specific diagrams
-    this.domainConfigs.forEach(config => {
-      console.log(`🔄 [RUN-${runId}] Generating ${config.id} domain...`);
-      results[config.id] = this.generateMermaidDiagram(tables, relationships, { 
-        domain: config.id,
-        maxTables: config.maxTables,
-        maxRelationships: config.maxRelationships
-      }, precomputedDomainGroups);
+    // Generate domain-specific diagrams for discovered domains
+    Object.keys(precomputedDomainGroups).forEach(domainId => {
+      const domainTables = precomputedDomainGroups[domainId];
+      if (domainTables.length > 0) {
+        const displayName = displayNames[domainId] || domainId;
+        console.log(`🔄 [RUN-${runId}] Generating discovered domain: ${domainId} ("${displayName}") (${domainTables.length} tables)...`);
+        const domainResult = this.generateMermaidDiagram(tables, relationships, { 
+          domain: domainId,
+          maxTables: 50, // Reasonable default for discovered domains
+          maxRelationships: 100
+        }, precomputedDomainGroups);
+        
+        results[domainId] = {
+          ...domainResult,
+          displayName: displayName // Add business-friendly display name
+        };
+      }
     });
     
     console.log(`✅ [RUN-${runId}] Generated ${Object.keys(results).length} domain diagrams`);
