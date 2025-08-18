@@ -16,6 +16,27 @@ import flexibleParserRouter from "./routes/flexibleParser";
 import erdChatRouter from "./routes/erdChat.js";
 import { chatRateLimit, standardRateLimit } from "./middleware/rateLimiter.js";
 
+// Import new security middleware
+import { 
+  validateSchema, 
+  validateFileUpload, 
+  sanitizeInput, 
+  validateRequestSize,
+  extractRateLimitContext,
+  secureApiResponse 
+} from "./middleware/validation";
+import { 
+  fileUploadRateLimit, 
+  burstProtection 
+} from "./middleware/advancedRateLimiter";
+import { 
+  logSecurityEvent, 
+  logResponseSecurity, 
+  logFileUploadSecurity,
+  securityLogger 
+} from "./middleware/securityLogger";
+import { parseExcelRequestSchema } from "@shared/validation-schemas";
+
 // Configure multer for file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -39,6 +60,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     origin: true, // Allow all origins in development
     credentials: true,
   }));
+
+  // Apply security middleware to all API routes
+  app.use("/api", [
+    extractRateLimitContext(),
+    secureApiResponse(),
+    logResponseSecurity(),
+    burstProtection,
+    validateRequestSize(),
+    sanitizeInput()
+  ]);
 
   // Mount flexible parser routes
   app.use("/api/flexible-parser", flexibleParserRouter);
@@ -70,8 +101,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Parse Excel endpoint
-  app.post("/api/parse-excel", upload.single('file'), async (req: any, res) => {
+  // Security monitoring endpoint (protected)
+  app.get("/api/security/metrics", [
+    logSecurityEvent('security_metrics_access', 'low')
+  ], async (req, res) => {
+    try {
+      // TODO: Add authentication/authorization check here
+      // For now, basic IP-based access control
+      const allowedIPs = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+      if (!allowedIPs.includes(req.ip)) {
+        await securityLogger.logEvent({
+          eventType: 'unauthorized_security_access',
+          severity: 'high',
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          path: req.path,
+          method: req.method,
+          details: { reason: 'IP not in allowed list' }
+        });
+        
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const metrics = securityLogger.getMetrics();
+      res.json({
+        success: true,
+        data: metrics,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('❌ Security metrics error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve security metrics',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Parse Excel endpoint with enhanced security
+  app.post("/api/parse-excel", [
+    fileUploadRateLimit,
+    logSecurityEvent('file_upload', 'medium'),
+    upload.single('file'),
+    validateFileUpload({ required: true }),
+    logFileUploadSecurity(),
+    validateSchema(parseExcelRequestSchema)
+  ], async (req: any, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({

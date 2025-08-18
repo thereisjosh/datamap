@@ -2,6 +2,19 @@ import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { flexibleExcelParser, type ColumnMappings } from "../services/flexibleExcelParser";
+import { 
+  validateFileUpload, 
+  validateSchema 
+} from "../middleware/validation";
+import { 
+  analysisRateLimit,
+  fileUploadRateLimit 
+} from "../middleware/advancedRateLimiter";
+import { 
+  logSecurityEvent, 
+  logFileUploadSecurity 
+} from "../middleware/securityLogger";
+import { columnMappingsSchema } from "@shared/validation-schemas";
 
 const router = Router();
 
@@ -44,7 +57,20 @@ const analyzeMappingsSchema = z.object({
  * POST /api/flexible-parser/analyze
  * Analyze Excel file structure and return sheets/columns information
  */
-router.post('/analyze', upload.single('file'), async (req, res) => {
+router.post('/analyze', [
+  analysisRateLimit,
+  logSecurityEvent('excel_analysis', 'medium'),
+  upload.single('file'),
+  validateFileUpload({ 
+    required: true,
+    maxSize: 10 * 1024 * 1024,
+    allowedMimeTypes: [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+    ]
+  }),
+  logFileUploadSecurity()
+], async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -77,7 +103,17 @@ router.post('/analyze', upload.single('file'), async (req, res) => {
  * POST /api/flexible-parser/parse
  * Parse Excel file using provided column mappings
  */
-router.post('/parse', upload.single('file'), async (req, res) => {
+router.post('/parse', [
+  fileUploadRateLimit,
+  logSecurityEvent('excel_parse', 'medium'),
+  upload.single('file'),
+  validateFileUpload({ 
+    required: true,
+    maxSize: 10 * 1024 * 1024
+  }),
+  logFileUploadSecurity(),
+  validateSchema(columnMappingsSchema)
+], async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
