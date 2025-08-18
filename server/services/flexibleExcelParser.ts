@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 
 // TypeScript interfaces for flexible parser
 export interface ExcelSheet {
@@ -66,18 +66,38 @@ export interface ValidationResult {
 
 export class FlexibleExcelParser {
   
+  private worksheetToArray(worksheet: ExcelJS.Worksheet): string[][] {
+    const data: string[][] = [];
+    
+    worksheet.eachRow((row, rowNumber) => {
+      const rowData: string[] = [];
+      row.eachCell((cell, colNumber) => {
+        // Handle different cell types
+        let value = cell.value;
+        if (value && typeof value === 'object' && 'text' in value) {
+          value = value.text; // Handle rich text
+        }
+        rowData[colNumber - 1] = value?.toString() || '';
+      });
+      data.push(rowData);
+    });
+    
+    return data;
+  }
+  
   /**
    * Analyze Excel structure and extract sheet/column information
    */
   async analyzeExcelStructure(buffer: Buffer): Promise<ExcelAnalysis> {
     try {
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
       const sheets: ExcelSheet[] = [];
       
       // Process each sheet
-      for (const sheetName of workbook.SheetNames) {
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
+      for (const worksheet of workbook.worksheets) {
+        const sheetName = worksheet.name;
+        const jsonData = this.worksheetToArray(worksheet);
         
         if (jsonData.length === 0) continue;
         
@@ -120,7 +140,8 @@ export class FlexibleExcelParser {
   async parseWithMappings(buffer: Buffer, mappings: ColumnMappings): Promise<ParseResult> {
     try {
       // Validate mappings first
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
       const analysis = await this.analyzeExcelStructure(buffer);
       const validation = this.validateMappings(mappings, analysis.sheets);
       
@@ -283,9 +304,12 @@ export class FlexibleExcelParser {
   /**
    * Extract table definitions from the specified sheet
    */
-  private async extractTables(workbook: XLSX.WorkBook, mappings: ColumnMappings): Promise<ParseResult['tables']> {
-    const worksheet = workbook.Sheets[mappings.tableSheet];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
+  private async extractTables(workbook: ExcelJS.Workbook, mappings: ColumnMappings): Promise<ParseResult['tables']> {
+    const worksheet = workbook.getWorksheet(mappings.tableSheet);
+    if (!worksheet) {
+      throw new Error(`Table sheet "${mappings.tableSheet}" not found`);
+    }
+    const jsonData = this.worksheetToArray(worksheet);
     
     // Find header row
     let headerRowIndex = 0;
@@ -351,12 +375,15 @@ export class FlexibleExcelParser {
    * Extract column definitions and relationships
    */
   private async extractColumnsAndRelationships(
-    workbook: XLSX.WorkBook, 
+    workbook: ExcelJS.Workbook, 
     mappings: ColumnMappings, 
     tables: ParseResult['tables']
   ): Promise<{ columns: any[], relationships: ParseResult['relationships'] }> {
-    const worksheet = workbook.Sheets[mappings.columnSheet];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
+    const worksheet = workbook.getWorksheet(mappings.columnSheet);
+    if (!worksheet) {
+      throw new Error(`Column sheet "${mappings.columnSheet}" not found`);
+    }
+    const jsonData = this.worksheetToArray(worksheet);
     
     // Find header row
     let headerRowIndex = 0;

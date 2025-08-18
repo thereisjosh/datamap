@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import { type TableData, type Column, type Relationship, tableSchema, relationshipSchema } from '@shared/schema';
 
 interface ExcelRow {
@@ -12,6 +12,42 @@ interface ParsedMetadata {
 }
 
 export class ExcelParserService {
+  private worksheetToJson(worksheet: ExcelJS.Worksheet): ExcelRow[] {
+    const jsonData: ExcelRow[] = [];
+    const headers: string[] = [];
+    
+    // Get headers from first row
+    const headerRow = worksheet.getRow(1);
+    headerRow.eachCell((cell, colNumber) => {
+      headers[colNumber] = cell.value?.toString() || '';
+    });
+    
+    // Process data rows
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return; // Skip header row
+      
+      const rowData: ExcelRow = {};
+      row.eachCell((cell, colNumber) => {
+        const header = headers[colNumber];
+        if (header) {
+          // Handle different cell types
+          let value = cell.value;
+          if (value && typeof value === 'object' && 'text' in value) {
+            value = value.text; // Handle rich text
+          }
+          rowData[header] = value;
+        }
+      });
+      
+      // Only add row if it has data
+      if (Object.keys(rowData).length > 0) {
+        jsonData.push(rowData);
+      }
+    });
+    
+    return jsonData;
+  }
+
   private normalizeColumnName(name: string): string {
     return name?.toString().trim().toLowerCase().replace(/\s+/g, '_') || '';
   }
@@ -179,14 +215,16 @@ export class ExcelParserService {
     let relationships: Relationship[] = [];
 
     try {
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
       
       // Debug: Log all available sheet names
-      console.log('📋 Available Excel sheets:', Object.keys(workbook.Sheets));
+      const sheetNames = workbook.worksheets.map(ws => ws.name);
+      console.log('📋 Available Excel sheets:', sheetNames);
       
       // Check for required sheets
-      const tableMetadataSheet = workbook.Sheets['TableMetadata'] || workbook.Sheets['tablemetadata'];
-      const attributeMetadataSheet = workbook.Sheets['AttributeMetadata'] || workbook.Sheets['attributemetadata'];
+      const tableMetadataSheet = workbook.getWorksheet('TableMetadata') || workbook.getWorksheet('tablemetadata');
+      const attributeMetadataSheet = workbook.getWorksheet('AttributeMetadata') || workbook.getWorksheet('attributemetadata');
 
       console.log('🔍 TableMetadata sheet found:', !!tableMetadataSheet);
       console.log('🔍 AttributeMetadata sheet found:', !!attributeMetadataSheet);
@@ -205,7 +243,7 @@ export class ExcelParserService {
       }
 
       // Parse table metadata
-      const tableRows: ExcelRow[] = XLSX.utils.sheet_to_json(tableMetadataSheet);
+      const tableRows: ExcelRow[] = this.worksheetToJson(tableMetadataSheet!);
       const allTables: { name: string; attributes: Column[] }[] = []; // Store all table entries
       const tableMap = new Map<string, { name: string; attributes: Column[] }>(); // For column lookup
 
@@ -284,7 +322,7 @@ export class ExcelParserService {
       console.log(`  Table names: [${Array.from(tableMap.keys()).join(', ')}]`);
 
       // Parse attribute metadata
-      const attributeRows: ExcelRow[] = XLSX.utils.sheet_to_json(attributeMetadataSheet);
+      const attributeRows: ExcelRow[] = this.worksheetToJson(attributeMetadataSheet!);
       
       console.log(`\n📊 AttributeMetadata sheet contains ${attributeRows.length} rows`);
       
