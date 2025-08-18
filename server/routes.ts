@@ -27,6 +27,7 @@ import {
 } from "./middleware/validation";
 import { 
   fileUploadRateLimit, 
+  projectRateLimit,
   burstProtection 
 } from "./middleware/advancedRateLimiter";
 import { 
@@ -542,7 +543,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new project
-  app.post("/api/projects", async (req, res) => {
+  app.post("/api/projects", [
+    projectRateLimit,
+    logSecurityEvent('project_create', 'low')
+  ], async (req, res) => {
     console.log('📍 POST /api/projects called');
     try {
       // Extract user ID from BetterAuth session
@@ -796,7 +800,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update project metadata
-  app.put("/api/projects/:projectId", async (req, res) => {
+  app.put("/api/projects/:projectId", [
+    projectRateLimit,
+    logSecurityEvent('project_update', 'low')
+  ], async (req, res) => {
     try {
       const auth = await getAuth();
       let userId = 'default-user';
@@ -832,7 +839,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete a project
-  app.delete("/api/projects/:projectId", async (req, res) => {
+  app.delete("/api/projects/:projectId", [
+    projectRateLimit,
+    logSecurityEvent('project_delete', 'medium')
+  ], async (req, res) => {
     try {
       const auth = await getAuth();
       let userId = 'default-user';
@@ -861,7 +871,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Duplicate a project
-  app.post("/api/projects/:projectId/duplicate", async (req, res) => {
+  app.post("/api/projects/:projectId/duplicate", [
+    projectRateLimit,
+    logSecurityEvent('project_duplicate', 'low')
+  ], async (req, res) => {
     try {
       const auth = await getAuth();
       let userId = 'default-user';

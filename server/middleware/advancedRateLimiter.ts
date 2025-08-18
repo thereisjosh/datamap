@@ -237,22 +237,37 @@ export class AdvancedRateLimiter {
   }
 }
 
-// Pre-configured rate limiters for different endpoint types
-export const fileUploadLimiter = new AdvancedRateLimiter({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  maxRequests: 10,
-  message: 'Too many file uploads. Please try again later.',
+// Pre-configured rate limiters for different endpoint types (optimized for UX)
+
+// Authentication endpoints - more forgiving for legitimate users
+export const authLimiter = new AdvancedRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  maxRequests: 20,
+  message: 'Too many authentication attempts. Please try again in a few minutes.',
   progressivePenalty: {
     enabled: true,
-    maxMultiplier: 5,
-    decayTime: 2 * 60 * 60 * 1000 // 2 hours
+    maxMultiplier: 2,
+    decayTime: 10 * 60 * 1000 // 10 minutes
   }
 });
 
-export const chatLimiter = new AdvancedRateLimiter({
+// Project operations - generous limits for normal usage
+export const projectLimiter = new AdvancedRateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
-  maxRequests: 50,
-  message: 'Too many chat messages. Please slow down.',
+  maxRequests: 100,
+  message: 'Too many project operations. Please try again later.',
+  progressivePenalty: {
+    enabled: true,
+    maxMultiplier: 2,
+    decayTime: 15 * 60 * 1000 // 15 minutes
+  }
+});
+
+// File uploads - increased limits for normal usage
+export const fileUploadLimiter = new AdvancedRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  maxRequests: 25,
+  message: 'Too many file uploads. Please try again later.',
   progressivePenalty: {
     enabled: true,
     maxMultiplier: 3,
@@ -260,25 +275,39 @@ export const chatLimiter = new AdvancedRateLimiter({
   }
 });
 
-export const sqlGenerationLimiter = new AdvancedRateLimiter({
+// Chat operations - increased for active conversations
+export const chatLimiter = new AdvancedRateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
-  maxRequests: 20,
-  message: 'Too many SQL generation requests. Please try again later.',
+  maxRequests: 150,
+  message: 'Too many chat messages. Please slow down.',
   progressivePenalty: {
     enabled: true,
-    maxMultiplier: 4,
-    decayTime: 60 * 60 * 1000 // 1 hour
+    maxMultiplier: 2,
+    decayTime: 15 * 60 * 1000 // 15 minutes
   }
 });
 
+// SQL generation - increased for query development
+export const sqlGenerationLimiter = new AdvancedRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  maxRequests: 50,
+  message: 'Too many SQL generation requests. Please try again later.',
+  progressivePenalty: {
+    enabled: true,
+    maxMultiplier: 2,
+    decayTime: 20 * 60 * 1000 // 20 minutes
+  }
+});
+
+// Analysis operations - increased for active development
 export const analysisLimiter = new AdvancedRateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
-  maxRequests: 30,
+  maxRequests: 75,
   message: 'Too many analysis requests. Please try again later.',
   progressivePenalty: {
     enabled: true,
-    maxMultiplier: 3,
-    decayTime: 45 * 60 * 1000 // 45 minutes
+    maxMultiplier: 2,
+    decayTime: 15 * 60 * 1000 // 15 minutes
   }
 });
 
@@ -295,19 +324,21 @@ export const adminLimiter = new AdvancedRateLimiter({
   }
 });
 
-// Burst protection limiter (short window, low limit)
+// Burst protection limiter - optimized for normal app navigation
 export const burstProtectionLimiter = new AdvancedRateLimiter({
   windowMs: 60 * 1000, // 1 minute
-  maxRequests: 10,
+  maxRequests: 60, // Increased from 10 to support normal app usage
   message: 'Too many requests in a short time. Please slow down.',
   progressivePenalty: {
     enabled: true,
-    maxMultiplier: 2,
-    decayTime: 5 * 60 * 1000 // 5 minutes
+    maxMultiplier: 1.5, // Reduced penalty for lighter impact
+    decayTime: 2 * 60 * 1000 // 2 minutes for faster recovery
   }
 });
 
 // Export middleware functions
+export const authRateLimit = authLimiter.createMiddleware();
+export const projectRateLimit = projectLimiter.createMiddleware();
 export const fileUploadRateLimit = fileUploadLimiter.createMiddleware();
 export const chatRateLimit = chatLimiter.createMiddleware();
 export const sqlGenerationRateLimit = sqlGenerationLimiter.createMiddleware();
