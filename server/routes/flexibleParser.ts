@@ -111,8 +111,7 @@ router.post('/parse', [
     required: true,
     maxSize: 10 * 1024 * 1024
   }),
-  logFileUploadSecurity(),
-  validateSchema(columnMappingsSchema)
+  logFileUploadSecurity()
 ], async (req, res) => {
   try {
     if (!req.file) {
@@ -133,20 +132,26 @@ router.post('/parse', [
       });
     }
 
-    // Validate mappings
-    const validationResult = analyzeMappingsSchema.safeParse(mappingData);
-    if (!validationResult.success) {
+    // Validate the parsed mapping data
+    try {
+      mappingData = columnMappingsSchema.parse(mappingData);
+    } catch (validationError: any) {
+      console.warn('🚫 Column mapping validation failed:', {
+        error: validationError.errors || validationError.message,
+        receivedData: mappingData,
+        ip: req.ip
+      });
+      
       return res.status(400).json({
         success: false,
-        error: 'Invalid mapping configuration',
-        details: validationResult.error.issues.map(issue => ({
-          field: issue.path.join('.'),
-          message: issue.message
-        }))
+        error: 'Invalid column mapping configuration',
+        details: validationError.errors || [{ message: validationError.message }]
       });
     }
 
-    const mappings: ColumnMappings = validationResult.data;
+    // mappingData is now validated by columnMappingsSchema above
+
+    const mappings: ColumnMappings = mappingData;
 
     console.log(`🔄 Parsing Excel with custom mappings: ${req.file.originalname}`);
     console.log(`📋 Complete Mappings:`, {
