@@ -333,6 +333,7 @@ export const LLM_MODELS = {
   ANTHROPIC: {
     'claude-3-sonnet-20240229': { maxTokens: 200000, costPerToken: 0.000015 },
     'claude-3-haiku-20240307': { maxTokens: 200000, costPerToken: 0.00000025 },
+    'claude-3-opus-20240229': { maxTokens: 200000, costPerToken: 0.000075 },
   }
 } as const;
 
