@@ -1,24 +1,27 @@
-# Icon Files Needed
+# Favicon Setup Complete! ✅
 
-Replace the placeholder files in this directory with your company logo in the following formats:
+## Current Icons:
+- **favicon.png** - Main browser tab icon (your heart logo)
+- **favicon-16x16.png** - Small browser tab icon  
+- **favicon-32x32.png** - Standard browser tab icon
+- **apple-touch-icon.png** - iOS home screen icon
 
-## Required Icon Files:
-- **favicon.ico** - 32x32 pixels, .ico format (main browser tab icon)
-- **favicon-16x16.png** - 16x16 pixels, PNG format (small browser tab)
-- **favicon-32x32.png** - 32x32 pixels, PNG format (standard browser tab)
-- **apple-touch-icon.png** - 180x180 pixels, PNG format (iOS home screen icon)
+## Source:
+All icons are using your provided heart logo PNG file (`favicon.ico.png`)
 
-## How to Generate:
-1. **From Company Logo**: Use your company logo as source image
-2. **Online Tools**: favicon.io, realfavicongenerator.net, or canva.com
-3. **Design Software**: Photoshop, GIMP, or Figma
+## Browser Support:
+- ✅ Chrome/Edge - favicon.png
+- ✅ Firefox - favicon-32x32.png  
+- ✅ Safari - apple-touch-icon.png
+- ✅ iOS/Android - apple-touch-icon.png
 
-## Tips:
-- Use square logo versions for best results
-- Ensure logo is readable at small sizes (16x16 pixels)
-- Use transparent background for PNG files
-- Keep consistent with your brand colors
+## Next Steps:
+1. Add environment variables to Railway:
+   - `VITE_APP_TITLE=Your Company ERD Platform`
+   - `VITE_APP_DESCRIPTION=Professional Entity Relationship Diagram Builder`
+   - `VITE_PRIMARY_COLOR=#2B4C7E` (matching your logo's navy blue)
 
-## Current Status:
-🔄 **Placeholder files** - Replace with actual company logos
-✅ **HTML configured** - Icons will display once files are replaced
+2. Deploy and test browser tab appearance
+
+## Theme Color:
+Based on your logo, suggested theme color: `#2B4C7E` (navy blue from your icon)
