@@ -38,7 +38,7 @@ export class EmailService {
 
   constructor(config?: Partial<EmailServiceConfig>) {
     this.config = {
-      fromEmail: config?.fromEmail || 'onboarding@resend.dev', // Use Resend's default domain
+      fromEmail: config?.fromEmail || process.env.RESEND_FROM_EMAIL || 'invitations@di-erdify.work',
       appUrl: config?.appUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
       appName: config?.appName || process.env.NEXT_PUBLIC_APP_NAME || 'ERDify',
       ...config
