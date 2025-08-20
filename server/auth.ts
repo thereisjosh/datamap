@@ -14,6 +14,10 @@ async function getAuth() {
       if (!db) {
         console.warn('⚠️ Database unavailable, creating auth without persistence');
         // Create auth without database - it will use in-memory storage
+        const isProduction = process.env.NODE_ENV === 'production';
+        const cookieDomain = process.env.AUTH_COOKIE_DOMAIN || undefined;
+        const trustedOrigins = process.env.AUTH_TRUSTED_ORIGINS?.split(',') || ["http://localhost:3000"];
+        
         authInstance = betterAuth({
           emailAndPassword: {
             enabled: true,
@@ -23,7 +27,12 @@ async function getAuth() {
               enabled: true,
             }
           },
-          trustedOrigins: ["http://localhost:3000"],
+          trustedOrigins: trustedOrigins,
+          cookies: isProduction ? {
+            domain: cookieDomain,
+            secure: true,
+            sameSite: "lax"
+          } : undefined,
           session: {
             expiresIn: 60 * 60 * 24 * 7, // 7 days
             updateAge: 60 * 60 * 24, // 1 day
@@ -32,6 +41,10 @@ async function getAuth() {
         });
       } else {
         console.log('✅ Creating auth with database persistence');
+        const isProduction = process.env.NODE_ENV === 'production';
+        const cookieDomain = process.env.AUTH_COOKIE_DOMAIN || undefined;
+        const trustedOrigins = process.env.AUTH_TRUSTED_ORIGINS?.split(',') || ["http://localhost:3000"];
+        
         authInstance = betterAuth({
           database: drizzleAdapter(db, {
             provider: "pg", // PostgreSQL
@@ -44,7 +57,12 @@ async function getAuth() {
               enabled: true,
             }
           },
-          trustedOrigins: ["http://localhost:3000"],
+          trustedOrigins: trustedOrigins,
+          cookies: isProduction ? {
+            domain: cookieDomain,
+            secure: true,
+            sameSite: "lax"
+          } : undefined,
           session: {
             expiresIn: 60 * 60 * 24 * 7, // 7 days
             updateAge: 60 * 60 * 24, // 1 day
