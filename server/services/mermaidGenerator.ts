@@ -18,6 +18,22 @@ interface MermaidResponse {
     relationships_count: number;
     domain?: string;
   };
+  
+  // AI Enhancement properties
+  aiEnhanced?: boolean;
+  explanations?: {
+    purpose: string;
+    coreTableReasons: Record<string, string>;
+    contextualTableReasons: Record<string, string>;
+    junctionTableReasons: Record<string, string>;
+    excludedTableReasons: Record<string, string>;
+  };
+  confidenceScore?: number;
+  businessMetrics?: {
+    completeness: number;
+    independence: number;
+    usability: number;
+  };
 }
 
 interface DomainConfig {
@@ -164,24 +180,61 @@ export class MermaidGeneratorService {
   }
 
   // ADVANCED: Relationship-driven domain grouping with business intelligence
-  private groupTablesByRelationships(tables: TableData[], relationships: Relationship[]): { 
+  private async groupTablesByRelationships(tables: TableData[], relationships: Relationship[]): Promise<{ 
     grouped: Record<string, TableData[]>, 
-    displayNames: Record<string, string> 
-  } {
+    displayNames: Record<string, string>,
+    aiEnhancements: Record<string, {
+      aiEnhanced: boolean;
+      explanations?: any;
+      confidenceScore?: number;
+      businessMetrics?: any;
+    }>
+  }> {
     console.log(`🔗 Advanced relationship-driven domain discovery for ${tables.length} tables`);
     
-    // Use the advanced domain analyzer with Louvain algorithm
-    const discoveredDomains = advancedDomainAnalyzer.discoverDomains(tables, relationships);
+    // Use the advanced domain analyzer with Louvain algorithm (now async)
+    const discoveredDomains = await advancedDomainAnalyzer.discoverDomains(tables, relationships);
     
     // Convert to the expected format
     const grouped: Record<string, TableData[]> = {};
     const displayNames: Record<string, string> = {};
+    const aiEnhancements: Record<string, {
+      aiEnhanced: boolean;
+      explanations?: any;
+      confidenceScore?: number;
+      businessMetrics?: any;
+    }> = {};
     
     discoveredDomains.forEach(domain => {
       grouped[domain.id] = domain.tables;
-      displayNames[domain.id] = domain.name; // Store the business-friendly display name
-      console.log(`✨ Advanced domain: "${domain.name}" (${domain.tables.length} tables, cohesion: ${domain.cohesionScore.toFixed(2)})`);
-      console.log(`   Type: ${domain.businessClassification.domainType} (confidence: ${domain.businessClassification.confidence.toFixed(2)})`);
+      displayNames[domain.id] = domain.name;
+      
+      // Preserve AI enhancement data if available
+      if (domain.aiEnhanced) {
+        aiEnhancements[domain.id] = {
+          aiEnhanced: true,
+          explanations: domain.explanations ? {
+            purpose: domain.explanations.purpose,
+            coreTableReasons: Object.fromEntries(domain.explanations.coreTableReasons || new Map()),
+            contextualTableReasons: Object.fromEntries(domain.explanations.contextualTableReasons || new Map()),
+            junctionTableReasons: Object.fromEntries(domain.explanations.junctionTableReasons || new Map()),
+            excludedTableReasons: Object.fromEntries(domain.explanations.excludedTableReasons || new Map())
+          } : undefined,
+          confidenceScore: domain.confidenceScore,
+          businessMetrics: domain.businessMetrics
+        };
+        
+        console.log(`🧠 AI-enhanced domain: "${domain.name}" (confidence: ${domain.confidenceScore?.toFixed(2) || 'N/A'})`);
+        if (domain.explanations?.purpose) {
+          console.log(`   Purpose: ${domain.explanations.purpose}`);
+        }
+        if (domain.businessMetrics) {
+          console.log(`   Business metrics - Completeness: ${domain.businessMetrics.completeness.toFixed(2)}, Independence: ${domain.businessMetrics.independence.toFixed(2)}, Usability: ${domain.businessMetrics.usability.toFixed(2)}`);
+        }
+      } else {
+        console.log(`✨ Traditional domain: "${domain.name}" (${domain.tables.length} tables, cohesion: ${domain.cohesionScore.toFixed(2)})`);
+        console.log(`   Type: ${domain.businessClassification.domainType} (confidence: ${domain.businessClassification.confidence.toFixed(2)})`);
+      }
       
       if (domain.tables.length <= 15) {
         console.log(`   Tables: [${Array.from(domain.tableNames).join(', ')}]`);
@@ -191,7 +244,7 @@ export class MermaidGeneratorService {
       }
     });
 
-    return { grouped, displayNames };
+    return { grouped, displayNames, aiEnhancements };
   }
 
   // LEGACY: Industry-standard domain grouping following DDD bounded context principles
@@ -720,7 +773,7 @@ export class MermaidGeneratorService {
   }
 
   // Generate diagrams for all domains
-  generateAllDomainDiagrams(tables: TableData[], relationships: Relationship[] = []): Record<string, MermaidResponse> {
+  async generateAllDomainDiagrams(tables: TableData[], relationships: Relationship[] = []): Promise<Record<string, MermaidResponse>> {
     const runId = Math.random().toString(36).substr(2, 9);
     console.log(`🚀 generateAllDomainDiagrams called with [RUN-${runId}]:`);
     console.log(`  Tables: ${tables.length}`);
@@ -729,9 +782,10 @@ export class MermaidGeneratorService {
     
     // Compute domain groupings once for efficiency and consistency
     console.log(`🏷️ [RUN-${runId}] Computing advanced relationship-driven domain groupings once for all diagrams...`);
-    const domainData = this.groupTablesByRelationships(tables, relationships);
+    const domainData = await this.groupTablesByRelationships(tables, relationships);
     const precomputedDomainGroups = domainData.grouped;
     const displayNames = domainData.displayNames;
+    const aiEnhancements = domainData.aiEnhancements;
     
     console.log(`📊 [RUN-${runId}] Domain grouping summary:`);
     Object.entries(precomputedDomainGroups).forEach(([domain, domainTables]) => {
@@ -754,7 +808,13 @@ export class MermaidGeneratorService {
       const domainTables = precomputedDomainGroups[domainId];
       if (domainTables.length > 0) {
         const displayName = displayNames[domainId] || domainId;
+        const enhancement = aiEnhancements[domainId];
+        
         console.log(`🔄 [RUN-${runId}] Generating discovered domain: ${domainId} ("${displayName}") (${domainTables.length} tables)...`);
+        if (enhancement?.aiEnhanced) {
+          console.log(`   🧠 AI-enhanced domain with confidence: ${enhancement.confidenceScore?.toFixed(2) || 'N/A'}`);
+        }
+        
         const domainResult = this.generateMermaidDiagram(tables, relationships, { 
           domain: domainId,
           maxTables: 50, // Reasonable default for discovered domains
@@ -763,7 +823,12 @@ export class MermaidGeneratorService {
         
         results[domainId] = {
           ...domainResult,
-          displayName: displayName // Add business-friendly display name
+          displayName: displayName,
+          // Include AI enhancement data if available
+          aiEnhanced: enhancement?.aiEnhanced || false,
+          explanations: enhancement?.explanations,
+          confidenceScore: enhancement?.confidenceScore,
+          businessMetrics: enhancement?.businessMetrics
         };
       }
     });

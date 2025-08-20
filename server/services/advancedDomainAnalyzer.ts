@@ -2,6 +2,7 @@ import { type TableData, type Relationship } from '@shared/schema';
 import Graph from 'graphology';
 import { relationshipAnalyzer, type RelationshipWeight } from './relationshipAnalyzer';
 import { businessRuleEngine, type BusinessDomainClassification } from './businessRuleEngine';
+import { intelligentDomainAnalyzer, type EnhancedDomainCluster } from './intelligentDomainAnalyzer';
 
 export interface TableDomainMembership {
   tableName: string;
@@ -31,6 +32,22 @@ export interface AdvancedTableCluster extends MultiDomainCluster {
   tableNames: Set<string>;
   modularityScore: number;
   size: number;
+  
+  // AI Enhancement properties (optional for backward compatibility)
+  aiEnhanced?: boolean;
+  explanations?: {
+    purpose: string;
+    coreTableReasons: Map<string, string>;
+    contextualTableReasons: Map<string, string>;
+    junctionTableReasons: Map<string, string>;
+    excludedTableReasons: Map<string, string>;
+  };
+  confidenceScore?: number;
+  businessMetrics?: {
+    completeness: number;
+    independence: number;
+    usability: number;
+  };
 }
 
 export interface MultiDomainDetectionResult {
@@ -44,10 +61,36 @@ export class AdvancedDomainAnalyzer {
   
   /**
    * Main entry point: Discover overlapping domains using multi-domain analysis
+   * Enhanced with AI-powered semantic understanding when enabled
    */
-  public discoverDomains(tables: TableData[], relationships: Relationship[]): AdvancedTableCluster[] {
+  public async discoverDomains(tables: TableData[], relationships: Relationship[]): Promise<AdvancedTableCluster[]> {
     const startTime = Date.now();
     console.log(`🔬 Multi-domain discovery for ${tables.length} tables, ${relationships.length} relationships`);
+    
+    // Check if AI-enhanced clustering is enabled
+    const useIntelligentClustering = process.env.USE_INTELLIGENT_CLUSTERING === 'true';
+    
+    if (useIntelligentClustering) {
+      console.log(`🧠 AI-enhanced domain clustering enabled`);
+      
+      try {
+        // Use AI-powered domain clustering
+        const aiClusters = await this.discoverDomainsWithAI(tables, relationships);
+        
+        const duration = Date.now() - startTime;
+        console.log(`⚡ AI-enhanced domain discovery completed in ${duration}ms`);
+        
+        this.logFinalResults(aiClusters);
+        return aiClusters;
+        
+      } catch (error) {
+        console.error('❌ AI-enhanced clustering failed, falling back to traditional clustering:', error);
+        // Fall through to traditional clustering
+      }
+    }
+    
+    // Traditional multi-domain clustering (fallback or when AI is disabled)
+    console.log(`📊 Using traditional graph-based domain clustering`);
     
     // Step 1: Analyze relationship weights
     const relationshipWeights = relationshipAnalyzer.analyzeRelationships(tables, relationships);
@@ -64,12 +107,159 @@ export class AdvancedDomainAnalyzer {
     const finalClusters = this.convertMultiDomainToClusters(tables, multiDomainResult, relationships);
     
     const duration = Date.now() - startTime;
-    console.log(`⚡ Multi-domain discovery completed in ${duration}ms`);
+    console.log(`⚡ Traditional multi-domain discovery completed in ${duration}ms`);
     
     // Log final results
     this.logFinalResults(finalClusters);
     
     return finalClusters;
+  }
+  
+  /**
+   * AI-Enhanced Domain Discovery using semantic understanding
+   */
+  private async discoverDomainsWithAI(tables: TableData[], relationships: Relationship[]): Promise<AdvancedTableCluster[]> {
+    console.log(`🧠 Starting AI-enhanced domain analysis...`);
+    
+    try {
+      // Step 1: Get AI-enhanced domain clusters
+      const enhancedClusters = await intelligentDomainAnalyzer.assembleDomains(tables, relationships);
+      console.log(`   ✅ AI assembled ${enhancedClusters.length} enhanced domains`);
+      
+      // Step 2: Convert enhanced clusters to standard format with AI metadata
+      const aiClusters = this.convertEnhancedToStandardClusters(tables, enhancedClusters, relationships);
+      
+      // Step 3: Post-process with relationship analysis for compatibility
+      const finalClusters = this.postProcessClusters(aiClusters, relationships);
+      
+      console.log(`   🎯 AI clustering completed with ${finalClusters.length} final domains`);
+      
+      return finalClusters;
+      
+    } catch (error) {
+      console.error('❌ AI domain analysis failed:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Convert enhanced AI clusters to standard cluster format
+   */
+  private convertEnhancedToStandardClusters(
+    tables: TableData[],
+    enhancedClusters: EnhancedDomainCluster[],
+    relationships: Relationship[]
+  ): AdvancedTableCluster[] {
+    const tableMap = new Map(tables.map(table => [table.name, table]));
+    const clusters: AdvancedTableCluster[] = [];
+    
+    enhancedClusters.forEach((enhanced, index) => {
+      // Gather all tables that belong to this domain (core + contextual + junction)
+      const domainTableNames = new Set([
+        ...enhanced.coreTables,
+        ...enhanced.contextualTables.keys(),
+        ...enhanced.junctionTables
+      ]);
+      
+      // Get actual table objects
+      const domainTables: TableData[] = [];
+      domainTableNames.forEach(tableName => {
+        const table = tableMap.get(tableName);
+        if (table) {
+          domainTables.push(table);
+        }
+      });
+      
+      if (domainTables.length === 0) {
+        console.warn(`⚠️ Enhanced cluster "${enhanced.name}" has no valid tables, skipping`);
+        return;
+      }
+      
+      // Create standard cluster with AI enhancement metadata
+      const cluster: AdvancedTableCluster = {
+        // Standard properties
+        id: enhanced.id,
+        name: enhanced.name,
+        description: enhanced.purpose,
+        tables: domainTables,
+        tableNames: new Set(domainTables.map(t => t.name)),
+        
+        // Multi-domain properties
+        coreTableNames: enhanced.coreTables,
+        allTableNames: domainTableNames,
+        tableMemberships: this.convertContextualToMemberships(enhanced.contextualTables, enhanced.coreTables),
+        coreTables: enhanced.coreTables.size,
+        totalTables: domainTableNames.size,
+        
+        // Legacy properties (will be calculated in post-processing)
+        internalConnections: 0,
+        externalConnections: new Map(),
+        cohesionScore: enhanced.cohesionScore,
+        modularityScore: enhanced.confidenceScore,
+        size: domainTables.length,
+        
+        // Business classification
+        businessClassification: this.createBusinessClassification(enhanced),
+        suggestedColor: this.generateColor(index),
+        
+        // AI Enhancement metadata
+        aiEnhanced: true,
+        explanations: enhanced.explanations,
+        confidenceScore: enhanced.confidenceScore,
+        businessMetrics: enhanced.businessMetrics
+      };
+      
+      clusters.push(cluster);
+    });
+    
+    console.log(`   🔄 Converted ${enhancedClusters.length} AI clusters to ${clusters.length} standard clusters`);
+    return clusters;
+  }
+  
+  /**
+   * Convert contextual tables map to membership strengths map
+   */
+  private convertContextualToMemberships(
+    contextualTables: Map<string, { relevanceScore: number; role: string; columns: string[]; reasoning: string; }>,
+    coreTables: Set<string>
+  ): Map<string, number> {
+    const memberships = new Map<string, number>();
+    
+    // Core tables get maximum membership (0.9)
+    coreTables.forEach(tableName => {
+      memberships.set(tableName, 0.9);
+    });
+    
+    // Contextual tables get their relevance scores
+    contextualTables.forEach((context, tableName) => {
+      memberships.set(tableName, context.relevanceScore);
+    });
+    
+    return memberships;
+  }
+  
+  /**
+   * Create business classification from enhanced cluster
+   */
+  private createBusinessClassification(enhanced: EnhancedDomainCluster): BusinessDomainClassification {
+    // Map enhanced domain ID to business domain type
+    const domainTypeMap: Record<string, string> = {
+      'user_management': 'user_management',
+      'payments_donations': 'payments_donations',
+      'opportunities': 'opportunities',
+      'campaigns_marketing': 'campaigns_marketing',
+      'system_configuration': 'system_configuration',
+      'organization_management': 'organization_management',
+      'content_management': 'content_management'
+    };
+    
+    return {
+      domainType: (domainTypeMap[enhanced.id] || 'unknown') as any,
+      confidence: enhanced.confidenceScore,
+      matchingPatterns: [], // AI doesn't use patterns
+      suggestedName: enhanced.displayName,
+      description: enhanced.purpose
+    };
   }
   
   /**

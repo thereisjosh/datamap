@@ -333,7 +333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('🔧 Formatted relationships for Mermaid generation:', formattedRelationships.length);
 
       // Generate all domain-specific diagrams
-      const domainResults = mermaidGeneratorService.generateAllDomainDiagrams(
+      const domainResults = await mermaidGeneratorService.generateAllDomainDiagrams(
         tables,
         formattedRelationships
       );

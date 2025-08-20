@@ -530,9 +530,254 @@ RESPONSE FORMAT:
   }
 
   /**
+   * Analyze table for domain classification using AI
+   */
+  public async analyzeTableForDomains(tableContext: string): Promise<string> {
+    const startTime = Date.now();
+    let success = false;
+    
+    try {
+      const prompt = this.buildTableAnalysisPrompt(tableContext);
+      const response = await this.callLLM(prompt);
+      
+      success = true;
+      this.trackUsage(startTime, success);
+      
+      return response;
+    } catch (error) {
+      this.trackUsage(startTime, success);
+      console.error('❌ Failed to analyze table for domains:', error);
+      throw new LLMServiceError(
+        `Failed to analyze table: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        this.config.provider,
+        500,
+        { tableContext: tableContext.substring(0, 200) + '...' }
+      );
+    }
+  }
+
+  /**
+   * Resolve junction table placement using business logic analysis
+   */
+  public async resolveJunctionTablePlacement(
+    tableName: string,
+    columns: string[],
+    connectedEntities: string[],
+    possibleDomains: string[]
+  ): Promise<string> {
+    const startTime = Date.now();
+    let success = false;
+    
+    try {
+      const prompt = this.buildJunctionResolutionPrompt(tableName, columns, connectedEntities, possibleDomains);
+      const response = await this.callLLM(prompt);
+      
+      success = true;
+      this.trackUsage(startTime, success);
+      
+      return response;
+    } catch (error) {
+      this.trackUsage(startTime, success);
+      console.error('❌ Failed to resolve junction table placement:', error);
+      throw new LLMServiceError(
+        `Failed to resolve junction table: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        this.config.provider,
+        500,
+        { tableName, possibleDomains }
+      );
+    }
+  }
+
+  /**
+   * Validate domain coherence and provide optimization suggestions
+   */
+  public async validateDomainCoherence(
+    domainName: string,
+    tables: string[],
+    relationships: string[]
+  ): Promise<string> {
+    const startTime = Date.now();
+    let success = false;
+    
+    try {
+      const prompt = this.buildDomainValidationPrompt(domainName, tables, relationships);
+      const response = await this.callLLM(prompt);
+      
+      success = true;
+      this.trackUsage(startTime, success);
+      
+      return response;
+    } catch (error) {
+      this.trackUsage(startTime, success);
+      console.error('❌ Failed to validate domain coherence:', error);
+      throw new LLMServiceError(
+        `Failed to validate domain: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        this.config.provider,
+        500,
+        { domainName, tables }
+      );
+    }
+  }
+
+  /**
+   * Build prompt for table domain analysis
+   */
+  private buildTableAnalysisPrompt(tableContext: string): string {
+    return `You are an expert database architect specializing in business domain modeling. Analyze this database table for business domain classification.
+
+Table Context: ${tableContext}
+
+Analyze and determine:
+
+1. PRIMARY_PURPOSE: What is this table's main business function? (1-2 sentences)
+
+2. BUSINESS_DOMAINS: Which business areas does this serve? Choose the most relevant from:
+   - user_management (user accounts, authentication, roles, permissions)
+   - payments_donations (payments, transactions, donations, billing)
+   - opportunities (volunteer opportunities, registrations, skills)
+   - campaigns_marketing (campaigns, marketing content, events)
+   - system_configuration (system settings, logs, configurations)
+   - organization_management (organizations, entities, partnerships)
+   - content_management (documents, resources, templates)
+
+3. IS_JUNCTION: Is this a junction/bridge table connecting other entities? (true/false)
+   Indicators: multiple foreign keys, connects two business entities, enables many-to-many relationships
+
+4. DOMAIN_ANALYSIS: For each relevant domain (max 3), provide:
+   - RELEVANCE: Score 0.0-1.0 where:
+     * 0.8+ = Core table (essential to domain)
+     * 0.4-0.8 = Contextual table (serves domain in specific context)
+     * <0.4 = Not relevant (exclude)
+   - ROLE: What specific role does this table play in that domain?
+   - REASONING: Why does it belong to this domain? Focus on business purpose.
+   - COLUMNS: Which columns are most relevant to this domain? (max 5)
+
+5. JUNCTION_ANALYSIS (only if IS_JUNCTION = true):
+   - CONNECTED_DOMAINS: Which domains does it connect?
+   - PRIMARY_DOMAIN: Which domain should own this junction table?
+   - BUSINESS_PROCESS: What primary business process does this enable?
+   - REASONING: Why should it belong to the primary domain over others?
+
+Format your response exactly as:
+
+PRIMARY_PURPOSE: [description]
+BUSINESS_DOMAINS: [domain1, domain2, domain3]
+IS_JUNCTION: [true/false]
+DOMAIN_ANALYSIS:
+- domain1: relevance=0.9, role="X", reasoning="Y", columns=[col1,col2,col3]
+- domain2: relevance=0.6, role="Z", reasoning="W", columns=[col4,col5]
+
+${tableContext.includes('FK') ? `JUNCTION_ANALYSIS:
+- connected_domains=[domain1,domain2]
+- primary_domain=domain1
+- business_process="X"
+- reasoning="Y"` : ''}
+
+Important: Focus on business semantics over technical relationships. Consider what business users would expect.`;
+  }
+
+  /**
+   * Build prompt for junction table resolution
+   */
+  private buildJunctionResolutionPrompt(
+    tableName: string,
+    columns: string[],
+    connectedEntities: string[],
+    possibleDomains: string[]
+  ): string {
+    return `You are a database design expert. This junction table connects multiple entities and could belong to different domains. Determine its PRIMARY domain based on business logic.
+
+Junction Table: ${tableName}
+Columns: ${columns.join(', ')}
+Connected Entities: ${connectedEntities.join(', ')}
+Possible Domains: ${possibleDomains.join(', ')}
+
+Analysis Framework:
+1. What is the PRIMARY business process this table enables?
+2. What is the main purpose of the data it stores?
+3. Which domain would be incomplete without this table?
+4. What workflow does this table primarily support?
+5. From a business user perspective, which domain "owns" this relationship?
+
+Consider these examples:
+- OrderItems → belongs to Orders domain (order fulfillment process)
+- CampaignDonations → belongs to Donations domain (donation recording process)
+- UserRoles → belongs to User Management domain (access control process)
+
+Analyze the table's semantic purpose, not just its foreign key relationships.
+
+Respond in this exact format:
+
+PRIMARY_DOMAIN: [domain]
+CONFIDENCE: [0.0-1.0]
+BUSINESS_PROCESS: [primary workflow this enables]
+REASONING: [detailed explanation of why it belongs to primary domain]
+ALTERNATIVE_DOMAINS: [other domains it could serve, if any]
+
+Focus on the business meaning and primary use case.`;
+  }
+
+  /**
+   * Build prompt for domain validation
+   */
+  private buildDomainValidationPrompt(
+    domainName: string,
+    tables: string[],
+    relationships: string[]
+  ): string {
+    return `You are a database architecture expert. Analyze this domain grouping for business coherence and suggest improvements.
+
+Domain: ${domainName}
+Tables: ${tables.join(', ')}
+Key Relationships: ${relationships.join(', ')}
+
+Evaluate:
+
+1. COHERENCE: Do these tables form a logical business domain?
+   - Do they serve related business functions?
+   - Are there obvious outliers that don't belong?
+   - Are there missing tables that should be included?
+
+2. COMPLETENESS: Is this domain complete for its business purpose?
+   - What business workflows would this domain support?
+   - Are any critical tables missing?
+   - Would a business user find this grouping useful?
+
+3. INDEPENDENCE: How well does this domain stand alone?
+   - Are there excessive dependencies on other domains?
+   - Could this domain be analyzed independently?
+   - Are the boundaries clear?
+
+4. OPTIMIZATION: How could this domain be improved?
+   - Should any tables be moved to other domains?
+   - Should any tables be added from other domains?
+   - Should this domain be split or merged?
+
+Respond in this format:
+
+COHERENCE_SCORE: [0.0-1.0]
+COHERENCE_ANALYSIS: [explanation of how well tables fit together]
+
+COMPLETENESS_SCORE: [0.0-1.0] 
+COMPLETENESS_ANALYSIS: [explanation of missing/extra elements]
+
+INDEPENDENCE_SCORE: [0.0-1.0]
+INDEPENDENCE_ANALYSIS: [explanation of domain boundaries]
+
+OPTIMIZATION_SUGGESTIONS:
+- [specific recommendation 1]
+- [specific recommendation 2]
+- [specific recommendation 3]
+
+BUSINESS_USE_CASES: [what business analysis this domain enables]
+
+Focus on practical business value and user experience.`;
+  }
+
+  /**
    * Call LLM API based on configured provider
    */
-  private async callLLM(prompt: string): Promise<string> {
+  public async callLLM(prompt: string): Promise<string> {
     try {
       if (this.config.provider === 'openai') {
         return await this.callOpenAI(prompt);
