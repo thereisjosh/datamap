@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
@@ -44,14 +44,17 @@ export const UnifiedSearchComponent: React.FC<UnifiedSearchComponentProps> = ({
     relationships: []
   });
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    setIsSearchActive(query.length > 0);
-    
-    if (query.length > 0) {
-      // Use requestAnimationFrame to defer search processing for better performance
-      requestAnimationFrame(() => {
-        const lowercaseQuery = query.toLowerCase();
+  // Debounce timer ref
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Optimized search function with debouncing
+  const performSearch = useCallback((query: string) => {
+    if (query.length === 0) {
+      setSearchResults({ tables: [], columns: [], relationships: [] });
+      return;
+    }
+
+    const lowercaseQuery = query.toLowerCase();
       
       // Search through real table names and create separate entries per domain
       const matchingTableEntries: Array<{ name: string; domain: string }> = [];
@@ -110,22 +113,50 @@ export const UnifiedSearchComponent: React.FC<UnifiedSearchComponentProps> = ({
         index === arr.findIndex(c => c.table === col.table && c.name === col.name)
       );
       
-        setSearchResults({
-          tables: matchingTableEntries,
-          columns: uniqueColumns,
-          relationships: [...new Set(matchingRelationships)]
-        });
-      });
+    setSearchResults({
+      tables: matchingTableEntries,
+      columns: uniqueColumns,
+      relationships: [...new Set(matchingRelationships)]
+    });
+  }, [tables, relationships, findDomainsForTable]);
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setIsSearchActive(query.length > 0);
+    
+    // Clear existing debounce timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    
+    if (query.length > 0) {
+      // Debounce search to avoid excessive processing
+      debounceTimer.current = setTimeout(() => {
+        performSearch(query);
+      }, 150); // 150ms debounce - fast enough for real-time, slow enough to avoid spam
     } else {
-      setSearchResults({ tables: [], columns: [], relationships: [] });
+      performSearch(query); // Immediate clear for empty query
     }
   };
 
   const handleClearSearch = () => {
+    // Clear debounce timer if active
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
     setSearchQuery('');
     setIsSearchActive(false);
     setSearchResults({ tables: [], columns: [], relationships: [] });
   };
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
 
   const handleResultClick = (type: string, item: string | object, domain?: string) => {
     onSearchResultClick(type, item, domain);

@@ -1,5 +1,35 @@
 /* Industry Standard Responsive Mermaid SVG Styling - 2024 Best Practices */
 
+/* Table Selection and Highlighting Styles */
+.table-selected {
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.6)) !important;
+  opacity: 1 !important;
+}
+
+.table-selected rect,
+.table-selected foreignObject {
+  stroke: rgba(59, 130, 246, 0.8) !important;
+  stroke-width: 3px !important;
+  animation: table-pulse 2s ease-in-out infinite !important;
+}
+
+@keyframes table-pulse {
+  0%, 100% { 
+    stroke-opacity: 0.8;
+    filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.4));
+  }
+  50% { 
+    stroke-opacity: 1;
+    filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.7));
+  }
+}
+
+/* Dim non-selected tables when a table is selected */
+.has-selection .table-entity:not(.table-selected) {
+  opacity: 0.4 !important;
+  transition: opacity 0.3s ease !important;
+}
+
 /* Responsive SVG Container - CSS-based approach */
 .erd-svg-container {
   width: 100% !important;

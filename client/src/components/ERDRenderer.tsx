@@ -2034,10 +2034,13 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           }
         }
         
-        // Set up click handling only - no visual styling
+        // Set up click handling and selection styling
         if (foundTableName) {
           box.setAttribute('data-table-name', foundTableName);
           (box as HTMLElement).style.cursor = 'pointer';
+          
+          // Add CSS class for table entity identification
+          box.classList.add('table-entity');
           
           // Accessibility only
           box.setAttribute('role', 'button');
@@ -2161,6 +2164,34 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     }
   }, [selectedTable, highlightedTables, baseSvgContent, isInitialStylingComplete, needsCenteringAfterStyling, centerOnTable, isSearchTriggered]);
 
+  // Apply visual highlighting to selected table
+  useEffect(() => {
+    if (!svgContainerRef.current) return;
+
+    const svgContainer = svgContainerRef.current;
+    
+    // Remove previous selections
+    const previouslySelected = svgContainer.querySelectorAll('.table-selected');
+    previouslySelected.forEach(element => {
+      element.classList.remove('table-selected');
+    });
+    
+    // Remove has-selection class
+    svgContainer.classList.remove('has-selection');
+    
+    // Apply new selection if any
+    if (selectedTable) {
+      const selectedElement = svgContainer.querySelector(`g[data-table-name="${selectedTable}"]`);
+      if (selectedElement) {
+        selectedElement.classList.add('table-selected');
+        svgContainer.classList.add('has-selection');
+        console.log(`✨ Applied visual highlighting to table: ${selectedTable}`);
+      } else {
+        console.warn(`⚠️ Could not find table element to highlight: ${selectedTable}`);
+      }
+    }
+  }, [selectedTable, svgContent]); // Re-run when svgContent changes (domain switch)
+
   // Debug: Track selectedTableFromSearch prop changes
   useEffect(() => {
     console.log(`📥 PROP CHANGE: selectedTableFromSearch changed to "${selectedTableFromSearch}"`);
@@ -2178,7 +2209,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     
     // Only process if this is a new search selection (not a repeated one)
     if (selectedTableFromSearch && 
-        selectedTableFromSearch !== selectedTable && 
         selectedTableFromSearch !== lastProcessedSearchTable.current) {
       
       console.log(`🔍 External table selection request: ${selectedTableFromSearch}`);
@@ -2200,7 +2230,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     } else if (selectedTableFromSearch === lastProcessedSearchTable.current) {
       console.log(`⚠️ Skipping duplicate search selection: "${selectedTableFromSearch}" was already processed`);
     } else {
-      console.log(`❌ Condition not met: selectedTableFromSearch="${selectedTableFromSearch}" (truthy: ${!!selectedTableFromSearch}), selectedTable="${selectedTable}", equal: ${selectedTableFromSearch === selectedTable}`);
+      console.log(`❌ Condition not met: selectedTableFromSearch="${selectedTableFromSearch}" (truthy: ${!!selectedTableFromSearch}), lastProcessed="${lastProcessedSearchTable.current}", same as last: ${selectedTableFromSearch === lastProcessedSearchTable.current}`);
     }
   }, [selectedTableFromSearch, selectedTable, handleTableClick]);
 
