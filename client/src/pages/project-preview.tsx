@@ -184,7 +184,8 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
       // Call the domain generation API with correct parameters
       const response = await api.generateDomainMermaid(
         transformedTables, 
-        projectRelationships
+        projectRelationships,
+        params?.projectId // Pass projectId to enable vector clustering
       );
       
       // Server returns {domains: {...}, metadata: {...}} format

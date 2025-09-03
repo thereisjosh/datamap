@@ -9,12 +9,12 @@ export interface RelationshipWeight {
 }
 
 export type RelationshipType = 
-  | 'composition'          // Parent-child relationship (User -> UserAuth)
-  | 'strong_association'   // Business relationship (Campaign -> Donation)
-  | 'weak_reference'       // Cross-domain reference (Giver -> User)
-  | 'junction_table'       // Many-to-many (User_Role)
-  | 'audit_reference'      // System reference (created_by, updated_by)
-  | 'lookup_reference';    // Reference for display/lookup purposes
+  | 'strong_fk'           // High connectivity, same module
+  | 'weak_fk'             // Low connectivity, cross-module
+  | 'multi_fk'            // Table has multiple FKs (junction)
+  | 'single_fk'           // Table has single FK reference
+  | 'cascade_fk'          // FK with cascade behavior
+  | 'reference_fk';       // FK to low-connectivity table
 
 export interface RelationshipMetrics {
   totalRelationships: number;
@@ -26,7 +26,7 @@ export interface RelationshipMetrics {
 export class RelationshipAnalyzer {
   
   /**
-   * Analyze relationships and assign weights based on business logic
+   * Analyze relationships and assign weights based on pure structural analysis
    */
   public analyzeRelationships(tables: TableData[], relationships: Relationship[]): RelationshipWeight[] {
     console.log(`🔍 Analyzing ${relationships.length} relationships for weight calculation`);
@@ -61,7 +61,7 @@ export class RelationshipAnalyzer {
         source: rel.sourceTable,
         target: rel.targetTable,
         weight: 0.1,
-        type: 'weak_reference',
+        type: 'weak_fk',
         strength: 'weak'
       };
     }
@@ -69,7 +69,7 @@ export class RelationshipAnalyzer {
     // Analyze relationship type and calculate weight
     const relType = this.determineRelationshipType(rel, sourceTable, targetTable);
     const baseWeight = this.getBaseWeight(relType);
-    const adjustedWeight = this.applyBusinessLogicAdjustments(baseWeight, rel, sourceTable, targetTable);
+    const adjustedWeight = this.applyStructuralAdjustments(baseWeight, rel, sourceTable, targetTable);
     
     return {
       source: rel.sourceTable,
@@ -81,7 +81,7 @@ export class RelationshipAnalyzer {
   }
   
   /**
-   * Determine the type of relationship based on table and column analysis
+   * Determine the type of relationship based on pure structural analysis
    */
   private determineRelationshipType(
     rel: Relationship, 
@@ -89,43 +89,38 @@ export class RelationshipAnalyzer {
     targetTable: TableData
   ): RelationshipType {
     
-    const sourceCol = rel.sourceColumn.toLowerCase();
-    const targetCol = rel.targetColumn.toLowerCase();
-    const sourceName = sourceTable.name.toLowerCase();
-    const targetName = targetTable.name.toLowerCase();
+    // Count foreign keys in source table
+    const sourceFKCount = sourceTable.attributes.filter(col => col.isForeignKey).length;
+    const targetFKCount = targetTable.attributes.filter(col => col.isForeignKey).length;
     
-    // Junction table detection (User_Role, Campaign_Tag, etc.)
-    if (this.isJunctionTable(sourceTable, targetTable)) {
-      return 'junction_table';
+    // Junction table detection - table has multiple FKs
+    if (sourceFKCount >= 2 && sourceTable.attributes.length <= sourceFKCount + 2) {
+      return 'multi_fk';
     }
     
-    // Audit field references (created_by, updated_by, deleted_by)
-    if (this.isAuditRelationship(sourceCol, targetCol)) {
-      return 'audit_reference';
+    // Check if this is a cascade relationship
+    if (rel.deleteRule === 'CASCADE' || rel.updateRule === 'CASCADE') {
+      return 'cascade_fk';
     }
     
-    // Composition relationships (User -> UserAuth, Campaign -> CampaignStatus)
-    if (this.isCompositionRelationship(sourceName, targetName)) {
-      return 'composition';
+    // Reference to low-connectivity table (likely lookup table)
+    if (targetTable.attributes.length < 5 && targetFKCount === 0) {
+      return 'reference_fk';
     }
     
-    // Strong business associations within same domain
-    if (this.isStrongBusinessAssociation(sourceName, targetName)) {
-      return 'strong_association';
+    // Single FK relationship
+    if (sourceFKCount === 1) {
+      return 'single_fk';
     }
     
-    // Cross-domain references (Giver -> User, Campaign -> User for created_by)
-    if (this.isCrossDomainReference(sourceName, targetName)) {
-      return 'weak_reference';
+    // Strong FK if both tables have similar connectivity
+    const connectivityDiff = Math.abs(sourceFKCount - targetFKCount);
+    if (connectivityDiff <= 1) {
+      return 'strong_fk';
     }
     
-    // Lookup references (status, type, category tables)
-    if (this.isLookupReference(targetName)) {
-      return 'lookup_reference';
-    }
-    
-    // Default to strong association for same-domain relationships
-    return 'strong_association';
+    // Default to weak FK for other cases
+    return 'weak_fk';
   }
   
   /**
@@ -133,21 +128,21 @@ export class RelationshipAnalyzer {
    */
   private getBaseWeight(type: RelationshipType): number {
     const weights: Record<RelationshipType, number> = {
-      'composition': 0.9,
-      'strong_association': 0.8,
-      'junction_table': 0.7,
-      'lookup_reference': 0.4,
-      'weak_reference': 0.2,
-      'audit_reference': 0.1
+      'cascade_fk': 0.9,      // Cascade relationships are strongest
+      'strong_fk': 0.8,       // Similar connectivity patterns
+      'multi_fk': 0.7,        // Junction tables
+      'single_fk': 0.5,       // Simple foreign keys
+      'reference_fk': 0.3,    // Lookup references
+      'weak_fk': 0.2          // Cross-module references
     };
     
     return weights[type];
   }
   
   /**
-   * Apply business logic adjustments to base weight
+   * Apply structural adjustments to base weight
    */
-  private applyBusinessLogicAdjustments(
+  private applyStructuralAdjustments(
     baseWeight: number,
     rel: Relationship,
     sourceTable: TableData,
@@ -155,18 +150,22 @@ export class RelationshipAnalyzer {
   ): number {
     let weight = baseWeight;
     
-    // Boost weight for same business domain
-    if (this.areInSameDomain(sourceTable.name, targetTable.name)) {
+    // Boost weight for tables with similar column counts (likely same module)
+    const columnRatio = Math.min(sourceTable.attributes.length, targetTable.attributes.length) / 
+                       Math.max(sourceTable.attributes.length, targetTable.attributes.length);
+    if (columnRatio > 0.7) {
       weight *= 1.2;
     }
     
-    // Reduce weight for cross-domain references
-    if (this.isCrossDomainReference(sourceTable.name.toLowerCase(), targetTable.name.toLowerCase())) {
+    // Reduce weight for very different table sizes (likely cross-module)
+    if (columnRatio < 0.3) {
       weight *= 0.5;
     }
     
-    // Boost weight for core business entities
-    if (this.isCoreBusinessEntity(sourceTable.name) && this.isCoreBusinessEntity(targetTable.name)) {
+    // Boost weight for tables with high constraint density
+    const sourceConstraints = this.calculateConstraintDensity(sourceTable);
+    const targetConstraints = this.calculateConstraintDensity(targetTable);
+    if (sourceConstraints > 0.5 && targetConstraints > 0.5) {
       weight *= 1.1;
     }
     
@@ -175,132 +174,13 @@ export class RelationshipAnalyzer {
   }
   
   /**
-   * Check if tables form a junction (many-to-many) relationship
+   * Calculate constraint density (unique, not null, etc.)
    */
-  private isJunctionTable(sourceTable: TableData, targetTable: TableData): boolean {
-    const sourceName = sourceTable.name.toLowerCase();
-    const targetName = targetTable.name.toLowerCase();
-    
-    // Common junction table patterns
-    const junctionPatterns = [
-      /.*_.*/, // Contains underscore (User_Role, Campaign_Tag)
-      /.*role.*/,
-      /.*permission.*/,
-      /.*tag.*/,
-      /.*category.*/
-    ];
-    
-    return junctionPatterns.some(pattern => 
-      pattern.test(sourceName) || pattern.test(targetName)
-    );
-  }
-  
-  /**
-   * Check if this is an audit field relationship
-   */
-  private isAuditRelationship(sourceCol: string, targetCol: string): boolean {
-    const auditPatterns = [
-      /created_by/,
-      /updated_by/,
-      /deleted_by/,
-      /modified_by/,
-      /approved_by/,
-      /assigned_to/
-    ];
-    
-    return auditPatterns.some(pattern => 
-      pattern.test(sourceCol) || pattern.test(targetCol)
-    );
-  }
-  
-  /**
-   * Check if this is a composition relationship (parent owns child)
-   */
-  private isCompositionRelationship(sourceName: string, targetName: string): boolean {
-    // Parent-child patterns where child contains parent name
-    if (targetName.includes(sourceName) && targetName !== sourceName) {
-      return true;
-    }
-    
-    // Status/log relationships
-    if (targetName.includes('status') || targetName.includes('log') || 
-        targetName.includes('history') || targetName.includes('audit')) {
-      return true;
-    }
-    
-    return false;
-  }
-  
-  /**
-   * Check if tables have strong business association
-   */
-  private isStrongBusinessAssociation(sourceName: string, targetName: string): boolean {
-    const businessDomains = [
-      ['campaign', 'donation', 'giver', 'pledge', 'fund'],
-      ['user', 'auth', 'role', 'permission', 'group'],
-      ['payment', 'transaction', 'checkout', 'billing', 'invoice'],
-      ['opportunity', 'volunteer', 'registration', 'skill'],
-      ['organization', 'entity', 'charity', 'profile']
-    ];
-    
-    return businessDomains.some(domain => 
-      domain.some(term => sourceName.includes(term)) &&
-      domain.some(term => targetName.includes(term))
-    );
-  }
-  
-  /**
-   * Check if this is a cross-domain reference
-   */
-  private isCrossDomainReference(sourceName: string, targetName: string): boolean {
-    // User is referenced from many domains but shouldn't merge them
-    if (targetName.includes('user') && !sourceName.includes('user')) {
-      return true;
-    }
-    
-    // EntityGroup/Organization references
-    if (targetName.includes('entity') || targetName.includes('organization')) {
-      return true;
-    }
-    
-    return false;
-  }
-  
-  /**
-   * Check if this is a lookup/reference table
-   */
-  private isLookupReference(tableName: string): boolean {
-    const lookupPatterns = [
-      /.*status$/,
-      /.*type$/,
-      /.*category$/,
-      /.*priority$/,
-      /.*source$/,
-      /language$/,
-      /country$/
-    ];
-    
-    return lookupPatterns.some(pattern => pattern.test(tableName));
-  }
-  
-  /**
-   * Check if tables are in the same business domain
-   */
-  private areInSameDomain(table1: string, table2: string): boolean {
-    return this.isStrongBusinessAssociation(table1.toLowerCase(), table2.toLowerCase());
-  }
-  
-  /**
-   * Check if table is a core business entity
-   */
-  private isCoreBusinessEntity(tableName: string): boolean {
-    const coreEntities = [
-      'user', 'campaign', 'donation', 'giver', 'opportunity', 
-      'payment', 'transaction', 'checkout', 'organization'
-    ];
-    
-    const name = tableName.toLowerCase();
-    return coreEntities.some(entity => name.includes(entity));
+  private calculateConstraintDensity(table: TableData): number {
+    const constrainedColumns = table.attributes.filter(col => 
+      col.unique || !col.nullable || col.isPrimary
+    ).length;
+    return constrainedColumns / table.attributes.length;
   }
   
   /**

@@ -1,6 +1,6 @@
 import { type TableData, type Relationship } from '@shared/schema';
 import { llmService } from './llmService';
-import { businessRuleEngine, type BusinessDomainClassification, type BusinessDomainType } from './businessRuleEngine';
+import { algorithmicDomainClassifier as businessRuleEngine, type DomainClassificationResult, type StructuralDomainType } from './businessRuleEngine';
 
 /**
  * Enhanced table analysis with AI-powered semantic understanding
@@ -406,10 +406,10 @@ export class IntelligentDomainAnalyzer {
     const domainContexts = new Map();
     
     if (classification.confidence > 0.3) {
-      domainContexts.set(classification.domainType, {
+      domainContexts.set(classification.structuralType, {
         relevanceScore: classification.confidence,
-        contextualRole: 'Rule-based classification',
-        reasoning: `Matched patterns: ${classification.matchingPatterns.join(', ')}`,
+        contextualRole: 'Algorithmic structural classification',
+        reasoning: `Structural features: connectivity=${classification.connectivityScore.toFixed(2)}, cohesion=${classification.semanticCohesion.toFixed(2)}`,
         relevantColumns: table.attributes.slice(0, 5).map(attr => attr.name) // First 5 columns as default
       });
     }
@@ -421,10 +421,10 @@ export class IntelligentDomainAnalyzer {
     return {
       tableName: table.name,
       primaryPurpose: classification.description || 'Unknown business purpose',
-      businessDomains: classification.domainType !== 'unknown' ? [classification.domainType] : [],
+      businessDomains: classification.structuralType !== 'unknown' ? [classification.structuralType] : [],
       domainContexts,
       confidence: Math.max(0.3, classification.confidence),
-      suggestedColumns: new Map([[classification.domainType, table.attributes.map(attr => attr.name)]]),
+      suggestedColumns: new Map([[classification.structuralType, table.attributes.map(attr => attr.name)]]),
       isJunctionTable
     };
   }
@@ -700,19 +700,72 @@ export class IntelligentDomainAnalyzer {
     console.log(`🧹 Cache cleanup completed: ${this.cache.tableAnalyses.size} table analyses, ${this.cache.domainAssemblies.size} domain assemblies`);
   }
 
-  // Utility methods
+  // Utility methods - Industry-Agnostic Display Name Generation
   private getDomainDisplayName(domainId: string): string {
-    const displayNames: Record<string, string> = {
-      'user_management': 'User Management',
-      'payments_donations': 'Donations & Payments',
-      'opportunities': 'Opportunities',
-      'campaigns_marketing': 'Campaigns & Marketing',
-      'system_configuration': 'System Configuration',
-      'organization_management': 'Organization Management',
-      'content_management': 'Content Management'
-    };
+    // Generate display names from structural analysis (no hardcoded business mappings)
+    return this.generateDisplayNameFromStructure(domainId);
+  }
+
+  /**
+   * Generate display name from structural analysis
+   */
+  private generateDisplayNameFromStructure(domainId: string): string {
+    // Extract semantic terms from domain ID
+    const terms = domainId
+      .toLowerCase()
+      .replace(/[_-]/g, ' ')
+      .split(' ')
+      .filter(term => term.length > 0);
     
-    return displayNames[domainId] || domainId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    if (terms.length === 0) {
+      return 'Unknown Domain';
+    }
+    
+    // Infer structural type from terms
+    const structuralType = this.inferStructuralTypeFromTerms(terms);
+    
+    // Capitalize and format terms
+    const formattedTerms = terms.map(term => 
+      term.charAt(0).toUpperCase() + term.slice(1)
+    );
+    
+    // Combine with structural context
+    if (structuralType && !formattedTerms.includes(structuralType)) {
+      return `${formattedTerms.join(' ')} ${structuralType}`;
+    }
+    
+    return formattedTerms.join(' ');
+  }
+
+  /**
+   * Infer structural type from domain terms
+   */
+  private inferStructuralTypeFromTerms(terms: string[]): string {
+    // Structural pattern detection (industry-agnostic)
+    const termSet = new Set(terms);
+    
+    if (termSet.has('user') || termSet.has('account') || termSet.has('auth')) {
+      return 'Management';
+    }
+    if (termSet.has('system') || termSet.has('config') || termSet.has('setting')) {
+      return 'Configuration';
+    }
+    if (termSet.has('process') || termSet.has('workflow') || termSet.has('flow')) {
+      return 'Processing';
+    }
+    if (termSet.has('data') || termSet.has('content') || termSet.has('information')) {
+      return 'Management';
+    }
+    if (termSet.has('report') || termSet.has('analytics') || termSet.has('metric')) {
+      return 'Analytics';
+    }
+    
+    // Default based on common structural patterns
+    if (terms.length === 1) {
+      return 'Domain';
+    }
+    
+    return 'System';
   }
 
   private hashString(str: string): string {

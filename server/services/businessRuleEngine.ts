@@ -1,323 +1,179 @@
 import { type TableData } from '@shared/schema';
 
-export type BusinessDomainType = 
-  | 'user_management'
-  | 'payments_donations' 
-  | 'opportunities'
-  | 'campaigns_marketing'
-  | 'system_configuration'
-  | 'organization_management'
-  | 'content_management'
+// Interface for algorithmic domain classification (no hardcoded business types)
+interface StructuralFeatures {
+  hasHierarchy: boolean;
+  hasTransactionality: boolean;
+  hasTemporalPatterns: boolean;
+  hasUserContext: boolean;
+  centralityScore: number;
+  relationshipDensity: number;
+}
+
+interface ConnectivityMetrics {
+  score: number;
+  hubTables: string[];
+  leafTables: string[];
+  bridgeTables: string[];
+}
+
+// Algorithmic structural domain types (no business assumptions)
+export type StructuralDomainType = 
+  | 'entity_aggregate'     // High-connectivity hub with related entities
+  | 'transactional'        // Sequential processing patterns
+  | 'hierarchical'         // Parent-child tree structures
+  | 'relational'           // Many-to-many relationship patterns
+  | 'temporal'             // Time-series or audit patterns
+  | 'configuration'        // Low-connectivity system tables
   | 'unknown';
 
-export interface DomainPattern {
+// Replace pattern-based approach with structural metrics
+export interface StructuralPattern {
   name: string;
-  patterns: RegExp[];
-  priority: number;
+  structuralType: StructuralDomainType;
+  connectivityThreshold: number;
+  relationshipWeight: number;
   description: string;
 }
 
-export interface BusinessDomainClassification {
-  domainType: BusinessDomainType;
+export interface DomainClassificationResult {
+  structuralType: StructuralDomainType;
   confidence: number;
-  matchingPatterns: string[];
-  suggestedName: string;
+  connectivityScore: number;
+  semanticCohesion: number;
+  industryAgnosticLabel: string;
   description: string;
+  structuralFeatures: StructuralFeatures;
 }
 
-export class BusinessRuleEngine {
+// Algorithmic Domain Classifier - Zero hardcoded business patterns
+export class AlgorithmicDomainClassifier {
   
-  private domainPatterns: Record<BusinessDomainType, DomainPattern> = {
-    user_management: {
-      name: 'User Management',
-      patterns: [
-        /\buser\b/i,
-        /\bauth\b/i,
-        /\brole\b/i,
-        /\bpermission\b/i,
-        /\blogin\b/i,
-        /\bmember\b/i,
-        /\bgroup\b/i,
-        /\baccount\b/i,
-        /\bprofile\b/i,
-        /\bsession\b/i
-      ],
-      priority: 1,
-      description: 'User authentication, authorization, and profile management'
-    },
-    
-    payments_donations: {
-      name: 'Donations and Payments',
-      patterns: [
-        /\bpayment\b/i,
-        /\btransaction\b/i,
-        /\bdonation\b/i,
-        /\bcheckout\b/i,
-        /\bbilling\b/i,
-        /\binvoice\b/i,
-        /\bgiver\b/i,
-        /\bdonor\b/i,
-        /\bpledge\b/i,
-        /\bfund\b/i,
-        /\brefund\b/i,
-        /\breceipt\b/i,
-        /\bstripe\b/i,
-        /\benets\b/i,
-        /\bideal\b/i
-      ],
-      priority: 2,
-      description: 'Payment processing, donations, and financial transactions'
-    },
-    
-    opportunities: {
-      name: 'Opportunities',
-      patterns: [
-        /\bopportunity\b/i,
-        /\bvolunteer\b/i,
-        /\bregistration\b/i,
-        /\bskill\b/i,
-        /\bposition\b/i,
-        /\bapplication\b/i,
-        /\battendance\b/i,
-        /\bvacancy\b/i,
-        /\btimeslot\b/i,
-        /\bhelper\b/i,
-        /\bpartner\b/i,
-        /\bapprove\b/i,
-        /\bsuitable\b/i,
-        /\bproject\b/i,
-        /\brecurring\b/i,
-        /\bregistration\b/i,
-        /\bthreshold\b/i
-      ],
-      priority: 3,
-      description: 'Volunteer opportunities, registrations, and skill matching'
-    },
-    
-    campaigns_marketing: {
-      name: 'Campaigns',
-      patterns: [
-        /\bcampaign\b/i,
-        /\bmarketing\b/i,
-        /\bcontent\b/i,
-        /\barticle\b/i,
-        /\bstory\b/i,
-        /\bevent\b/i,
-        /\btag\b/i,
-        /\bcollection\b/i,
-        /\bbrand\b/i,
-        /\basset\b/i,
-        /\bfeature\b/i
-      ],
-      priority: 4,
-      description: 'Marketing campaigns, content management, and events'
-    },
-    
-    organization_management: {
-      name: 'Users',
-      patterns: [
-        /\bentitygroup\b/i,
-        /\borganisation\b/i,
-        /\borganization\b/i,
-        /\bcharity\b/i,
-        /\bpartner\b/i,
-        /\binvitation\b/i,
-        /\bgroundup\b/i,
-        /\bsector\b/i,
-        /\bentity\b/i
-      ],
-      priority: 5,
-      description: 'Organization setup, partnerships, and entity management'
-    },
-    
-    system_configuration: {
-      name: 'System Management',
-      patterns: [
-        /\baudit\b/i,
-        /\blog\b/i,
-        /\bconfig\b/i,
-        /\bsetting\b/i,
-        /\bfile\b/i,
-        /\breport\b/i,
-        /\bnotification\b/i,
-        /\bsystem\b/i,
-        /\bapi\b/i,
-        /\benvironment\b/i,
-        /\bmenu\b/i,
-        /\bmodule\b/i,
-        /\bapplication\b/i,
-        /\btrail\b/i,
-        /\bsso\b/i
-      ],
-      priority: 6,
-      description: 'System configuration, logging, and administrative functions'
-    },
-    
-    content_management: {
-      name: 'Content Management',
-      patterns: [
-        /\bdocument\b/i,
-        /\bresource\b/i,
-        /\bcategory\b/i,
-        /\btype\b/i,
-        /\bstatus\b/i,
-        /\btemplate\b/i,
-        /\blanguage\b/i,
-        /\bconsent\b/i,
-        /\bredirect\b/i,
-        /\burl\b/i
-      ],
-      priority: 7,
-      description: 'Content, documents, and resource management'
-    },
-    
-    unknown: {
-      name: 'Unknown Domain',
-      patterns: [],
-      priority: 999,
-      description: 'Tables that do not match any recognized business domain'
-    }
+  // Structural thresholds for algorithmic classification
+  private readonly CONNECTIVITY_THRESHOLDS = {
+    HIGH_HUB: 0.7,        // Tables connected to >70% of domain
+    MEDIUM_HUB: 0.4,      // Tables connected to 40-70% of domain
+    LOW_CONNECTIVITY: 0.2  // Tables connected to <20% of domain
   };
+
+  private readonly TRANSACTIONALITY_INDICATORS = [
+    'created_at', 'updated_at', 'timestamp', 'date',
+    'status', 'state', 'processed', 'completed'
+  ];
+
+  private readonly HIERARCHY_INDICATORS = [
+    'parent_id', 'children', 'level', 'depth', 'tree'
+  ];
   
   /**
-   * Classify a group of tables into a business domain
+   * Algorithmically classify domain using structural analysis only
    */
-  public classifyDomain(tables: TableData[]): BusinessDomainClassification {
-    console.log(`🏢 Classifying domain for ${tables.length} tables: [${tables.map(t => t.name).join(', ')}]`);
+  public classifyDomain(tables: TableData[]): DomainClassificationResult {
+    console.log(`🏗️ Algorithmically analyzing ${tables.length} tables: [${tables.map(t => t.name).join(', ')}]`);
     
-    const scores = new Map<BusinessDomainType, number>();
-    const matchedPatterns = new Map<BusinessDomainType, string[]>();
+    // Perform structural analysis
+    const structuralFeatures = this.analyzeStructuralPatterns(tables);
+    const connectivityMetrics = this.calculateConnectivityMetrics(tables);
+    const semanticCohesion = this.calculateSemanticSimilarity(tables);
     
-    // Initialize scores
-    Object.keys(this.domainPatterns).forEach(domain => {
-      scores.set(domain as BusinessDomainType, 0);
-      matchedPatterns.set(domain as BusinessDomainType, []);
-    });
+    // Classify based on structural characteristics
+    const structuralType = this.inferStructuralType(structuralFeatures);
+    const confidence = this.calculateStructuralConfidence(structuralFeatures, connectivityMetrics, semanticCohesion);
+    const industryAgnosticLabel = this.generateAgnosticLabel(structuralFeatures, tables);
     
-    // Score each table against all domain patterns
-    tables.forEach(table => {
-      const tableName = table.name;
-      
-      Object.entries(this.domainPatterns).forEach(([domainType, pattern]) => {
-        const domain = domainType as BusinessDomainType;
-        const matches = this.matchTableAgainstPattern(tableName, pattern);
-        
-        if (matches.length > 0) {
-          const currentScore = scores.get(domain) || 0;
-          const currentPatterns = matchedPatterns.get(domain) || [];
-          
-          scores.set(domain, currentScore + matches.length);
-          matchedPatterns.set(domain, [...currentPatterns, ...matches]);
-        }
-      });
-    });
-    
-    // Find the best match
-    let bestDomain: BusinessDomainType = 'unknown';
-    let bestScore = 0;
-    let bestPatterns: string[] = [];
-    
-    scores.forEach((score, domain) => {
-      if (domain !== 'unknown' && score > bestScore) {
-        bestScore = score;
-        bestDomain = domain;
-        bestPatterns = matchedPatterns.get(domain) || [];
-      }
-    });
-    
-    // Calculate confidence based on coverage and strength
-    const confidence = this.calculateConfidence(tables, bestScore, bestPatterns);
-    const suggestedName = this.generateDomainName(bestDomain, bestPatterns, tables);
-    
-    console.log(`   ✅ Classification: ${bestDomain} (confidence: ${confidence.toFixed(2)}, patterns: ${bestPatterns.length})`);
+    console.log(`   ✅ Structural classification: ${structuralType} (confidence: ${confidence.toFixed(2)})`);
     
     return {
-      domainType: bestDomain,
+      structuralType,
       confidence,
-      matchingPatterns: bestPatterns,
-      suggestedName,
-      description: this.domainPatterns[bestDomain].description
+      connectivityScore: connectivityMetrics.score,
+      semanticCohesion,
+      industryAgnosticLabel,
+      description: this.getStructuralDescription(structuralType),
+      structuralFeatures
     };
   }
   
   /**
-   * Match table name against domain pattern
+   * Analyze structural patterns in table group using algorithms
    */
-  private matchTableAgainstPattern(tableName: string, pattern: DomainPattern): string[] {
-    const matches: string[] = [];
+  private analyzeStructuralPatterns(tables: TableData[]): StructuralFeatures {
+    const hasHierarchy = this.detectHierarchicalPatterns(tables);
+    const hasTransactionality = this.detectTransactionalPatterns(tables);
+    const hasTemporalPatterns = this.detectTemporalPatterns(tables);
+    const hasUserContext = this.detectUserContextPatterns(tables);
+    const centralityScore = this.calculateCentralityScore(tables);
+    const relationshipDensity = this.calculateRelationshipDensity(tables);
     
-    pattern.patterns.forEach(regex => {
-      if (regex.test(tableName)) {
-        matches.push(regex.source);
+    return {
+      hasHierarchy,
+      hasTransactionality,
+      hasTemporalPatterns,
+      hasUserContext,
+      centralityScore,
+      relationshipDensity
+    };
+  }
+  
+  /**
+   * Calculate structural connectivity metrics
+   */
+  private calculateConnectivityMetrics(tables: TableData[]): ConnectivityMetrics {
+    const hubTables: string[] = [];
+    const leafTables: string[] = [];
+    const bridgeTables: string[] = [];
+    
+    // Analyze each table's connectivity patterns
+    tables.forEach(table => {
+      const foreignKeys = table.columns.filter(col => col.foreignKey).length;
+      const referencingTables = this.countReferencingTables(table, tables);
+      const totalConnections = foreignKeys + referencingTables;
+      const connectivityRatio = totalConnections / Math.max(tables.length - 1, 1);
+      
+      if (connectivityRatio >= this.CONNECTIVITY_THRESHOLDS.HIGH_HUB) {
+        hubTables.push(table.name);
+      } else if (connectivityRatio <= this.CONNECTIVITY_THRESHOLDS.LOW_CONNECTIVITY) {
+        leafTables.push(table.name);
+      } else if (foreignKeys > 0 && referencingTables > 0) {
+        bridgeTables.push(table.name);
       }
     });
     
-    return matches;
+    const score = (hubTables.length * 3 + bridgeTables.length * 2 + leafTables.length) / (tables.length * 3);
+    
+    return { score, hubTables, leafTables, bridgeTables };
   }
   
   /**
-   * Calculate confidence score for domain classification
+   * Generate industry-agnostic domain label based on structural analysis
    */
-  private calculateConfidence(
-    tables: TableData[], 
-    matchScore: number, 
-    matchedPatterns: string[]
-  ): number {
-    if (matchScore === 0) return 0;
+  private generateAgnosticLabel(features: StructuralFeatures, tables: TableData[]): string {
+    const concepts = this.extractStructuralConcepts(tables);
+    const structuralRole = this.inferStructuralRole(features);
     
-    // Base confidence from pattern matches
-    const patternCoverage = matchedPatterns.length / tables.length;
-    const baseConfidence = Math.min(patternCoverage * 0.8, 0.8);
-    
-    // Bonus for strong pattern matches
-    const patternStrengthBonus = Math.min(matchScore / tables.length * 0.2, 0.2);
-    
-    return Math.min(baseConfidence + patternStrengthBonus, 1.0);
-  }
-  
-  /**
-   * Generate a meaningful domain name
-   */
-  private generateDomainName(
-    domainType: BusinessDomainType, 
-    patterns: string[], 
-    tables: TableData[]
-  ): string {
-    // Use predefined name if confidence is high
-    if (patterns.length >= 2) {
-      return this.domainPatterns[domainType].name;
-    }
-    
-    // Generate custom name based on table analysis
-    const concepts = this.extractBusinessConcepts(tables);
     if (concepts.length > 0) {
-      if (concepts.length === 1) {
-        return `${concepts[0]} Management`;
-      } else if (concepts.length === 2) {
-        return `${concepts[0]} & ${concepts[1]}`;
-      } else {
-        return `${concepts[0]}, ${concepts[1]} & ${concepts[2]}`;
-      }
+      const primaryConcept = concepts[0];
+      return `${primaryConcept} ${structuralRole}`;
     }
     
-    // Fallback to domain type name
-    return this.domainPatterns[domainType].name;
+    // Fallback to pure structural description
+    return `${structuralRole} Domain`;
   }
   
   /**
-   * Extract business concepts from table names
+   * Extract structural concepts from table names (no business assumptions)
    */
-  private extractBusinessConcepts(tables: TableData[]): string[] {
+  private extractStructuralConcepts(tables: TableData[]): string[] {
     const conceptMap = new Map<string, number>();
     
     tables.forEach(table => {
       const tableName = table.name.toLowerCase();
       
-      // Extract meaningful words (skip common suffixes/prefixes)
+      // Extract meaningful words (skip technical suffixes/prefixes)
       const words = tableName
         .split(/[_\s]+/)
         .filter(word => word.length > 2)
-        .filter(word => !['log', 'type', 'status', 'history', 'audit'].includes(word))
+        .filter(word => !['log', 'type', 'status', 'history', 'audit', 'config', 'setting'].includes(word))
         .map(word => this.capitalizeFirst(word));
       
       words.forEach(word => {
@@ -333,20 +189,25 @@ export class BusinessRuleEngine {
   }
   
   /**
-   * Check if domain should remain separate (avoid merging cross-domain references)
+   * Algorithmically determine if domains should remain separate
    */
   public shouldKeepDomainsSeparate(
-    domain1Classification: BusinessDomainClassification,
-    domain2Classification: BusinessDomainClassification
+    domain1: DomainClassificationResult,
+    domain2: DomainClassificationResult
   ): boolean {
-    // Always keep user management separate
-    if (domain1Classification.domainType === 'user_management' || 
-        domain2Classification.domainType === 'user_management') {
+    // Keep domains with different structural types separate
+    if (domain1.structuralType !== domain2.structuralType) {
       return true;
     }
     
-    // Keep high-confidence domains separate
-    if (domain1Classification.confidence > 0.7 && domain2Classification.confidence > 0.7) {
+    // Keep high-confidence domains with low semantic similarity separate
+    if (domain1.confidence > 0.7 && domain2.confidence > 0.7 && 
+        Math.abs(domain1.semanticCohesion - domain2.semanticCohesion) > 0.3) {
+      return true;
+    }
+    
+    // Keep domains with very different connectivity patterns separate
+    if (Math.abs(domain1.connectivityScore - domain2.connectivityScore) > 0.5) {
       return true;
     }
     
@@ -354,21 +215,248 @@ export class BusinessRuleEngine {
   }
   
   /**
-   * Get minimum domain size for a domain type
+   * Get minimum domain size based on structural complexity
    */
-  public getMinimumDomainSize(domainType: BusinessDomainType): number {
-    const minimumSizes: Record<BusinessDomainType, number> = {
-      'user_management': 3,
-      'payments_donations': 5,
-      'opportunities': 3,
-      'campaigns_marketing': 4,
-      'organization_management': 3,
-      'system_configuration': 2,
-      'content_management': 2,
+  public getMinimumDomainSize(structuralType: StructuralDomainType): number {
+    // Algorithmic sizing based on structural characteristics
+    const algorithmicSizes: Record<StructuralDomainType, number> = {
+      'entity_aggregate': 4,    // Requires multiple related entities
+      'transactional': 3,       // Needs process flow tables
+      'hierarchical': 3,        // Requires parent-child relationships
+      'relational': 2,          // Basic many-to-many patterns
+      'temporal': 2,            // Time-series or audit patterns
+      'configuration': 1,       // Can be standalone
       'unknown': 1
     };
     
-    return minimumSizes[domainType];
+    return algorithmicSizes[structuralType];
+  }
+
+  // === ALGORITHMIC HELPER METHODS (NO HARDCODED PATTERNS) ===
+
+  /**
+   * Detect hierarchical patterns using structural analysis
+   */
+  private detectHierarchicalPatterns(tables: TableData[]): boolean {
+    return tables.some(table => {
+      const columnNames = table.columns.map(col => col.name.toLowerCase());
+      return this.HIERARCHY_INDICATORS.some(indicator => 
+        columnNames.some(name => name.includes(indicator))
+      );
+    });
+  }
+
+  /**
+   * Detect transactional patterns using structural analysis
+   */
+  private detectTransactionalPatterns(tables: TableData[]): boolean {
+    return tables.some(table => {
+      const columnNames = table.columns.map(col => col.name.toLowerCase());
+      const hasStatusField = columnNames.some(name => name.includes('status') || name.includes('state'));
+      const hasTimestamp = columnNames.some(name => 
+        this.TRANSACTIONALITY_INDICATORS.some(indicator => name.includes(indicator))
+      );
+      return hasStatusField && hasTimestamp;
+    });
+  }
+
+  /**
+   * Detect temporal patterns using column analysis
+   */
+  private detectTemporalPatterns(tables: TableData[]): boolean {
+    const temporalKeywords = ['created_at', 'updated_at', 'timestamp', 'date', 'time'];
+    return tables.some(table => {
+      const columnNames = table.columns.map(col => col.name.toLowerCase());
+      return temporalKeywords.some(keyword => 
+        columnNames.some(name => name.includes(keyword))
+      );
+    });
+  }
+
+  /**
+   * Detect user context patterns using structural analysis
+   */
+  private detectUserContextPatterns(tables: TableData[]): boolean {
+    // Look for user_id, account_id, or similar identity patterns
+    const identityPatterns = ['user_id', 'account_id', 'member_id', 'person_id', 'entity_id'];
+    return tables.some(table => {
+      const columnNames = table.columns.map(col => col.name.toLowerCase());
+      return identityPatterns.some(pattern => 
+        columnNames.some(name => name === pattern || name.endsWith('_' + pattern))
+      );
+    });
+  }
+
+  /**
+   * Calculate centrality score based on relationship patterns
+   */
+  private calculateCentralityScore(tables: TableData[]): number {
+    if (tables.length <= 1) return 0;
+    
+    let totalConnections = 0;
+    let maxPossibleConnections = 0;
+    
+    tables.forEach(table => {
+      const foreignKeys = table.columns.filter(col => col.foreignKey).length;
+      const referencingTables = this.countReferencingTables(table, tables);
+      totalConnections += (foreignKeys + referencingTables);
+      maxPossibleConnections += (tables.length - 1) * 2; // max possible bidirectional connections
+    });
+    
+    return maxPossibleConnections > 0 ? totalConnections / maxPossibleConnections : 0;
+  }
+
+  /**
+   * Calculate relationship density in domain
+   */
+  private calculateRelationshipDensity(tables: TableData[]): number {
+    if (tables.length <= 1) return 0;
+    
+    const totalRelationships = tables.reduce((sum, table) => {
+      return sum + table.columns.filter(col => col.foreignKey).length;
+    }, 0);
+    
+    const maxPossibleRelationships = tables.length * (tables.length - 1);
+    return maxPossibleRelationships > 0 ? totalRelationships / maxPossibleRelationships : 0;
+  }
+
+  /**
+   * Count tables that reference this table
+   */
+  private countReferencingTables(targetTable: TableData, allTables: TableData[]): number {
+    return allTables.filter(table => 
+      table.name !== targetTable.name && 
+      table.columns.some(col => 
+        col.foreignKey && col.foreignKey.table === targetTable.name
+      )
+    ).length;
+  }
+
+  /**
+   * Calculate semantic similarity score using structural features
+   */
+  private calculateSemanticSimilarity(tables: TableData[]): number {
+    if (tables.length <= 1) return 1.0;
+    
+    // Extract common word stems from table names
+    const allWords = tables.flatMap(table => 
+      table.name.toLowerCase().split(/[_\s]+/).filter(word => word.length > 2)
+    );
+    
+    const wordFrequency = new Map<string, number>();
+    allWords.forEach(word => {
+      wordFrequency.set(word, (wordFrequency.get(word) || 0) + 1);
+    });
+    
+    // Calculate cohesion based on shared terminology
+    const commonWords = Array.from(wordFrequency.entries())
+      .filter(([_, count]) => count > 1)
+      .length;
+    
+    const uniqueWords = wordFrequency.size;
+    return uniqueWords > 0 ? commonWords / uniqueWords : 0;
+  }
+
+  /**
+   * Infer structural type from features
+   */
+  private inferStructuralType(features: StructuralFeatures): StructuralDomainType {
+    // Algorithmic classification based on structural characteristics
+    if (features.hasHierarchy && features.centralityScore > 0.3) {
+      return 'hierarchical';
+    }
+    
+    if (features.hasTransactionality && features.hasTemporalPatterns) {
+      return 'transactional';
+    }
+    
+    if (features.centralityScore > 0.6 && features.relationshipDensity > 0.4) {
+      return 'entity_aggregate';
+    }
+    
+    if (features.relationshipDensity > 0.5) {
+      return 'relational';
+    }
+    
+    if (features.hasTemporalPatterns && features.centralityScore < 0.3) {
+      return 'temporal';
+    }
+    
+    if (features.centralityScore < 0.2 && features.relationshipDensity < 0.2) {
+      return 'configuration';
+    }
+    
+    return 'unknown';
+  }
+
+  /**
+   * Calculate structural confidence score
+   */
+  private calculateStructuralConfidence(
+    features: StructuralFeatures,
+    connectivity: ConnectivityMetrics,
+    semanticCohesion: number
+  ): number {
+    // Base confidence from structural clarity
+    let baseConfidence = 0.3;
+    
+    // Bonus for clear structural patterns
+    if (features.hasHierarchy || features.hasTransactionality) {
+      baseConfidence += 0.2;
+    }
+    
+    // Bonus for good connectivity patterns
+    if (connectivity.score > 0.3) {
+      baseConfidence += 0.2;
+    }
+    
+    // Bonus for semantic cohesion
+    if (semanticCohesion > 0.3) {
+      baseConfidence += 0.2;
+    }
+    
+    // Bonus for multiple structural indicators
+    const structuralIndicators = [
+      features.hasHierarchy,
+      features.hasTransactionality,
+      features.hasTemporalPatterns,
+      features.hasUserContext
+    ].filter(Boolean).length;
+    
+    if (structuralIndicators >= 2) {
+      baseConfidence += 0.1;
+    }
+    
+    return Math.min(baseConfidence, 1.0);
+  }
+
+  /**
+   * Infer structural role from features
+   */
+  private inferStructuralRole(features: StructuralFeatures): string {
+    if (features.hasHierarchy) return 'Hierarchy';
+    if (features.hasTransactionality) return 'Processing';
+    if (features.centralityScore > 0.6) return 'Hub';
+    if (features.relationshipDensity > 0.5) return 'Network';
+    if (features.hasTemporalPatterns) return 'Timeline';
+    return 'Cluster';
+  }
+
+  /**
+   * Get structural description for domain type
+   */
+  private getStructuralDescription(structuralType: StructuralDomainType): string {
+    const descriptions: Record<StructuralDomainType, string> = {
+      'entity_aggregate': 'High-connectivity entity cluster with central hub tables',
+      'transactional': 'Sequential processing domain with state transitions',
+      'hierarchical': 'Parent-child tree structure with nested relationships',
+      'relational': 'Many-to-many relationship patterns with distributed connectivity',
+      'temporal': 'Time-series or audit domain with temporal ordering',
+      'configuration': 'Low-connectivity system configuration and settings',
+      'unknown': 'Unstructured domain with unclear relationship patterns'
+    };
+    
+    return descriptions[structuralType];
   }
   
   /**
@@ -379,5 +467,8 @@ export class BusinessRuleEngine {
   }
 }
 
-// Export singleton instance
-export const businessRuleEngine = new BusinessRuleEngine();
+// Export singleton instance with new algorithmic classifier
+export const algorithmicDomainClassifier = new AlgorithmicDomainClassifier();
+
+// Backward compatibility alias
+export const businessRuleEngine = algorithmicDomainClassifier;

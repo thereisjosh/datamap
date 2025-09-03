@@ -1,8 +1,10 @@
 import { type TableData, type Relationship } from '@shared/schema';
 import Graph from 'graphology';
 import { relationshipAnalyzer, type RelationshipWeight } from './relationshipAnalyzer';
-import { businessRuleEngine, type BusinessDomainClassification } from './businessRuleEngine';
+import { algorithmicDomainClassifier as businessRuleEngine, type DomainClassificationResult } from './businessRuleEngine';
 import { intelligentDomainAnalyzer, type EnhancedDomainCluster } from './intelligentDomainAnalyzer';
+import { vectorClusteringService } from './vectorClusteringService';
+import { domainPersistenceService } from './domainPersistenceService';
 
 export interface TableDomainMembership {
   tableName: string;
@@ -21,7 +23,7 @@ export interface MultiDomainCluster {
   internalConnections: number;
   externalConnections: Map<string, number>;
   cohesionScore: number;
-  businessClassification: BusinessDomainClassification;
+  businessClassification: DomainClassificationResult;
   suggestedColor: string;
   coreTables: number;
   totalTables: number;
@@ -63,30 +65,26 @@ export class AdvancedDomainAnalyzer {
    * Main entry point: Discover overlapping domains using multi-domain analysis
    * Enhanced with AI-powered semantic understanding when enabled
    */
-  public async discoverDomains(tables: TableData[], relationships: Relationship[]): Promise<AdvancedTableCluster[]> {
+  public async discoverDomains(tables: TableData[], relationships: Relationship[], projectId?: string): Promise<AdvancedTableCluster[]> {
     const startTime = Date.now();
     console.log(`🔬 Multi-domain discovery for ${tables.length} tables, ${relationships.length} relationships`);
     
-    // Check if AI-enhanced clustering is enabled
-    const useIntelligentClustering = process.env.USE_INTELLIGENT_CLUSTERING === 'true';
+    // DEPRECATED: Old intelligent clustering system (disabled to prevent interference with hybrid system)
+    // The new hybrid clustering system in contextualSchemaAnalyzer.ts is the primary approach
+    const useIntelligentClustering = false; // Permanently disabled - was: process.env.USE_INTELLIGENT_CLUSTERING === 'true'
     
-    if (useIntelligentClustering) {
-      console.log(`🧠 AI-enhanced domain clustering enabled`);
+    if (useIntelligentClustering && projectId) {
+      console.warn(`⚠️ USE_INTELLIGENT_CLUSTERING is deprecated and disabled`);
+      console.warn(`   The new hybrid clustering system provides superior results`);
+      console.warn(`   Please use contextualSchemaAnalyzer for domain analysis`);
       
-      try {
-        // Use AI-powered domain clustering
-        const aiClusters = await this.discoverDomainsWithAI(tables, relationships);
-        
-        const duration = Date.now() - startTime;
-        console.log(`⚡ AI-enhanced domain discovery completed in ${duration}ms`);
-        
-        this.logFinalResults(aiClusters);
-        return aiClusters;
-        
-      } catch (error) {
-        console.error('❌ AI-enhanced clustering failed, falling back to traditional clustering:', error);
-        // Fall through to traditional clustering
-      }
+      // This code path is now unreachable but kept for reference
+      // The hybrid clustering system replaces this entire approach
+      
+    } else if (process.env.USE_INTELLIGENT_CLUSTERING === 'true') {
+      console.warn(`⚠️ USE_INTELLIGENT_CLUSTERING environment variable detected but disabled`);
+      console.warn(`   This system has been replaced by the hybrid clustering approach`);
+      console.warn(`   Set USE_HYBRID_CLUSTERING=false to disable the new system if needed`);
     }
     
     // Traditional multi-domain clustering (fallback or when AI is disabled)
@@ -116,7 +114,55 @@ export class AdvancedDomainAnalyzer {
   }
   
   /**
-   * AI-Enhanced Domain Discovery using semantic understanding
+   * Vector-Based Domain Discovery using semantic embeddings
+   */
+  private async discoverDomainsWithVectors(tables: TableData[], relationships: Relationship[], projectId: string): Promise<AdvancedTableCluster[]> {
+    console.log(`🔗 Starting vector-based domain analysis...`);
+    
+    try {
+      // Step 1: Convert TableData to TableInfo format for vector service
+      const tableInfos = tables.map(table => ({
+        name: table.name,
+        columns: table.attributes.map(col => ({
+          name: col.name,
+          type: col.type,
+          nullable: col.nullable,
+          defaultValue: col.defaultValue,
+        })),
+        primaryKeys: table.primaryKeys || [],
+        foreignKeys: relationships
+          .filter(rel => rel.fromTable === table.name)
+          .map(rel => `${rel.fromColumn} -> ${rel.toTable}.${rel.toColumn}`),
+      }));
+      
+      // Step 2: Perform vector clustering with relationships for context
+      const vectorResult = await vectorClusteringService.performVectorClusteringWithContext(tableInfos, relationships);
+      console.log(`   ✅ Vector clustering created ${vectorResult.clusters.length} clusters`);
+      
+      // Step 3: Store results in database for future use
+      const embeddings = await vectorClusteringService.generateTableEmbeddings(tableInfos);
+      await domainPersistenceService.storeDomainClustering(projectId, vectorResult, embeddings);
+      console.log(`   💾 Stored domain clustering for project ${projectId}`);
+      
+      // Step 4: Convert vector clusters to standard format
+      const vectorClusters = this.convertVectorClustersToStandard(tables, vectorResult, relationships);
+      
+      // Step 5: Post-process with relationship analysis for compatibility
+      const finalClusters = this.postProcessClusters(vectorClusters, relationships);
+      
+      console.log(`   🎯 Vector clustering completed with ${finalClusters.length} final domains`);
+      
+      return finalClusters;
+      
+    } catch (error) {
+      console.error('❌ Vector domain analysis failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * AI-Enhanced Domain Discovery using semantic understanding (Legacy)
+   * @deprecated Use discoverDomainsWithVectors for better performance
    */
   private async discoverDomainsWithAI(tables: TableData[], relationships: Relationship[]): Promise<AdvancedTableCluster[]> {
     console.log(`🧠 Starting AI-enhanced domain analysis...`);
@@ -239,26 +285,135 @@ export class AdvancedDomainAnalyzer {
   }
   
   /**
+   * Convert vector clusters to standard cluster format
+   */
+  private convertVectorClustersToStandard(
+    tables: TableData[],
+    vectorResult: any, // VectorClusteringResult
+    relationships: Relationship[]
+  ): AdvancedTableCluster[] {
+    const tableMap = new Map(tables.map(table => [table.name, table]));
+    const clusters: AdvancedTableCluster[] = [];
+    
+    vectorResult.clusters.forEach((vectorCluster: any, index: number) => {
+      // Get actual table objects for this cluster
+      const clusterTables: TableData[] = [];
+      const clusterTableNames = new Set<string>();
+      
+      vectorCluster.tables.forEach((tableEmbedding: any) => {
+        const table = tableMap.get(tableEmbedding.tableName);
+        if (table) {
+          clusterTables.push(table);
+          clusterTableNames.add(table.name);
+        }
+      });
+      
+      if (clusterTables.length === 0) {
+        console.warn(`⚠️ Vector cluster "${vectorCluster.suggestedDomainName}" has no valid tables, skipping`);
+        return;
+      }
+      
+      // Create business classification from vector cluster
+      const businessClassification: DomainClassificationResult = {
+        structuralType: 'unknown', // TODO: Map vectorCluster to structural type
+        confidence: vectorCluster.coherenceScore,
+        connectivityScore: 0.5, // TODO: Calculate from vector cluster
+        semanticCohesion: vectorCluster.coherenceScore,
+        industryAgnosticLabel: vectorCluster.suggestedDomainName,
+        description: vectorCluster.businessPurpose,
+        structuralFeatures: {
+          hasHierarchy: false,
+          hasTransactionality: false,
+          hasTemporalPatterns: false,
+          hasUserContext: false,
+          centralityScore: 0.5,
+          relationshipDensity: 0.5
+        }
+      };
+      
+      // Create memberships map (all tables in vector cluster have equal membership)
+      const tableMemberships = new Map<string, number>();
+      clusterTableNames.forEach(tableName => {
+        tableMemberships.set(tableName, vectorCluster.coherenceScore);
+      });
+      
+      // Create standard cluster with vector enhancement metadata
+      const cluster: AdvancedTableCluster = {
+        // Standard properties
+        id: `vector_${index}`,
+        name: vectorCluster.suggestedDomainName,
+        description: vectorCluster.businessPurpose,
+        tables: clusterTables,
+        tableNames: clusterTableNames,
+        
+        // Multi-domain properties
+        coreTableNames: clusterTableNames, // All tables are considered core in vector clustering
+        allTableNames: clusterTableNames,
+        tableMemberships,
+        coreTables: clusterTableNames.size,
+        totalTables: clusterTableNames.size,
+        
+        // Legacy properties (will be calculated in post-processing)
+        internalConnections: 0,
+        externalConnections: new Map(),
+        cohesionScore: vectorCluster.coherenceScore,
+        modularityScore: vectorCluster.coherenceScore,
+        businessClassification,
+        suggestedColor: this.generateColor(index),
+        size: clusterTables.length,
+        
+        // AI Enhancement properties
+        aiEnhanced: true,
+        explanations: {
+          purpose: vectorCluster.businessPurpose,
+          coreTableReasons: new Map(
+            [...clusterTableNames].map(name => [
+              name, 
+              `Semantically clustered with ${vectorCluster.coherenceScore.toFixed(3)} coherence score`
+            ])
+          ),
+          contextualTableReasons: new Map(),
+          junctionTableReasons: new Map(),
+          excludedTableReasons: new Map(),
+        },
+        confidenceScore: vectorCluster.coherenceScore,
+        businessMetrics: {
+          completeness: vectorCluster.coherenceScore,
+          independence: 0.8, // Default for vector clustering
+          usability: vectorCluster.coherenceScore * 0.9,
+        },
+      };
+      
+      clusters.push(cluster);
+    });
+    
+    return clusters;
+  }
+  
+  /**
    * Create business classification from enhanced cluster
    */
-  private createBusinessClassification(enhanced: EnhancedDomainCluster): BusinessDomainClassification {
-    // Map enhanced domain ID to business domain type
-    const domainTypeMap: Record<string, string> = {
-      'user_management': 'user_management',
-      'payments_donations': 'payments_donations',
-      'opportunities': 'opportunities',
-      'campaigns_marketing': 'campaigns_marketing',
-      'system_configuration': 'system_configuration',
-      'organization_management': 'organization_management',
-      'content_management': 'content_management'
-    };
+  private createBusinessClassification(enhanced: EnhancedDomainCluster): DomainClassificationResult {
+    // Use structural analysis instead of hardcoded mappings
+    const structuralType = this.inferStructuralTypeFromCluster(enhanced);
+    const connectivityScore = this.calculateConnectivityScore(enhanced);
+    const semanticCohesion = this.calculateSemanticCohesion(enhanced);
     
     return {
-      domainType: (domainTypeMap[enhanced.id] || 'unknown') as any,
+      structuralType,
       confidence: enhanced.confidenceScore,
-      matchingPatterns: [], // AI doesn't use patterns
-      suggestedName: enhanced.displayName,
-      description: enhanced.purpose
+      connectivityScore,
+      semanticCohesion,
+      industryAgnosticLabel: enhanced.displayName,
+      description: enhanced.purpose,
+      structuralFeatures: {
+        hasHierarchy: this.detectHierarchyInCluster(enhanced),
+        hasTransactionality: this.detectTransactionalityInCluster(enhanced),
+        hasTemporalPatterns: this.detectTemporalPatternsInCluster(enhanced),
+        hasUserContext: this.detectUserContextInCluster(enhanced),
+        centralityScore: enhanced.confidenceScore,
+        relationshipDensity: connectivityScore
+      }
     };
   }
   
@@ -386,55 +541,25 @@ export class AdvancedDomainAnalyzer {
   ): { id: string; name: string; seedTables: string[]; domainType: string }[] {
     const coreDomains: { id: string; name: string; seedTables: string[]; domainType: string }[] = [];
     
-    // Define business domain patterns with seed tables
-    const domainPatterns = [
-      {
-        id: 'donations_payments',
-        name: 'Donations and Payments',
-        domainType: 'payments_donations',
-        patterns: [/donation/i, /payment/i, /transaction/i, /checkout/i, /refund/i, /pledge/i, /recurring/i]
-      },
-      {
-        id: 'opportunities_volunteer',
-        name: 'Opportunities', 
-        domainType: 'opportunities',
-        patterns: [/opportunity/i, /volunteer/i, /registration/i, /helper/i, /partner/i, /skill/i, /position/i, /attendance/i]
-      },
-      {
-        id: 'campaigns_marketing',
-        name: 'Campaigns',
-        domainType: 'campaigns_marketing', 
-        patterns: [/campaign/i, /article/i, /marketing/i, /brand/i, /asset/i, /story/i, /event/i]
-      },
-      {
-        id: 'user_organization',
-        name: 'Users',
-        domainType: 'organization_management',
-        patterns: [/user/i, /entity/i, /organization/i, /auth/i, /permission/i, /role/i, /group/i, /giver/i]
-      },
-      {
-        id: 'system_config',
-        name: 'System Management',
-        domainType: 'system_configuration',
-        patterns: [/batch/i, /status/i, /type/i, /config/i, /log/i, /audit/i, /api/i, /file/i, /sequence/i]
-      }
-    ];
+    // Use graph-based community detection instead of business patterns
+    const connectivityGraph = this.buildConnectivityGraph(tables, weights);
+    const communities = this.detectCommunities(connectivityGraph);
     
-    // Find seed tables for each domain
-    domainPatterns.forEach(pattern => {
-      const seedTables = tables.filter(table => 
-        pattern.patterns.some(p => p.test(table.name))
-      ).map(t => t.name);
+    console.log(`🏗️ Detected ${communities.length} structural communities using graph analysis`);
+    
+    // Generate domains from structural communities
+    communities.forEach((community, index) => {
+      const structuralAnalysis = this.analyzeStructuralCharacteristics(community);
+      const semanticLabel = this.generateSemanticLabel(community);
       
-      if (seedTables.length > 0) {
-        coreDomains.push({
-          id: pattern.id,
-          name: pattern.name,
-          seedTables,
-          domainType: pattern.domainType
-        });
-        console.log(`   Core domain "${pattern.name}": ${seedTables.length} seed tables`);
-      }
+      coreDomains.push({
+        id: `structural_domain_${index + 1}`,
+        name: semanticLabel,
+        seedTables: community.map(table => table.name),
+        domainType: structuralAnalysis.structuralType
+      });
+      
+      console.log(`   Structural domain "${semanticLabel}": ${community.length} tables (type: ${structuralAnalysis.structuralType})`);
     });
     
     return coreDomains;
@@ -528,19 +653,9 @@ export class AdvancedDomainAnalyzer {
       return 1.0;
     }
     
-    // Define domain-specific patterns
-    const domainPatterns: Record<string, RegExp[]> = {
-      'donations_payments': [/donation/i, /payment/i, /transaction/i, /checkout/i, /refund/i, /pledge/i, /recurring/i, /bank/i, /fee/i],
-      'opportunities': [/opportunity/i, /volunteer/i, /registration/i, /helper/i, /partner/i, /skill/i, /position/i, /attendance/i, /suitable/i, /approve/i],
-      'campaigns_marketing': [/campaign/i, /article/i, /marketing/i, /brand/i, /asset/i, /story/i, /event/i, /content/i, /collection/i],
-      'organization_management': [/user/i, /entity/i, /organization/i, /auth/i, /permission/i, /role/i, /group/i, /giver/i, /member/i, /sector/i],
-      'system_configuration': [/batch/i, /status/i, /type/i, /config/i, /log/i, /audit/i, /api/i, /file/i, /sequence/i, /system/i, /app/i]
-    };
-    
-    const patterns = domainPatterns[domain.domainType] || [];
-    const matchingPatterns = patterns.filter(pattern => pattern.test(lowerName));
-    
-    return matchingPatterns.length > 0 ? Math.min(matchingPatterns.length * 0.3, 1.0) : 0;
+    // Use semantic similarity instead of hardcoded patterns
+    const semanticStrength = this.calculateSemanticPatternStrength(tableName, domain);
+    return semanticStrength;
   }
   
   /**
@@ -632,12 +747,21 @@ export class AdvancedDomainAnalyzer {
       
       if (allTableNames.size > 0) {
         // Create business classification for this domain
-        const businessClassification: BusinessDomainClassification = {
-          domainType: coreDomain.domainType,
-          suggestedName: coreDomain.name,
+        const businessClassification: DomainClassificationResult = {
+          structuralType: 'unknown', // TODO: Map coreDomain.domainType to structural type
+          industryAgnosticLabel: coreDomain.name,
           description: `Multi-domain cluster for ${coreDomain.name}`,
           confidence: coreTableNames.size / allTableNames.size, // Core ratio as confidence
-          patterns: []
+          connectivityScore: 0.5,
+          semanticCohesion: 0.5,
+          structuralFeatures: {
+            hasHierarchy: false,
+            hasTransactionality: false,
+            hasTemporalPatterns: false,
+            hasUserContext: false,
+            centralityScore: 0.5,
+            relationshipDensity: 0.5
+          }
         };
         
         const domain: MultiDomainCluster = {
@@ -824,24 +948,25 @@ export class AdvancedDomainAnalyzer {
     
     clusters.forEach((cluster, index) => {
       console.log(`\n📊 Domain ${index + 1}: "${cluster.name}"`);
-      console.log(`   Type: ${cluster.businessClassification.domainType}`);
-      console.log(`   Core tables: ${cluster.coreTables} | Total participating: ${cluster.totalTables}`);
-      console.log(`   Primary tables: ${cluster.size} (cohesion: ${cluster.cohesionScore.toFixed(2)})`);
-      console.log(`   Confidence: ${cluster.businessClassification.confidence.toFixed(2)}`);
-      console.log(`   Internal connections: ${cluster.internalConnections}`);
-      console.log(`   External connections: ${Array.from(cluster.externalConnections.values()).reduce((sum, count) => sum + count, 0)}`);
+      console.log(`   Type: ${cluster.businessClassification?.structuralType || 'unknown'}`);
+      console.log(`   Core tables: ${cluster.coreTables || 0} | Total participating: ${cluster.totalTables || 0}`);
+      console.log(`   Primary tables: ${cluster.size || 0} (cohesion: ${cluster.cohesionScore?.toFixed(2) || '0.00'})`);
+      console.log(`   Confidence: ${cluster.businessClassification?.confidence?.toFixed(2) || '0.00'}`);
+      console.log(`   Internal connections: ${cluster.internalConnections || 0}`);
+      console.log(`   External connections: ${cluster.externalConnections ? Array.from(cluster.externalConnections.values()).reduce((sum, count) => sum + count, 0) : 0}`);
       
       // Show core vs secondary tables
-      if (cluster.coreTables <= 15) {
-        console.log(`   Core tables: [${Array.from(cluster.coreTableNames).join(', ')}]`);
-        if (cluster.totalTables > cluster.coreTables) {
-          const secondaryTables = Array.from(cluster.allTableNames).filter(t => !cluster.coreTableNames.has(t));
+      if ((cluster.coreTables || 0) <= 15) {
+        console.log(`   Core tables: [${cluster.coreTableNames ? Array.from(cluster.coreTableNames).join(', ') : ''}]`);
+        if ((cluster.totalTables || 0) > (cluster.coreTables || 0)) {
+          const secondaryTables = cluster.allTableNames && cluster.coreTableNames ? 
+            Array.from(cluster.allTableNames).filter(t => !cluster.coreTableNames?.has(t)) : [];
           console.log(`   Secondary tables: [${secondaryTables.slice(0, 8).join(', ')}${secondaryTables.length > 8 ? `, ... +${secondaryTables.length - 8} more` : ''}]`);
         }
       } else {
-        const coreList = Array.from(cluster.coreTableNames);
+        const coreList = cluster.coreTableNames ? Array.from(cluster.coreTableNames) : [];
         console.log(`   Core tables: [${coreList.slice(0, 10).join(', ')}, ... +${coreList.length - 10} more]`);
-        console.log(`   Secondary tables: ${cluster.totalTables - cluster.coreTables} additional participating tables`);
+        console.log(`   Secondary tables: ${(cluster.totalTables || 0) - (cluster.coreTables || 0)} additional participating tables`);
       }
     });
     
@@ -859,6 +984,228 @@ export class AdvancedDomainAnalyzer {
     console.log(`   Average cohesion: ${avgCohesion.toFixed(3)}`);
     console.log(`   Domain core sizes: ${clusters.map(c => c.coreTables).join(', ')}`);
     console.log(`   Domain total sizes: ${clusters.map(c => c.totalTables).join(', ')}`);
+  }
+
+  // === INDUSTRY-AGNOSTIC STRUCTURAL ANALYSIS METHODS ===
+
+  /**
+   * Build connectivity graph from tables and relationships
+   */
+  private buildConnectivityGraph(tables: TableData[], weights: RelationshipWeight[]): Map<string, Set<string>> {
+    const graph = new Map<string, Set<string>>();
+    
+    // Initialize nodes
+    tables.forEach(table => {
+      graph.set(table.name, new Set<string>());
+    });
+    
+    // Add edges based on relationships
+    weights.forEach(weight => {
+      const sourceConnections = graph.get(weight.sourceTable) || new Set();
+      const targetConnections = graph.get(weight.targetTable) || new Set();
+      
+      sourceConnections.add(weight.targetTable);
+      targetConnections.add(weight.sourceTable);
+      
+      graph.set(weight.sourceTable, sourceConnections);
+      graph.set(weight.targetTable, targetConnections);
+    });
+    
+    return graph;
+  }
+
+  /**
+   * Detect communities using structural analysis (no business assumptions)
+   */
+  private detectCommunities(graph: Map<string, Set<string>>): TableData[][] {
+    const visited = new Set<string>();
+    const communities: TableData[][] = [];
+    
+    // Use connected components as basic communities
+    for (const [tableName, connections] of graph) {
+      if (!visited.has(tableName)) {
+        const community = this.exploreConnectedComponent(tableName, graph, visited);
+        if (community.length > 0) {
+          // Convert table names back to TableData objects (simplified for now)
+          const communityTables = community.map(name => ({ name } as TableData));
+          communities.push(communityTables);
+        }
+      }
+    }
+    
+    return communities;
+  }
+
+  /**
+   * Explore connected component in graph
+   */
+  private exploreConnectedComponent(
+    startTable: string, 
+    graph: Map<string, Set<string>>, 
+    visited: Set<string>
+  ): string[] {
+    const component: string[] = [];
+    const stack = [startTable];
+    
+    while (stack.length > 0) {
+      const currentTable = stack.pop()!;
+      
+      if (!visited.has(currentTable)) {
+        visited.add(currentTable);
+        component.push(currentTable);
+        
+        const connections = graph.get(currentTable) || new Set();
+        for (const connectedTable of connections) {
+          if (!visited.has(connectedTable)) {
+            stack.push(connectedTable);
+          }
+        }
+      }
+    }
+    
+    return component;
+  }
+
+  /**
+   * Analyze structural characteristics of a community
+   */
+  private analyzeStructuralCharacteristics(community: TableData[]): { structuralType: string } {
+    // Simple structural analysis - can be enhanced
+    const tableCount = community.length;
+    
+    if (tableCount >= 5) {
+      return { structuralType: 'entity_aggregate' };
+    } else if (tableCount >= 3) {
+      return { structuralType: 'relational' };
+    } else {
+      return { structuralType: 'configuration' };
+    }
+  }
+
+  /**
+   * Generate semantic label from community tables (industry-agnostic)
+   */
+  private generateSemanticLabel(community: TableData[]): string {
+    if (community.length === 0) return 'Empty Domain';
+    
+    // Extract common terms from table names
+    const commonTerms = this.extractCommonTerminology(community.map(t => t.name));
+    
+    if (commonTerms.length > 0) {
+      return `${commonTerms[0]} Domain`;
+    }
+    
+    // Fallback to structural description
+    return `${community.length}-Table Domain`;
+  }
+
+  /**
+   * Extract common terminology from table names (no business assumptions)
+   */
+  private extractCommonTerminology(tableNames: string[]): string[] {
+    const wordFrequency = new Map<string, number>();
+    
+    tableNames.forEach(name => {
+      const words = name.toLowerCase()
+        .split(/[_\s]+/)
+        .filter(word => word.length > 2)
+        .filter(word => !['log', 'type', 'status', 'history', 'audit', 'config'].includes(word));
+      
+      words.forEach(word => {
+        const capitalized = word.charAt(0).toUpperCase() + word.slice(1);
+        wordFrequency.set(capitalized, (wordFrequency.get(capitalized) || 0) + 1);
+      });
+    });
+    
+    return Array.from(wordFrequency.entries())
+      .filter(([_, count]) => count > 1)
+      .sort((a, b) => b[1] - a[1])
+      .map(([term]) => term)
+      .slice(0, 3);
+  }
+
+  /**
+   * Calculate semantic pattern strength (industry-agnostic)
+   */
+  private calculateSemanticPatternStrength(tableName: string, domain: any): number {
+    if (!domain.seedTables || domain.seedTables.length === 0) {
+      return 0.3; // Default moderate strength
+    }
+    
+    // Use semantic similarity based on common word stems
+    const tableWords = tableName.toLowerCase().split(/[_\s]+/);
+    const domainWords = domain.seedTables.flatMap(seed => 
+      seed.toLowerCase().split(/[_\s]+/)
+    );
+    
+    // Calculate word overlap
+    const commonWords = tableWords.filter(word => 
+      domainWords.some(domainWord => 
+        word.includes(domainWord) || domainWord.includes(word)
+      )
+    );
+    
+    const overlapRatio = commonWords.length / Math.max(tableWords.length, 1);
+    return Math.min(overlapRatio, 1.0);
+  }
+
+  // === ENHANCED CLUSTER ANALYSIS METHODS ===
+
+  /**
+   * Infer structural type from enhanced cluster characteristics
+   */
+  private inferStructuralTypeFromCluster(enhanced: EnhancedDomainCluster): string {
+    const tableCount = enhanced.tables?.length || 0;
+    
+    if (tableCount >= 5) return 'entity_aggregate';
+    if (tableCount >= 3) return 'relational';
+    return 'configuration';
+  }
+
+  /**
+   * Calculate connectivity score from enhanced cluster
+   */
+  private calculateConnectivityScore(enhanced: EnhancedDomainCluster): number {
+    return enhanced.confidenceScore || 0.5;
+  }
+
+  /**
+   * Calculate semantic cohesion from enhanced cluster
+   */
+  private calculateSemanticCohesion(enhanced: EnhancedDomainCluster): number {
+    return enhanced.confidenceScore || 0.5;
+  }
+
+  /**
+   * Detect hierarchy patterns in cluster
+   */
+  private detectHierarchyInCluster(enhanced: EnhancedDomainCluster): boolean {
+    // Simple heuristic - can be enhanced with actual structural analysis
+    return (enhanced.tables?.length || 0) > 3;
+  }
+
+  /**
+   * Detect transactional patterns in cluster
+   */
+  private detectTransactionalityInCluster(enhanced: EnhancedDomainCluster): boolean {
+    // Simple heuristic - can be enhanced with actual temporal analysis
+    return (enhanced.confidenceScore || 0) > 0.7;
+  }
+
+  /**
+   * Detect temporal patterns in cluster
+   */
+  private detectTemporalPatternsInCluster(enhanced: EnhancedDomainCluster): boolean {
+    // Simple heuristic - can be enhanced with column analysis
+    return false;
+  }
+
+  /**
+   * Detect user context patterns in cluster
+   */
+  private detectUserContextInCluster(enhanced: EnhancedDomainCluster): boolean {
+    // Simple heuristic - can be enhanced with relationship analysis
+    return false;
   }
 }
 

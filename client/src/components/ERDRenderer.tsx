@@ -11,8 +11,6 @@ interface ERDRendererProps {
   isLoading?: boolean;
   domain?: string;
   selectedTableFromSearch?: string | null;
-  onTableSelectionComplete?: () => void;
-  onDomainSwitch?: (domain: string, tableName: string) => void;
   domainResults?: Record<string, any>;
 }
 
@@ -23,8 +21,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   isLoading = false,
   domain,
   selectedTableFromSearch = null,
-  onTableSelectionComplete,
-  onDomainSwitch,
   domainResults = {}
 }) => {
   
@@ -40,6 +36,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Search-specific state for immediate centering
   const [searchTargetTable, setSearchTargetTable] = useState<string | null>(null);
   const [isSearchTriggered, setIsSearchTriggered] = useState<boolean>(false);
+  
+  // Track last processed selectedTableFromSearch to prevent duplicate processing
+  const lastProcessedSearchTable = useRef<string | null>(null);
   
   // Transform-based Pan-Zoom state and refs
   const svgContainerRef = useRef<HTMLDivElement>(null);
@@ -886,8 +885,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     if (svgContainer) {
       const tableElement = svgContainer.querySelector(`g[data-table-name="${tableName}"]`);
       
-      if (!tableElement && onDomainSwitch) {
-        console.log(`🔍 Table "${tableName}" not found in current domain "${domain || 'unknown'}" - requesting domain switch`);
+      if (!tableElement) {
+        console.log(`🔍 Table "${tableName}" not found in current domain "${domain || 'unknown'}"`);
         
         // Use real domainResults to find which domain contains this table
         let targetDomain = null;
@@ -924,9 +923,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         }
         
         if (targetDomain && targetDomain !== domain) {
-          console.log(`🎯 Switching to domain "${targetDomain}" for table "${tableName}"`);
-          onDomainSwitch(targetDomain, tableName);
-          return; // Don't proceed with centering, let the domain switch handle it
+          console.log(`🎯 Table "${tableName}" is in domain "${targetDomain}" (current: "${domain}")`);
+          return; // Don't proceed with centering since table is in different domain
         } else {
           console.warn(`⚠️ Could not determine domain for table "${tableName}" - proceeding in current domain`);
         }
@@ -1023,7 +1021,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     
     // Schedule centering to happen after styling completes
     setNeedsCenteringAfterStyling({ tableName });
-  }, [selectedTable, domain, onDomainSwitch, getTableCenterCoordinates]);
+  }, [selectedTable, domain, getTableCenterCoordinates]);
 
   // Add event delegation for table clicks - handles clicks on any child element
   useEffect(() => {
@@ -1759,15 +1757,11 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     setHighlightedTables(new Set());
     setViewMode('overview');
     
-    // Notify parent component that selection has been cleared
-    if (onTableSelectionComplete) {
-      onTableSelectionComplete();
-    }
     
     handleFit();
     
     console.log('🧹 Cleared table selection, handles, and DOM states');
-  }, [handleFit, removeSelectionHandles, onTableSelectionComplete]);
+  }, [handleFit, removeSelectionHandles]);
 
   const handleDomainFocus = useCallback(() => {
     // Focus on the current domain by fitting and centering
@@ -2021,14 +2015,27 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Debug: Track selectedTableFromSearch prop changes
   useEffect(() => {
     console.log(`📥 PROP CHANGE: selectedTableFromSearch changed to "${selectedTableFromSearch}"`);
+    
+    // Clear the last processed ref when search selection is cleared
+    if (!selectedTableFromSearch) {
+      lastProcessedSearchTable.current = null;
+      console.log(`🧹 Cleared lastProcessedSearchTable ref`);
+    }
   }, [selectedTableFromSearch]);
 
   // Handle external table selection from search
   useEffect(() => {
-    console.log(`🔍 ERDRenderer useEffect triggered: selectedTableFromSearch="${selectedTableFromSearch}", selectedTable="${selectedTable}"`);
+    console.log(`🔍 ERDRenderer useEffect triggered: selectedTableFromSearch="${selectedTableFromSearch}", selectedTable="${selectedTable}", lastProcessed="${lastProcessedSearchTable.current}"`);
     
-    if (selectedTableFromSearch && selectedTableFromSearch !== selectedTable) {
+    // Only process if this is a new search selection (not a repeated one)
+    if (selectedTableFromSearch && 
+        selectedTableFromSearch !== selectedTable && 
+        selectedTableFromSearch !== lastProcessedSearchTable.current) {
+      
       console.log(`🔍 External table selection request: ${selectedTableFromSearch}`);
+      
+      // Update the last processed ref
+      lastProcessedSearchTable.current = selectedTableFromSearch;
       
       // Mark this as a search-triggered selection for immediate centering
       setSearchTargetTable(selectedTableFromSearch);
@@ -2039,16 +2046,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       handleTableClick(selectedTableFromSearch);
       
-      // DON'T notify parent immediately - let the centering complete first
-      // The centering useEffect will handle notification after centering
-      console.log(`⏳ Skipping immediate onTableSelectionComplete to allow centering`);
-      // if (onTableSelectionComplete) {
-      //   onTableSelectionComplete();
-      // }
+      // Centering will be handled by the effect that watches searchTargetTable
+      console.log(`⏳ Allowing centering to complete`);
+    } else if (selectedTableFromSearch === lastProcessedSearchTable.current) {
+      console.log(`⚠️ Skipping duplicate search selection: "${selectedTableFromSearch}" was already processed`);
     } else {
       console.log(`❌ Condition not met: selectedTableFromSearch="${selectedTableFromSearch}" (truthy: ${!!selectedTableFromSearch}), selectedTable="${selectedTable}", equal: ${selectedTableFromSearch === selectedTable}`);
     }
-  }, [selectedTableFromSearch, selectedTable, handleTableClick, onTableSelectionComplete]);
+  }, [selectedTableFromSearch, selectedTable, handleTableClick]);
 
   // Immediate centering for search results after ERD content changes
   useEffect(() => {
@@ -2068,16 +2073,13 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         
         console.log(`✅ Search centering completed for table: ${searchTargetTable}`);
         
-        // Now notify parent that selection is complete
-        if (onTableSelectionComplete) {
-          console.log(`📤 Calling onTableSelectionComplete after centering`);
-          onTableSelectionComplete();
-        }
+        // Centering is complete
+        console.log(`✅ Table centering completed`);
       }, 200); // Shorter delay for immediate response
       
       return () => clearTimeout(timeoutId);
     }
-  }, [svgContent, searchTargetTable, isSearchTriggered, baseSvgContent, centerOnTable, onTableSelectionComplete]);
+  }, [svgContent, searchTargetTable, isSearchTriggered, baseSvgContent, centerOnTable]);
 
   // Enhanced domain switch completion detection
   useEffect(() => {

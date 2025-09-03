@@ -229,7 +229,7 @@ export class DomainAnalyzer {
    */
   private generateDomainMetadata(clusters: TableCluster[]): TableCluster[] {
     return clusters.map((cluster, index) => {
-      const businessConcepts = this.extractBusinessConcepts(cluster.tables);
+      const businessConcepts = this.extractStructuralConcepts(cluster.tables);
       const suggestedName = this.generateDomainName(businessConcepts, cluster.tables);
       const description = this.generateDomainDescription(businessConcepts, cluster.tables.length);
 
@@ -245,41 +245,23 @@ export class DomainAnalyzer {
   /**
    * Extract business concepts from table names
    */
-  private extractBusinessConcepts(tables: TableData[]): string[] {
+  private extractStructuralConcepts(tables: TableData[]): string[] {
     const concepts = new Map<string, number>();
 
-    // Common business concept patterns
-    const businessPatterns = [
-      // Financial
-      { patterns: ['payment', 'transaction', 'billing', 'invoice', 'checkout'], concept: 'Payments' },
-      { patterns: ['donation', 'pledge', 'fund', 'donor', 'giver'], concept: 'Donations' },
-      { patterns: ['order', 'cart', 'purchase', 'sale'], concept: 'Orders' },
-      
-      // Customer/User
-      { patterns: ['user', 'customer', 'account', 'profile'], concept: 'Users' },
-      { patterns: ['contact', 'person', 'individual'], concept: 'Contacts' },
-      
-      // Content/Campaign
-      { patterns: ['campaign', 'marketing', 'email'], concept: 'Marketing' },
-      { patterns: ['opportunity', 'deal', 'lead', 'quote'], concept: 'Sales' },
-      
-      // System
-      { patterns: ['log', 'audit', 'config', 'setting'], concept: 'System' },
-      { patterns: ['role', 'permission', 'auth', 'login'], concept: 'Authorization' },
-    ];
-
+    // Extract concepts algorithmically based on table structure and naming
     tables.forEach(table => {
-      const tableName = table.name.toLowerCase();
+      const structuralType = this.analyzeTableStructure(table);
+      const primaryConcept = this.extractPrimaryConcept(table.name);
       
-      businessPatterns.forEach(({ patterns, concept }) => {
-        const matchCount = patterns.filter(pattern => 
-          tableName.includes(pattern) || pattern.includes(tableName.split(/[_\s]/)[0])
-        ).length;
-        
-        if (matchCount > 0) {
-          concepts.set(concept, (concepts.get(concept) || 0) + matchCount);
-        }
-      });
+      // Add structural type as concept
+      if (structuralType) {
+        concepts.set(structuralType, (concepts.get(structuralType) || 0) + 1);
+      }
+      
+      // Add primary table concept for domain naming
+      if (primaryConcept && primaryConcept.length > 2) {
+        concepts.set(primaryConcept, (concepts.get(primaryConcept) || 0) + 0.5);
+      }
     });
 
     // Return concepts sorted by frequency
@@ -287,6 +269,220 @@ export class DomainAnalyzer {
       .sort((a, b) => b[1] - a[1])
       .map(([concept]) => concept)
       .slice(0, 3); // Top 3 concepts
+  }
+
+  /**
+   * Analyze table structure algorithmically to determine its architectural role
+   */
+  private analyzeTableStructure(table: TableData): string {
+    const name = table.name.toLowerCase();
+    const columns = table.columns || [];
+    
+    // Algorithmic analysis based on naming patterns and structure
+    
+    // 1. Junction/relationship tables (compound names or multiple FK-like columns)
+    if (this.isCompoundTableName(name) || this.hasMultipleForeignKeyLikeColumns(columns)) {
+      return 'Relational';
+    }
+    
+    // 2. Audit/logging tables (time-based fields and user tracking)
+    if (this.hasAuditingStructure(columns, name)) {
+      return 'Audit';
+    }
+    
+    // 3. Reference/lookup tables (small, descriptive, enum-like)
+    if (this.hasReferenceStructure(columns, name)) {
+      return 'Reference';
+    }
+    
+    // 4. Identity/access tables (user-related fields and auth patterns)
+    if (this.hasIdentityStructure(columns, name)) {
+      return 'Identity';
+    }
+    
+    // 5. Transaction-like tables (amount/value fields with timestamps)
+    if (this.hasTransactionalStructure(columns, name)) {
+      return 'Transactional';
+    }
+    
+    // 6. Content/media tables (blob fields or file-related columns)
+    if (this.hasContentStructure(columns, name)) {
+      return 'Content';
+    }
+    
+    // 7. Communication tables (message-like structure)
+    if (this.hasCommunicationStructure(columns, name)) {
+      return 'Communication';
+    }
+    
+    // 8. Configuration tables (key-value or settings structure)
+    if (this.hasConfigurationStructure(columns, name)) {
+      return 'Configuration';
+    }
+    
+    // Default: Primary entity based on extracted concept
+    return this.extractPrimaryConcept(name);
+  }
+
+  // Algorithmic structure detection methods
+  private isCompoundTableName(name: string): boolean {
+    // Detects compound names like "user_role", "ProductCategory", etc.
+    return /^[a-z]+[_][a-z]+$/.test(name) || 
+           /^[a-z]+[A-Z][a-z]+[A-Z][a-z]+/.test(name) ||
+           name.split('_').length > 2;
+  }
+
+  private hasMultipleForeignKeyLikeColumns(columns: any[]): boolean {
+    const idColumns = columns.filter(col => 
+      col.name.toLowerCase().endsWith('_id') || 
+      col.name.toLowerCase().endsWith('id')
+    );
+    return idColumns.length >= 2;
+  }
+
+  private hasAuditingStructure(columns: any[], name: string): boolean {
+    const auditIndicators = columns.filter(col => {
+      const colName = col.name.toLowerCase();
+      return colName.includes('created') || colName.includes('modified') || 
+             colName.includes('updated') || colName.includes('deleted') ||
+             colName.includes('timestamp') || colName.includes('date');
+    });
+    
+    const userTrackingFields = columns.filter(col => {
+      const colName = col.name.toLowerCase();
+      return colName.includes('by') && (colName.includes('created') || colName.includes('modified'));
+    });
+    
+    return auditIndicators.length >= 2 || userTrackingFields.length >= 1 || 
+           /log|audit|history|track/.test(name);
+  }
+
+  private hasReferenceStructure(columns: any[], name: string): boolean {
+    // Small tables with descriptive fields
+    const hasDescriptiveFields = columns.some(col => 
+      /name|description|label|title/.test(col.name.toLowerCase())
+    );
+    
+    const isSmallTable = columns.length <= 5;
+    const hasEnumLikeName = /status|type|category|kind|class/.test(name);
+    
+    return (isSmallTable && hasDescriptiveFields) || hasEnumLikeName;
+  }
+
+  private hasIdentityStructure(columns: any[], tableConnectivity: number): boolean {
+    // Pure mathematical statistical analysis - no pattern matching
+    if (columns.length === 0) return false;
+    
+    // Statistical constraint analysis
+    const uniqueRatio = columns.filter(col => col.unique).length / columns.length;
+    const nullableRatio = columns.filter(col => col.nullable).length / columns.length;
+    const primaryKeyCount = columns.filter(col => col.isPrimaryKey).length;
+    
+    // Connectivity statistical analysis
+    const connectivityScore = Math.min(tableConnectivity / 10, 1.0); // Normalize to 0-1
+    const lowConnectivity = connectivityScore < 0.3;
+    
+    // Mathematical identity probability calculation
+    const constraintDensity = (uniqueRatio * 0.4) + ((1 - nullableRatio) * 0.3) + (primaryKeyCount > 0 ? 0.3 : 0);
+    const identityProbability = constraintDensity * (lowConnectivity ? 1.2 : 0.8);
+    
+    return identityProbability > 0.6;
+  }
+
+  private hasTransactionalStructure(columns: any[], tableConnectivity: number): boolean {
+    // Pure mathematical statistical analysis - no type name matching
+    if (columns.length === 0) return false;
+    
+    // Statistical column diversity analysis
+    const columnCount = columns.length;
+    const foreignKeyRatio = columns.filter(col => col.isForeignKey).length / columnCount;
+    const primaryKeyCount = columns.filter(col => col.isPrimaryKey).length;
+    const nullableRatio = columns.filter(col => col.nullable).length / columnCount;
+    const uniqueRatio = columns.filter(col => col.unique).length / columnCount;
+    
+    // Connectivity-based analysis
+    const normalizedConnectivity = Math.min(tableConnectivity / 8, 1.0); // Normalize to 0-1
+    const moderateConnectivity = normalizedConnectivity >= 0.25 && normalizedConnectivity <= 0.75;
+    
+    // Mathematical transactional probability
+    const structuralComplexity = (foreignKeyRatio * 0.3) + 
+                               ((1 - nullableRatio) * 0.2) + 
+                               (uniqueRatio * 0.2) + 
+                               (primaryKeyCount === 1 ? 0.3 : 0);
+    
+    const transactionalProbability = structuralComplexity * (moderateConnectivity ? 1.1 : 0.9);
+    
+    return transactionalProbability > 0.5 && columnCount >= 4;
+  }
+
+  private hasContentStructure(columns: any[], tableConnectivity: number): boolean {
+    // Pure mathematical statistical analysis - no type name or length assumptions
+    if (columns.length === 0) return false;
+    
+    // Statistical column analysis
+    const columnCount = columns.length;
+    const nullableRatio = columns.filter(col => col.nullable).length / columnCount;
+    const constrainedRatio = columns.filter(col => col.unique || !col.nullable).length / columnCount;
+    const primaryKeyCount = columns.filter(col => col.isPrimaryKey).length;
+    const foreignKeyRatio = columns.filter(col => col.isForeignKey).length / columnCount;
+    
+    // Connectivity statistical analysis
+    const normalizedConnectivity = Math.min(tableConnectivity / 6, 1.0);
+    const lowToModerateConnectivity = normalizedConnectivity >= 0.1 && normalizedConnectivity <= 0.5;
+    
+    // Mathematical content storage probability
+    // Tables with diverse constraints and moderate size often store content
+    const structuralDiversity = (nullableRatio * 0.3) + 
+                               (constrainedRatio * 0.2) + 
+                               (foreignKeyRatio < 0.3 ? 0.3 : 0) + 
+                               (columnCount >= 5 && columnCount <= 15 ? 0.2 : 0);
+    
+    const contentProbability = structuralDiversity * (lowToModerateConnectivity ? 1.1 : 0.9);
+    
+    return contentProbability > 0.6;
+  }
+
+  private hasCommunicationStructure(columns: any[], name: string): boolean {
+    const messageFields = columns.filter(col => {
+      const colName = col.name.toLowerCase();
+      return colName.includes('message') || colName.includes('subject') || 
+             colName.includes('body') || colName.includes('content') ||
+             colName.includes('sender') || colName.includes('recipient');
+    });
+    
+    return messageFields.length >= 2 || /message|mail|notification|chat|communication/.test(name);
+  }
+
+  private hasConfigurationStructure(columns: any[], name: string): boolean {
+    const configFields = columns.filter(col => {
+      const colName = col.name.toLowerCase();
+      return colName.includes('key') || colName.includes('value') || 
+             colName.includes('setting') || colName.includes('config') ||
+             colName.includes('parameter') || colName.includes('option');
+    });
+    
+    return configFields.length >= 2 || /config|setting|parameter|preference/.test(name);
+  }
+
+  /**
+   * Extract primary concept from table name for domain identification
+   */
+  private extractPrimaryConcept(tableName: string): string {
+    const name = tableName.toLowerCase();
+    
+    // Remove common prefixes/suffixes
+    const cleanName = name
+      .replace(/^(tbl_|table_|tb_)/, '')
+      .replace(/(_tbl|_table|_tb)$/, '')
+      .replace(/(_log|_audit|_history)$/, '')
+      .replace(/(_status|_type|_ref)$/, '');
+    
+    // Split camelCase and get primary word
+    const words = cleanName.replace(/([A-Z])/g, ' $1').trim()
+      .toLowerCase().split(/[\s_]+/).filter(word => word.length > 2);
+    
+    const primaryWord = words[0] || cleanName;
+    return primaryWord.charAt(0).toUpperCase() + primaryWord.slice(1);
   }
 
   /**

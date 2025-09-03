@@ -197,7 +197,7 @@ export const api = {
     return response.json();
   },
 
-  async generateDomainMermaid(tables: Table[], relationships: Relationship[] = []): Promise<GenerateDomainMermaidResponse> {
+  async generateDomainMermaid(tables: Table[], relationships: Relationship[] = [], projectId?: string): Promise<GenerateDomainMermaidResponse> {
     const response = await apiRequest('POST', '/api/generate-domain-mermaid', {
       tables: tables.map(table => ({
         name: table.name,
@@ -210,7 +210,8 @@ export const api = {
         }))
       })),
       relationships,
-      options: {}
+      options: {},
+      projectId
     });
 
     return response.json();

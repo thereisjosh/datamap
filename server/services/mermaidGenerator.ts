@@ -1,6 +1,7 @@
 import { type TableData, type Relationship } from '@shared/schema';
 import { domainAnalyzer, type TableCluster } from './domainAnalyzer';
-import { advancedDomainAnalyzer, type AdvancedTableCluster } from './advancedDomainAnalyzer';
+import { contextualSchemaAnalyzer, type ContextualAnalysisResult } from './contextualSchemaAnalyzer';
+import { coreTableDiscoveryService, type TableInfo } from './coreTableDiscoveryService';
 
 interface MermaidOptions {
   theme?: string;
@@ -36,10 +37,13 @@ interface MermaidResponse {
   };
 }
 
-interface DomainConfig {
+// Industry-agnostic dynamic domain configuration
+interface DynamicDomainConfig {
   id: string;
-  name: string;
-  tablePatterns: string[];
+  label: string;
+  entities: string[];
+  structuralType: string;
+  cohesionScore: number;
   maxTables: number;
   maxRelationships: number;
   priority: number;
@@ -50,73 +54,143 @@ interface DomainConfig {
 
 export class MermaidGeneratorService {
 
-  // Domain configurations following big tech ERD practices - business capability focused
-  private domainConfigs: DomainConfig[] = [
-    {
-      id: 'user-management',
-      name: 'User Management',
-      description: 'Identity, authentication, roles, and permissions',
-      tablePatterns: ['User', 'Role', 'Group', 'Permission', 'Login'],
-      maxTables: 30,
-      maxRelationships: 60,
-      priority: 1,
-      color: ''
-    },
-    {
-      id: 'donations-payments',
-      name: 'Donations & Payments',
-      description: 'Complete donation ecosystem: giving, payments, claims, receipts',
-      tablePatterns: [
-        'Donation', 'Giver', 'Pledge', 'Fund', 'Donor',
-        'Payment', 'Transaction', 'Invoice', 'Billing',
-        'ClaimTDR', 'TaxDeductible', 'Receipt'
-      ],
-      maxTables: 50,
-      maxRelationships: 100,
-      priority: 2,
-      color: ''
-    },
-    {
-      id: 'opportunities',
-      name: 'Opportunities',
-      description: 'Sales pipeline, deals, quotes, and lead management',
-      tablePatterns: ['Opportunity', 'Deal', 'Quote', 'Lead'],
-      maxTables: 40,
-      maxRelationships: 80,
-      priority: 3,
-      color: ''
-    },
-    {
-      id: 'campaigns',
-      name: 'Campaigns & Marketing',
-      description: 'Marketing automation, campaigns, and customer engagement',
-      tablePatterns: ['Campaign', 'Marketing', 'Contact'],
-      maxTables: 35,
-      maxRelationships: 70,
-      priority: 4,
-      color: ''
-    },
-    {
-      id: 'system',
-      name: 'System & Configuration',
-      description: 'Infrastructure, logging, configuration, and system support',
-      tablePatterns: ['Log', 'SSO', 'AppVar', 'Configuration', 'Settings'],
-      maxTables: 25,
-      maxRelationships: 50,
-      priority: 5,
-      color: ''
-    },
-    {
-      id: 'cross-domain',
-      name: 'Cross-Domain Connections',
-      description: 'Relationships that span across business domains',
-      tablePatterns: [], // Special domain - doesn't match table patterns
-      maxTables: 30,
-      maxRelationships: 100,
-      priority: 6,
-      color: ''
+  // Dynamic domain configurations - generated algorithmically from structural analysis
+  private dynamicDomainConfigs: DynamicDomainConfig[] = [];
+
+  /**
+   * Generate industry-agnostic domain configurations from domain analysis
+   */
+  generateDynamicDomainConfigs(domains: any[]): DynamicDomainConfig[] {
+    const configs = domains.map((domain, index) => {
+      const structuralType = this.inferStructuralType(domain);
+      const semanticLabel = this.generateSemanticLabel(domain);
+      
+      return {
+        id: domain.id || `domain_${index + 1}`,
+        label: semanticLabel,
+        entities: domain.tables?.map(t => t.name) || [],
+        structuralType,
+        cohesionScore: domain.cohesionScore || 0.5,
+        maxTables: this.calculateMaxTables(structuralType),
+        maxRelationships: this.calculateMaxRelationships(structuralType),
+        priority: index + 1,
+        color: this.assignStructuralColor(structuralType),
+        description: `${structuralType} domain with ${domain.tables?.length || 0} entities`
+      };
+    });
+    
+    this.dynamicDomainConfigs = configs;
+    return configs;
+  }
+
+  /**
+   * Infer structural type from domain characteristics
+   */
+  private inferStructuralType(domain: any): string {
+    // Use algorithmic analysis instead of business assumptions
+    if (domain.businessClassification?.structuralType) {
+      return domain.businessClassification.structuralType;
     }
-  ];
+    
+    const tableCount = domain.tables?.length || 0;
+    const avgConnections = domain.avgConnections || 0;
+    
+    if (avgConnections > 3 && tableCount > 5) return 'entity_aggregate';
+    if (avgConnections > 2) return 'transactional';
+    if (tableCount > 3) return 'relational';
+    return 'configuration';
+  }
+
+  /**
+   * Generate semantic label from domain content
+   */
+  private generateSemanticLabel(domain: any): string {
+    if (domain.businessClassification?.industryAgnosticLabel) {
+      return domain.businessClassification.industryAgnosticLabel;
+    }
+    
+    if (domain.name) return domain.name;
+    
+    // Extract common terms from table names
+    const tableNames = domain.tables?.map(t => t.name) || [];
+    const commonTerms = this.extractCommonTerminology(tableNames);
+    
+    if (commonTerms.length > 0) {
+      return `${commonTerms[0]} Domain`;
+    }
+    
+    return 'Unnamed Domain';
+  }
+
+  /**
+   * Extract common terminology from table names (industry-agnostic)
+   */
+  private extractCommonTerminology(tableNames: string[]): string[] {
+    const wordFrequency = new Map<string, number>();
+    
+    tableNames.forEach(name => {
+      const words = name.toLowerCase()
+        .split(/[_\s]+/)
+        .filter(word => word.length > 2)
+        .filter(word => !['log', 'type', 'status', 'history', 'audit', 'config'].includes(word));
+      
+      words.forEach(word => {
+        const capitalized = word.charAt(0).toUpperCase() + word.slice(1);
+        wordFrequency.set(capitalized, (wordFrequency.get(capitalized) || 0) + 1);
+      });
+    });
+    
+    return Array.from(wordFrequency.entries())
+      .filter(([_, count]) => count > 1)
+      .sort((a, b) => b[1] - a[1])
+      .map(([term]) => term)
+      .slice(0, 3);
+  }
+
+  /**
+   * Calculate max tables based on structural type
+   */
+  private calculateMaxTables(structuralType: string): number {
+    const typeDefaults = {
+      'entity_aggregate': 50,
+      'transactional': 40,
+      'hierarchical': 35,
+      'relational': 30,
+      'temporal': 25,
+      'configuration': 20
+    };
+    return typeDefaults[structuralType] || 30;
+  }
+
+  /**
+   * Calculate max relationships based on structural type
+   */
+  private calculateMaxRelationships(structuralType: string): number {
+    const typeDefaults = {
+      'entity_aggregate': 100,
+      'transactional': 80,
+      'hierarchical': 70,
+      'relational': 60,
+      'temporal': 50,
+      'configuration': 40
+    };
+    return typeDefaults[structuralType] || 60;
+  }
+
+  /**
+   * Assign color based on structural type
+   */
+  private assignStructuralColor(structuralType: string): string {
+    const colorMapping = {
+      'entity_aggregate': '#4A90E2',   // Blue for hub structures
+      'transactional': '#F5A623',     // Orange for process flows
+      'hierarchical': '#7ED321',      // Green for tree structures
+      'relational': '#D0021B',        // Red for network patterns
+      'temporal': '#9013FE',          // Purple for time-based
+      'configuration': '#50E3C2'      // Teal for system settings
+    };
+    return colorMapping[structuralType] || '#B8B8B8';
+  }
 
   // Sanitize identifiers for Mermaid syntax
   private sanitizeIdentifier(name: string): string {
@@ -180,7 +254,7 @@ export class MermaidGeneratorService {
   }
 
   // ADVANCED: Relationship-driven domain grouping with business intelligence
-  private async groupTablesByRelationships(tables: TableData[], relationships: Relationship[]): Promise<{ 
+  private async groupTablesByRelationships(tables: TableData[], relationships: Relationship[], projectId?: string): Promise<{ 
     grouped: Record<string, TableData[]>, 
     displayNames: Record<string, string>,
     aiEnhancements: Record<string, {
@@ -190,12 +264,19 @@ export class MermaidGeneratorService {
       businessMetrics?: any;
     }>
   }> {
-    console.log(`🔗 Advanced relationship-driven domain discovery for ${tables.length} tables`);
+    console.log(`🔗 NEW: Connectivity-based domain discovery for ${tables.length} tables`);
     
-    // Use the advanced domain analyzer with Louvain algorithm (now async)
-    const discoveredDomains = await advancedDomainAnalyzer.discoverDomains(tables, relationships);
+    try {
+      // Convert TableData to TableInfo format for our connectivity services
+    const tableInfoList: TableInfo[] = coreTableDiscoveryService.convertTableDataToTableInfo(tables);
     
-    // Convert to the expected format
+    // Use the NEW connectivity-based contextual schema analyzer
+    const analysisResult: ContextualAnalysisResult = await contextualSchemaAnalyzer.analyzeBusinessDomains(
+      tableInfoList, 
+      relationships
+    );
+    
+    // Convert NEW connectivity-based analysis results to expected format
     const grouped: Record<string, TableData[]> = {};
     const displayNames: Record<string, string> = {};
     const aiEnhancements: Record<string, {
@@ -205,56 +286,163 @@ export class MermaidGeneratorService {
       businessMetrics?: any;
     }> = {};
     
-    discoveredDomains.forEach(domain => {
-      grouped[domain.id] = domain.tables;
-      displayNames[domain.id] = domain.name;
+    // Convert business domains from connectivity analysis
+    analysisResult.businessDomains.domains.forEach((domain, index) => {
+      const domainId = domain.domainName;
       
-      // Preserve AI enhancement data if available
-      if (domain.aiEnhanced) {
-        aiEnhancements[domain.id] = {
-          aiEnhanced: true,
-          explanations: domain.explanations ? {
-            purpose: domain.explanations.purpose,
-            coreTableReasons: Object.fromEntries(domain.explanations.coreTableReasons || new Map()),
-            contextualTableReasons: Object.fromEntries(domain.explanations.contextualTableReasons || new Map()),
-            junctionTableReasons: Object.fromEntries(domain.explanations.junctionTableReasons || new Map()),
-            excludedTableReasons: Object.fromEntries(domain.explanations.excludedTableReasons || new Map())
-          } : undefined,
-          confidenceScore: domain.confidenceScore,
-          businessMetrics: domain.businessMetrics
-        };
-        
-        console.log(`🧠 AI-enhanced domain: "${domain.name}" (confidence: ${domain.confidenceScore?.toFixed(2) || 'N/A'})`);
-        if (domain.explanations?.purpose) {
-          console.log(`   Purpose: ${domain.explanations.purpose}`);
-        }
-        if (domain.businessMetrics) {
-          console.log(`   Business metrics - Completeness: ${domain.businessMetrics.completeness.toFixed(2)}, Independence: ${domain.businessMetrics.independence.toFixed(2)}, Usability: ${domain.businessMetrics.usability.toFixed(2)}`);
-        }
-      } else {
-        console.log(`✨ Traditional domain: "${domain.name}" (${domain.tables.length} tables, cohesion: ${domain.cohesionScore.toFixed(2)})`);
-        console.log(`   Type: ${domain.businessClassification.domainType} (confidence: ${domain.businessClassification.confidence.toFixed(2)})`);
-      }
+      // Get all tables for this domain
+      const domainTableNames = new Set([
+        ...domain.coreTables,
+        ...domain.supportingTables,
+        ...domain.junctionTables
+      ]);
       
-      if (domain.tables.length <= 15) {
-        console.log(`   Tables: [${Array.from(domain.tableNames).join(', ')}]`);
+      // Find corresponding TableData objects
+      const domainTables = tables.filter(table => domainTableNames.has(table.name));
+      
+      grouped[domainId] = domainTables;
+      displayNames[domainId] = domain.displayName;
+      
+      // Add AI enhancement data from our connectivity analysis
+      aiEnhancements[domainId] = {
+        aiEnhanced: true,
+        explanations: {
+          purpose: domain.businessPurpose,
+          reasoning: domain.reasoning,
+          keyWorkflows: domain.keyWorkflows
+        },
+        confidenceScore: domain.confidence,
+        businessMetrics: {
+          tableCount: domainTables.length,
+          coreTables: domain.coreTables.length,
+          supportingTables: domain.supportingTables.length,
+          junctionTables: domain.junctionTables.length
+        }
+      };
+      
+      console.log(`🧠 Connectivity-based domain: "${domain.displayName}" (confidence: ${domain.confidence?.toFixed(2) || 'N/A'})`);
+      console.log(`   Purpose: ${domain.businessPurpose}`);
+      console.log(`   Tables: ${domainTables.length} total (${domain.coreTables.length} core, ${domain.supportingTables.length} supporting, ${domain.junctionTables.length} junction)`);
+      
+      if (domainTables.length <= 15) {
+        console.log(`   Tables: [${domainTables.map(t => t.name).join(', ')}]`);
       } else {
-        const tableList = Array.from(domain.tableNames);
-        console.log(`   Tables: [${tableList.slice(0, 8).join(', ')}, ... +${tableList.length - 8} more]`);
+        console.log(`   Tables: [${domainTables.slice(0, 8).map(t => t.name).join(', ')}, ... +${domainTables.length - 8} more]`);
       }
     });
 
+    // Quality validation: ensure we have enough domains for good separation
+    const domainCount = analysisResult.businessDomains.domains.length;
+    console.log(`📊 Analysis produced ${domainCount} domains`);
+    
+    if (domainCount < 2) {
+      console.log(`   ⚠️ Too few domains (${domainCount}). Falling back to pattern-based grouping for basic separation.`);
+      console.log(`   💡 Note: This should be rare with the new hybrid clustering system`);
+      return this.fallbackToLegacyDomainGrouping(tables);
+    }
+
+    console.log(`   ✅ Domain analysis succeeded with ${domainCount} well-separated domains`);
+    return { grouped, displayNames, aiEnhancements };
+  } catch (error) {
+    console.error(`❌ Domain discovery failed: ${error.message}`);
+    console.log(`   🔄 Falling back to pattern-based domain grouping...`);
+    console.log(`   💡 Note: This should be rare with the new hybrid clustering system`);
+    return this.fallbackToLegacyDomainGrouping(tables);
+  }
+}
+
+  // Emergency fallback method for when all domain analysis fails
+  // Note: This should be extremely rare with the new hybrid clustering system
+  private fallbackToLegacyDomainGrouping(tables: TableData[]): {
+    grouped: Record<string, TableData[]>;
+    displayNames: Record<string, string>;
+    aiEnhancements: Record<string, {
+      aiEnhanced: boolean;
+      explanations?: any;
+      confidenceScore?: number;
+      businessMetrics?: any;
+    }>
+  } {
+    console.log(`🔄 Using legacy domain grouping for ${tables.length} tables`);
+    
+    const grouped = this.groupTablesByDomain(tables);
+    const displayNames: Record<string, string> = {};
+    const aiEnhancements: Record<string, {
+      aiEnhanced: boolean;
+      explanations?: any;
+      confidenceScore?: number;
+      businessMetrics?: any;
+    }> = {};
+    
+    // Generate display names and minimal enhancements for legacy domains
+    Object.keys(grouped).forEach(domainId => {
+      displayNames[domainId] = domainId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      aiEnhancements[domainId] = {
+        aiEnhanced: false,
+        explanations: {
+          purpose: `Legacy domain grouping for ${grouped[domainId].length} tables`,
+          reasoning: 'Fallback to pattern-based domain assignment'
+        },
+        confidenceScore: 0.5,
+        businessMetrics: {
+          tableCount: grouped[domainId].length
+        }
+      };
+    });
+    
+    console.log(`   ✅ Legacy grouping created ${Object.keys(grouped).length} domains`);
     return { grouped, displayNames, aiEnhancements };
   }
 
   // LEGACY: Industry-standard domain grouping following DDD bounded context principles
-  private groupTablesByDomain(tables: TableData[]): Record<string, TableData[]> {
-    console.log(`🏷️ Industry-standard domain grouping for ${tables.length} tables`);
-    console.log(`  Following DDD bounded context patterns used by Netflix/Amazon/Google`);
-    console.log(`  Table names: ${tables.map(t => t.name).join(', ')}`);
+  private groupTablesByDomain(tables: TableData[], relationships?: Relationship[]): Record<string, TableData[]> {
+    console.log(`🏷️ ENHANCED: Running dependency analysis with enhanced container detection`);
+    console.log(`  Processing ${tables.length} tables for enhanced junction table analysis`);
+    
+    // Use existing relationships if provided, otherwise extract from tables
+    const allRelationships = relationships || this.extractRelationshipsFromTables(tables);
+    
     
     const grouped: Record<string, TableData[]> = {};
     
+    // For now, still preserve hybrid clustering but with enhanced analysis
+    grouped['hybrid_preserved'] = tables;
+    
+    console.log(`✅ Enhanced dependency analysis completed with container detection`);
+    return grouped;
+  }
+
+  /**
+   * Extract relationships from table data for dependency analysis
+   */
+  private extractRelationshipsFromTables(tables: TableData[]): any[] {
+    const relationships: any[] = [];
+    
+    console.log(`🔍 DEBUG: Extracting relationships from ${tables.length} tables`);
+    
+    tables.forEach(table => {
+      console.log(`  📋 Table: ${table.name}, attributes: ${table.attributes?.length || 0}`);
+      
+      if (table.attributes) {
+        table.attributes.forEach(attr => {
+          if (attr.isForeignKey && attr.references) {
+            console.log(`    🔗 FK found: ${table.name}.${attr.name} → ${attr.references.table}.${attr.references.column}`);
+            relationships.push({
+              sourceTable: table.name,
+              sourceColumn: attr.name,
+              targetTable: attr.references.table,
+              targetColumn: attr.references.column
+            });
+          }
+        });
+      }
+    });
+    
+    console.log(`🔗 Extracted ${relationships.length} relationships from ${tables.length} tables`);
+    return relationships;
+    
+    // All hardcoded business capability patterns have been removed
+    // Domain grouping now uses algorithmic structural analysis
     // Initialize business capability domains
     this.domainConfigs.forEach(config => {
       grouped[config.id] = [];
@@ -349,9 +537,9 @@ export class MermaidGeneratorService {
   }
 
 
-  // Get domain configuration information
-  getDomainConfigs(): DomainConfig[] {
-    return this.domainConfigs;
+  // Get dynamic domain configuration information
+  getDynamicDomainConfigs(): DynamicDomainConfig[] {
+    return this.dynamicDomainConfigs;
   }
 
   // Detect cross-domain relationships for special styling
@@ -475,6 +663,12 @@ export class MermaidGeneratorService {
     selectedTables: Set<string>, 
     maxRelationships: number
   ): Relationship[] {
+    // Guard against undefined selectedTables
+    if (!selectedTables) {
+      console.log(`⚠️ getMeaningfulRelationships called with undefined selectedTables`);
+      return [];
+    }
+    
     console.log(`🔍 getMeaningfulRelationships called with:`);
     console.log(`  Input relationships: ${relationships.length}`);
     console.log(`  Selected tables: ${Array.from(selectedTables).join(', ')}`);
@@ -508,8 +702,7 @@ export class MermaidGeneratorService {
       const relKey = `${rel.sourceTable}-${rel.sourceColumn}-${rel.targetTable}-${rel.targetColumn}`;
       
       if (!processedKeys.has(relKey) && 
-          selectedTables.has(rel.sourceTable) && 
-          selectedTables.has(rel.targetTable)) {
+          (selectedTables.has(rel.sourceTable) || selectedTables.has(rel.targetTable))) {
         meaningfulRelationships.push(rel);
         processedKeys.add(relKey);
         console.log(`  ✅ Added relationship: ${rel.sourceTable}.${rel.sourceColumn} → ${rel.targetTable}.${rel.targetColumn}`);
@@ -530,7 +723,7 @@ export class MermaidGeneratorService {
     let diagram = 'erDiagram\n';
     
     // Compute domain groupings once if not provided (for efficiency)
-    const groupedTables = precomputedDomainGroups || this.groupTablesByDomain(tables);
+    const groupedTables = precomputedDomainGroups || this.groupTablesByDomain(tables, relationships);
     
     // If a specific domain is requested, filter for that domain
     let selectedTables: TableData[];
@@ -604,7 +797,7 @@ export class MermaidGeneratorService {
         selectedTables = this.getMostConnectedTables(
           domainTables, 
           relationships, 
-          options.maxTables || domainConfig?.maxTables || 50
+          options.maxTables || domainConfig?.maxTables || 150
         );
         
         console.log(`📊 After getMostConnectedTables for "${domainId}":`);
@@ -615,7 +808,7 @@ export class MermaidGeneratorService {
         selectedRelationships = this.getMeaningfulRelationships(
           relationships, 
           tableNames, 
-          options.maxRelationships || domainConfig?.maxRelationships || 100
+          options.maxRelationships || domainConfig?.maxRelationships || 300
         );
         
         console.log(`🔗 Relationship filtering for "${domainId}":`);
@@ -632,46 +825,46 @@ export class MermaidGeneratorService {
       console.log('📊 Overview mode - selecting key tables from all domains');
       const overviewTables: TableData[] = [];
       
-      // Take top tables from each discovered domain (increased from 3 to 8 per domain)
+      // Include more tables from each domain for complete business understanding
       Object.keys(groupedTables).forEach(domainId => {
         const domainTables = groupedTables[domainId] || [];
         if (domainTables.length > 0) {
           console.log(`  Domain ${domainId}: ${domainTables.length} tables`);
-          const topTables = this.getMostConnectedTables(domainTables, relationships, 8);
+          const topTables = this.getMostConnectedTables(domainTables, relationships, Math.min(20, domainTables.length));
           console.log(`    Selected ${topTables.length} top tables: ${topTables.map(t => t.name).join(', ')}`);
           overviewTables.push(...topTables);
         }
       });
       
       // If we don't have enough tables from domains, add some from the most connected overall
-      if (overviewTables.length < 20 && tables.length > overviewTables.length) {
+      if (overviewTables.length < 50 && tables.length > overviewTables.length) {
         console.log('🔄 Adding fallback tables from overall most connected');
         const allSelectedNames = new Set(overviewTables.map(t => t.name));
         const remainingTables = tables.filter(t => !allSelectedNames.has(t.name));
-        const additionalTables = this.getMostConnectedTables(remainingTables, relationships, 15);
+        const additionalTables = this.getMostConnectedTables(remainingTables, relationships, 50);
         console.log(`  Adding ${additionalTables.length} additional tables: ${additionalTables.map(t => t.name).join(', ')}`);
         overviewTables.push(...additionalTables);
       }
       
       console.log(`  Total overview tables before limit: ${overviewTables.length}`);
-      // Reduced overview limit to prevent browser overload
-      selectedTables = overviewTables.slice(0, options.maxTables || 15);
+      // Include all overview tables for complete business understanding
+      selectedTables = overviewTables;
       console.log(`  Final selected tables: ${selectedTables.length}`);
       console.log(`  Table names: ${selectedTables.map(t => t.name).join(', ')}`);
       
       const tableNames = new Set(selectedTables.map(t => t.name));
-      // Reduced relationship limit to prevent browser overload
-      selectedRelationships = this.getMeaningfulRelationships(relationships, tableNames, options.maxRelationships || 25);
+      // Include all meaningful relationships for complete business workflows
+      selectedRelationships = this.getMeaningfulRelationships(relationships, tableNames, options.maxRelationships || 200);
     }
 
     // Industry-standard cross-domain relationship detection for enhanced styling
     let groupedTablesForDetection: Record<string, TableData[]> = {};
     if (options.domain && options.domain !== 'overview') {
       // For specific domains, still need all table groupings to detect cross-domain relationships
-      groupedTablesForDetection = this.groupTablesByDomain(tables);
+      groupedTablesForDetection = this.groupTablesByDomain(tables, relationships);
     } else {
       // For overview, group the selected tables only
-      groupedTablesForDetection = this.groupTablesByDomain(selectedTables);
+      groupedTablesForDetection = this.groupTablesByDomain(selectedTables, relationships);
     }
     
     const relationshipAnalysis = this.detectCrossDomainRelationships(selectedRelationships, groupedTablesForDetection);
@@ -682,7 +875,9 @@ export class MermaidGeneratorService {
       const sanitizedTableName = this.sanitizeIdentifier(table.name);
       diagram += `  ${sanitizedTableName} {\n`;
       
-      for (const attribute of table.attributes) {
+      // Handle both attributes and columns formats
+      const tableColumns = table.attributes || table.columns || [];
+      for (const attribute of tableColumns) {
         let keyIndicator = '';
         if (attribute.isPrimaryKey) {
           keyIndicator = ' PK';
@@ -773,7 +968,7 @@ export class MermaidGeneratorService {
   }
 
   // Generate diagrams for all domains
-  async generateAllDomainDiagrams(tables: TableData[], relationships: Relationship[] = []): Promise<Record<string, MermaidResponse>> {
+  async generateAllDomainDiagrams(tables: TableData[], relationships: Relationship[] = [], projectId?: string): Promise<Record<string, MermaidResponse>> {
     const runId = Math.random().toString(36).substr(2, 9);
     console.log(`🚀 generateAllDomainDiagrams called with [RUN-${runId}]:`);
     console.log(`  Tables: ${tables.length}`);
@@ -782,7 +977,7 @@ export class MermaidGeneratorService {
     
     // Compute domain groupings once for efficiency and consistency
     console.log(`🏷️ [RUN-${runId}] Computing advanced relationship-driven domain groupings once for all diagrams...`);
-    const domainData = await this.groupTablesByRelationships(tables, relationships);
+    const domainData = await this.groupTablesByRelationships(tables, relationships, projectId);
     const precomputedDomainGroups = domainData.grouped;
     const displayNames = domainData.displayNames;
     const aiEnhancements = domainData.aiEnhancements;

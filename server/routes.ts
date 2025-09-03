@@ -6,6 +6,8 @@ import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import { excelParserService } from "./services/excelParser";
 import { mermaidGeneratorService } from "./services/mermaidGenerator";
+import { AdvancedDomainBoundaryService } from "./services/AdvancedDomainBoundaryService";
+import { coreTableDiscoveryService } from "./services/coreTableDiscoveryService";
 import { generateMermaidRequestSchema, projectSchema, insertProjectSchema, insertProjectFileSchema, member, organization, user } from "@shared/schema";
 import { getAuth } from "./auth.ts";
 import { emailService } from "./services/emailService.ts";
@@ -37,6 +39,73 @@ import {
   securityLogger 
 } from "./middleware/securityLogger";
 import { parseExcelRequestSchema } from "@shared/validation-schemas";
+
+// Utility function to sanitize and validate table data
+function sanitizeTableData(tables: any[]): any[] {
+  if (!Array.isArray(tables)) {
+    console.warn('⚠️ Tables input is not an array:', typeof tables);
+    return [];
+  }
+
+  const sanitizedTables = [];
+  
+  for (let i = 0; i < tables.length; i++) {
+    const table = tables[i];
+    
+    // Skip null, undefined, or non-object entries
+    if (!table || typeof table !== 'object') {
+      console.warn(`⚠️ Skipped non-object table at index ${i}:`, table);
+      continue;
+    }
+    
+    // Skip tables with invalid names
+    if (!table.name || typeof table.name !== 'string' || table.name.trim() === '') {
+      console.warn(`⚠️ Skipped table with invalid name at index ${i}:`, table);
+      continue;
+    }
+    
+    // Ensure columns array exists and is valid
+    let columns = table.columns;
+    let attributes = table.attributes;
+    
+    // Check if we have attributes but no columns (frontend sends attributes)
+    if (!Array.isArray(columns) && Array.isArray(attributes)) {
+      console.log(`   📋 Converting attributes to columns for ${table.name}`);
+      columns = attributes.map((attr: any) => ({
+        name: attr.name || '',
+        type: attr.type || 'string',
+        isPrimaryKey: attr.isPrimaryKey || false,
+        isForeignKey: attr.isForeignKey || false,
+        nullable: attr.nullable,
+        unique: attr.unique,
+        references: attr.references
+      }));
+      // Clear attributes since we've converted to columns
+      attributes = undefined;
+    } else if (!Array.isArray(columns)) {
+      // Create minimal column structure if none exists
+      console.warn(`   ⚠️ Table ${table.name} has no columns or attributes, creating minimal structure`);
+      columns = [
+        { name: 'id', type: 'integer', isPrimaryKey: true, isForeignKey: false }
+      ];
+    }
+    
+    // Sanitize the table object - only include columns, not attributes
+    const sanitizedTable = {
+      name: table.name.trim(),
+      columns: columns,
+      // Don't include attributes to avoid confusion
+      primaryKeys: table.primaryKeys || ['id'],
+      foreignKeys: table.foreignKeys || [],
+      relationships: table.relationships || []
+    };
+    
+    sanitizedTables.push(sanitizedTable);
+  }
+  
+  console.log(`🧹 Table sanitization complete: ${tables.length} → ${sanitizedTables.length} valid tables`);
+  return sanitizedTables;
+}
 
 // Configure multer for file uploads
 const upload = multer({
@@ -256,6 +325,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { tables, relationships = [], options = {} } = validatedData;
 
+      // Sanitize and validate table data
+      const sanitizedTables = sanitizeTableData(tables);
+
       // Convert relationships to the correct format for Mermaid generation
       const formattedRelationships = relationships.map(rel => ({
         id: '',
@@ -270,7 +342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate Mermaid diagram
       const result = mermaidGeneratorService.generateMermaidDiagram(
-        tables,
+        sanitizedTables,
         formattedRelationships,
         options
       );
@@ -304,21 +376,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Generate domain-specific Mermaid diagrams endpoint
+  // Generate domain-specific Mermaid diagrams endpoint - SIMPLIFIED VERSION
   app.post("/api/generate-domain-mermaid", async (req, res) => {
     try {
       // Validate request body
       const validatedData = generateMermaidRequestSchema.parse(req.body);
       
-      const { tables, relationships = [], options = {} } = validatedData;
+      const { tables, relationships = [], options = {}, projectId } = validatedData;
 
-      // Debug logging: Input relationships
-      console.log('🔍 Input relationships received:', relationships.length);
-      relationships.forEach((rel, index) => {
-        console.log(`  ${index + 1}. ${rel.sourceTable}.${rel.sourceColumn} → ${rel.targetTable}.${rel.targetColumn}`);
-      });
+      console.log('🚀 AI-Enhanced Domain Clustering Pipeline Started');
+      console.log(`  📊 Tables: ${tables.length}, Relationships: ${relationships.length}`);
+      console.log(`  🤖 Features: 1536D Semantic Vectors + Multiplicative Scoring + Dependency Analysis`);
 
-      // Convert relationships to the correct format for Mermaid generation
+      // Sanitize and validate table data early (before cache check)
+      const sanitizedTables = sanitizeTableData(tables);
+
+      // Convert relationships to the correct format
       const formattedRelationships = relationships.map(rel => ({
         id: '',
         sourceTable: rel.sourceTable,
@@ -330,11 +403,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
         organizationId: null
       }));
 
-      console.log('🔧 Formatted relationships for Mermaid generation:', formattedRelationships.length);
+      // Check for cached domains if projectId provided
+      if (projectId) {
+        try {
+          const domainPersistenceService = new (await import('./services/domainPersistenceService')).DomainPersistenceService();
+          const cachedDomains = await domainPersistenceService.getStoredDomains(projectId);
+          
+          if (cachedDomains && cachedDomains.domains.length > 0 && !options.forceRefresh) {
+            console.log(`📦 Using cached domains for project ${projectId} (${cachedDomains.domains.length} domains)`);
+            
+            // Transform cached domains to response format
+            const { transformHybridClustersToDomainsResponse } = await import('./utils/domainTransformer');
+            
+            // Convert cached domains back to hybrid cluster format for transformer
+            const hybridClusters = cachedDomains.domains.map((domain, index) => ({
+              clusterId: domain.id,
+              clusterName: domain.displayName,
+              coreTable: cachedDomains.tables[domain.id]?.[0]?.tableName || `table_${index}`,
+              tables: cachedDomains.tables[domain.id]?.map(t => t.tableName) || [],
+              businessDomain: domain.domainName,
+              confidenceScore: parseFloat(domain.confidenceScore || '0.5'),
+              coherenceScore: domain.businessMetrics?.coherence || 0.5,
+              isolationScore: domain.businessMetrics?.isolation || 0.5,
+              hybridScore: parseFloat(domain.confidenceScore || '0.5'),
+              connectivityScore: 0.5,
+              semanticScore: 0.5,
+              clusterType: 'cached' as const,
+              coreTables: [],
+              supportingTables: [],
+              decisionReasons: ['Loaded from cache']
+            }));
+            
+            const domainResults = transformHybridClustersToDomainsResponse(
+              hybridClusters,
+              sanitizedTables,
+              formattedRelationships
+            );
+            
+            return res.json({
+              domains: domainResults,
+              metadata: {
+                total_domains: cachedDomains.domains.length,
+                total_tables: tables.length,
+                total_relationships: formattedRelationships.length,
+                cached: true,
+                cachedAt: cachedDomains.lastComputedAt
+              }
+            });
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not load cached domains:', error);
+          // Continue with clustering if cache fails
+        }
+      }
 
-      // Generate all domain-specific diagrams
-      const domainResults = await mermaidGeneratorService.generateAllDomainDiagrams(
-        tables,
+      // Convert TableData to TableInfo format for hybrid clustering
+      const tableInfoList = coreTableDiscoveryService.convertTableDataToTableInfo(sanitizedTables);
+
+      // Call advanced domain boundary service (AI-enhanced approach)
+      console.log('🤖 Calling enhanced AI domain boundary service...');
+      const advancedDomainService = new AdvancedDomainBoundaryService();
+      const advancedResult = await advancedDomainService.detectAdvancedDomainBoundaries(
+        tableInfoList,
+        formattedRelationships,
+        {
+          algorithm: 'auto',                      // Auto-select optimal algorithm (Louvain/Dependency/Spectral)
+          targetClusterCount: 15,                 // Target 15 meaningful business domains
+          minClusterSize: 2,                      // Min 2 tables per domain (conservative)
+          maxClusterSize: 20,                     // Max 20 tables per domain (enterprise-appropriate)
+          
+          // AI-Enhanced Semantic Analysis
+          enableSemanticAnalysis: true,           // Enable 1536D OpenAI embeddings
+          semanticWeight: 0.4,                    // Balanced semantic influence (40%)
+          structuralWeight: 0.6,                  // Structure-first approach (60%)
+          scoringMethod: 'multiplicative',        // Conservative multiplicative scoring
+          conservativeMode: true,                 // Require both structural AND semantic strength
+          
+          // Dependency-Driven Domain Detection
+          enableDependencyAnalysis: true,         // Enable hub-centric domain formation
+          includeTransitiveDeps: false,           // Direct dependencies only (conservative)
+          businessWeighting: 0.3,                 // Business naming pattern influence
+          
+          // Quality & Validation
+          enableValidation: true,                 // Enable comprehensive validation
+          performanceMode: 'accuracy',            // Prioritize quality over speed
+          batchProcessing: true,                  // Enable batch processing for semantic vectors
+          cachingEnabled: true                    // Enable result caching
+        }
+      );
+
+      console.log(`✅ AI-enhanced clustering completed - found ${advancedResult.domains.length} domains`);
+      console.log(`   📊 Algorithm selected: ${advancedResult.louvainClustering ? 'Louvain' : advancedResult.dependencyAnalysis ? 'Dependency' : 'Spectral'}`);
+      console.log(`   🎯 Quality score: ${advancedResult.validation.overallQuality.overallScore.toFixed(3)}`);
+      console.log(`   🤖 Semantic analysis: ${advancedResult.semanticAnalysis ? `${advancedResult.semanticAnalysis.vectorCount} vectors (${advancedResult.semanticAnalysis.embeddingDimensions}D)` : 'disabled'}`);
+      console.log(`   🏗️ Dependency analysis: ${advancedResult.dependencyAnalysis ? `${advancedResult.dependencyAnalysis.domains.length} hub domains` : 'disabled'}`);
+      console.log(`   ⚡ Processing time: ${advancedResult.performance?.totalProcessingTime?.toFixed(1) || '0'}ms`);
+
+      // Transform AI-enhanced domains to legacy format for frontend compatibility  
+      const hybridResult = {
+        hybridClusters: advancedResult.domains.map(domain => ({
+          clusterId: domain.id,
+          clusterName: domain.name,
+          tables: domain.tables,
+          coreTable: domain.tables[0], // First table as core table
+          confidenceScore: domain.confidence,
+          coherenceScore: domain.coherenceScore,
+          businessDomain: domain.businessContext || domain.name,
+          algorithmUsed: domain.algorithmUsed || 'AI-enhanced',
+          hubTables: domain.hubTables,
+          // AI enhancement indicators
+          aiEnhanced: true,
+          semanticScore: advancedResult.semanticAnalysis?.averageSimilarity || 0,
+          dependencyDriven: !!advancedResult.dependencyAnalysis
+        })),
+        clusteringMetrics: {
+          averageQuality: advancedResult.validation.overallQuality.overallScore,
+          totalProcessingTime: advancedResult.performance?.totalProcessingTime || 0,
+          algorithmUsed: advancedResult.louvainClustering ? 'Louvain' : advancedResult.dependencyAnalysis ? 'Dependency-Driven' : 'Spectral',
+          hubCount: advancedResult.hubDetection.statistics.hubCount,
+          isolatedHubs: advancedResult.hubAssignment.isolatedHubs.length,
+          // AI-enhanced metrics
+          semanticCoverage: advancedResult.semanticAnalysis?.semanticCoverage || 0,
+          embeddingDimensions: advancedResult.semanticAnalysis?.embeddingDimensions || 0,
+          dependencyDomains: advancedResult.dependencyAnalysis?.domains.length || 0,
+          aiEnhanced: true
+        }
+      };
+
+      // Import transformer function
+      const { transformHybridClustersToDomainsResponse } = await import('./utils/domainTransformer');
+      
+      // Transform hybrid clusters to frontend domain format
+      const domainResults = transformHybridClustersToDomainsResponse(
+        hybridResult.hybridClusters,
+        sanitizedTables,
         formattedRelationships
       );
 
@@ -344,12 +546,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`  ${domain}: ${result.metadata.tables_count} tables, ${result.metadata.relationships_count} relationships`);
       });
 
+      // Store domains in database for future use
+      if (projectId && hybridResult.hybridClusters.length > 0) {
+        try {
+          const domainPersistenceService = new (await import('./services/domainPersistenceService')).DomainPersistenceService();
+          
+          // Convert hybrid clusters to vector clustering format for storage
+          const vectorClusteringResult = {
+            clusters: hybridResult.hybridClusters.map(cluster => ({
+              id: cluster.clusterId,
+              name: cluster.clusterName,
+              tables: cluster.tables,
+              coreTable: cluster.coreTable,
+              confidence: cluster.confidenceScore,
+              coherence: cluster.coherenceScore,
+              businessDomain: cluster.businessDomain || cluster.clusterName,
+              purpose: `Domain containing ${cluster.coreTable} and related entities`
+            })),
+            overallMetrics: {
+              clusterCount: hybridResult.hybridClusters.length,
+              averageCoherence: hybridResult.clusteringMetrics?.averageQuality || 0.5,
+              coverage: 1.0
+            }
+          };
+          
+          await domainPersistenceService.storeDomainClustering(
+            projectId,
+            vectorClusteringResult,
+            [] // Empty embeddings since we're using hybrid clustering
+          );
+          
+          console.log(`💾 Stored ${hybridResult.hybridClusters.length} domains for project ${projectId}`);
+        } catch (error) {
+          console.warn('⚠️ Could not store domains:', error);
+          // Don't fail the request if storage fails
+        }
+      }
+
       res.json({
         domains: domainResults,
         metadata: {
           total_domains: Object.keys(domainResults).length,
           total_tables: tables.length,
-          total_relationships: formattedRelationships.length
+          total_relationships: formattedRelationships.length,
+          clustering_metrics: hybridResult.clusteringMetrics,
+          processing_time_ms: hybridResult.clusteringMetrics.totalProcessingTime,
+          // AI enhancement metadata
+          ai_enhanced: true,
+          features_enabled: {
+            semantic_analysis: !!advancedResult.semanticAnalysis,
+            dependency_analysis: !!advancedResult.dependencyAnalysis,
+            multiplicative_scoring: true,
+            quality_validation: true
+          },
+          semantic_info: advancedResult.semanticAnalysis ? {
+            vector_count: advancedResult.semanticAnalysis.vectorCount,
+            embedding_dimensions: advancedResult.semanticAnalysis.embeddingDimensions,
+            coverage_percentage: Math.round(advancedResult.semanticAnalysis.semanticCoverage * 100),
+            average_similarity: advancedResult.semanticAnalysis.averageSimilarity.toFixed(3)
+          } : null
         }
       });
 
@@ -783,6 +1038,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.clearProjectRelationships(req.params.projectId);
         await storage.storeTables(tables, req.params.projectId, project.organizationId);
         await storage.storeRelationships(relationships, req.params.projectId, project.organizationId);
+      }
+
+      // Pre-compute AI-enhanced domain clustering for this project (async, don't block response)
+      if (process.env.USE_INTELLIGENT_CLUSTERING === 'true' && tables.length > 0) {
+        console.log(`🤖 Starting background AI domain pre-computation for project ${req.params.projectId}`);
+        
+        // Run enhanced domain computation in background
+        setImmediate(async () => {
+          try {
+            const formattedRelationshipsForDomains = relationships.map(rel => ({
+              id: '',
+              sourceTable: rel.sourceTable,
+              sourceColumn: rel.sourceColumn,
+              targetTable: rel.targetTable,
+              targetColumn: rel.targetColumn,
+              createdAt: new Date(),
+              projectId: req.params.projectId,
+              organizationId: project.organizationId
+            }));
+
+            console.log(`🔄 Pre-computing enhanced domains for ${tables.length} tables, ${relationships.length} relationships`);
+            
+            // Use new AdvancedDomainBoundaryService for consistent results
+            const backgroundDomainService = new AdvancedDomainBoundaryService();
+            const backgroundTableInfoList = coreTableDiscoveryService.convertTableDataToTableInfo(tables);
+            
+            const backgroundResult = await backgroundDomainService.detectAdvancedDomainBoundaries(
+              backgroundTableInfoList,
+              formattedRelationshipsForDomains,
+              {
+                algorithm: 'auto',
+                targetClusterCount: 15,
+                minClusterSize: 2,
+                maxClusterSize: 20,
+                
+                // Enhanced features for background processing
+                enableSemanticAnalysis: true,
+                semanticWeight: 0.4,
+                structuralWeight: 0.6,
+                scoringMethod: 'multiplicative',
+                conservativeMode: true,
+                
+                enableDependencyAnalysis: true,
+                includeTransitiveDeps: false,
+                businessWeighting: 0.3,
+                
+                enableValidation: true,
+                performanceMode: 'balanced',  // Balanced for background processing
+                batchProcessing: true,
+                cachingEnabled: true
+              }
+            );
+            
+            // Convert and store the results using existing persistence service
+            const domainPersistenceService = new (await import('./services/domainPersistenceService')).DomainPersistenceService();
+            
+            const vectorClusteringResult = {
+              clusters: backgroundResult.domains.map(domain => ({
+                id: domain.id,
+                name: domain.name,
+                tables: domain.tables,
+                coreTable: domain.tables[0] || `domain_${domain.id}`,
+                confidence: domain.confidence,
+                coherence: domain.coherenceScore,
+                businessDomain: domain.businessContext || domain.name,
+                purpose: `AI-enhanced domain: ${domain.name}`
+              })),
+              overallMetrics: {
+                clusterCount: backgroundResult.domains.length,
+                averageCoherence: backgroundResult.validation.overallQuality.overallScore,
+                coverage: 1.0
+              }
+            };
+            
+            await domainPersistenceService.storeDomainClustering(
+              req.params.projectId,
+              vectorClusteringResult,
+              [] // Semantic vectors stored internally by the service
+            );
+            
+            console.log(`✅ AI-enhanced domain pre-computation completed for project ${req.params.projectId}`);
+            console.log(`   📊 Generated ${backgroundResult.domains.length} domains with ${backgroundResult.validation.overallQuality.overallScore.toFixed(3)} quality`);
+            
+          } catch (error) {
+            console.error(`❌ AI domain pre-computation failed for project ${req.params.projectId}:`, error);
+          }
+        });
       }
 
       res.json({ 

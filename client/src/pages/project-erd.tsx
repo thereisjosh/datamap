@@ -44,13 +44,16 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
     return urlParams.get('domain') || 'overview';
   };
   const [selectedDomain, setSelectedDomain] = useState(getInitialDomain());
+  const [selectedTable, setSelectedTable] = useState<string | null>(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('table');
+  });
   const [searchResults, setSearchResults] = useState<{
     tables: string[];
     columns: Array<{name: string, table: string, type: string, isPK: boolean, isFK: boolean}>;
     relationships: string[];
   }>({ tables: [], columns: [], relationships: [] });
   const [isSearchActive, setIsSearchActive] = useState(false);
-  const [pendingTableSelection, setPendingTableSelection] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
   // Chat state
@@ -67,8 +70,65 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
   const [domainResults, setDomainResults] = useState<Record<string, any>>({});
   const [isDomainLoading, setIsDomainLoading] = useState(false);
   const [domainError, setDomainError] = useState<string | null>(null);
+  
+  // Watch for URL parameter changes
+  useEffect(() => {
+    const checkUrlParams = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const domainParam = urlParams.get('domain');
+      const tableParam = urlParams.get('table');
+      
+      if (domainParam && domainParam !== selectedDomain) {
+        setSelectedDomain(domainParam);
+      }
+      
+      setSelectedTable(tableParam);
+    };
+    
+    // Check on mount and when URL changes
+    checkUrlParams();
+    window.addEventListener('popstate', checkUrlParams);
+    
+    return () => {
+      window.removeEventListener('popstate', checkUrlParams);
+    };
+  }, [selectedDomain]);
+  const [domainResultsReady, setDomainResultsReady] = useState(false);
 
   const projectId = params?.projectId || '';
+
+  // Helper function to find the primary domain for a table
+  const findDomainForTable = (tableName: string): string | null => {
+    console.log(`🔎 Finding domain for table "${tableName}"`);
+    
+    for (const [domainName, domainData] of Object.entries(domainResults)) {
+      if (domainData?.diagram) {
+        const diagram = domainData.diagram;
+        const lines = diagram.split('\n');
+        
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          // Check for table definition: "TableName {" or relationship references
+          if (trimmedLine.startsWith(tableName + ' {') || 
+              trimmedLine.includes(tableName + ' ||') ||
+              trimmedLine.includes('|| ' + tableName) ||
+              trimmedLine.includes(tableName + ' }')) {
+            console.log(`✅ Found table "${tableName}" in domain "${domainName}"`);
+            return domainName;
+          }
+        }
+      }
+    }
+    
+    // Fallback to overview if not found in specific domains
+    if (domainResults.overview) {
+      console.log(`⚠️ Table "${tableName}" not found in any domain, defaulting to overview`);
+      return 'overview';
+    }
+    
+    console.log(`❌ Table "${tableName}" not found and no overview available`);
+    return null;
+  };
 
   // Load project data on component mount
   useEffect(() => {
@@ -107,8 +167,12 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
     loadProjectData();
   }, [projectId, toast]);
 
+
   // Generate domain views based on project data
   const generateDomainViews = async (projectTables: Table[], projectRelationships: Relationship[]) => {
+    // Reset ready state when starting generation
+    setDomainResultsReady(false);
+    
     // Validate input data
     if (!Array.isArray(projectTables) || !Array.isArray(projectRelationships)) {
       console.error('Invalid data format: tables or relationships is not an array');
@@ -118,6 +182,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
           metadata: { tables_count: 0, relationships_count: 0 }
         }
       });
+      setDomainResultsReady(true);
       return;
     }
 
@@ -132,6 +197,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
           }
         }
       });
+      setDomainResultsReady(true);
       return;
     }
 
@@ -186,12 +252,14 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
       // Call the domain generation API with correct parameters (not an object)
       const response = await api.generateDomainMermaid(
         transformedTables, 
-        projectRelationships
+        projectRelationships,
+        params?.projectId // Pass projectId to enable vector clustering
       );
       
       // Server returns {domains: {...}, metadata: {...}} format
       if (response.domains) {
         setDomainResults(response.domains);
+        setDomainResultsReady(true);
         
         // Validate selected domain from URL parameter
         const domains = Object.keys(response.domains);
@@ -234,6 +302,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         }
       };
       setDomainResults(fallbackResults);
+      setDomainResultsReady(true);
       
       // Ensure selectedDomain is valid and update URL
       if (selectedDomain !== 'overview') {
@@ -325,18 +394,19 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
       // Use provided domain or find which domain contains this table
       const targetDomain = domain || findDomainForTable(item);
       
-      if (targetDomain && targetDomain !== selectedDomain) {
-        // Cross-domain navigation needed
-        console.log(`🌐 Cross-domain search: switching to "${targetDomain}" for table "${item}"`);
-        handleDomainSwitchForTable(targetDomain, item);
-      } else {
-        // Same domain - highlight the table with enhanced feedback
-        console.log(`🎯 Same domain search: highlighting table "${item}" in domain "${targetDomain}"`);
-        setPendingTableSelection(item);
-        
-        // Additional feedback: briefly flash or highlight the current domain selector
-        console.log(`📍 Table "${item}" is visible in current domain view`);
+      if (!targetDomain) {
+        // Table not found in any domain
+        console.error(`❌ Table "${item}" not found in any domain`);
+        toast({
+          title: "Table Not Found",
+          description: `Table "${item}" could not be found in any domain. It may have been removed or renamed.`,
+          variant: "destructive",
+        });
+        return;
       }
+      
+      // Navigate to the domain with table parameter
+      navigate(`/projects/${params?.projectId}/erd?domain=${targetDomain}&table=${item}`);
     } else if (type === 'column') {
       // For enhanced column objects, we already have the table information
       const columnObj = typeof item === 'object' ? item : null;
@@ -346,13 +416,9 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         console.log(`📋 Column search: found "${columnObj.name}" in table "${containingTable}"`);
         const targetDomain = findDomainForTable(containingTable);
         
-        if (targetDomain && targetDomain !== selectedDomain) {
-          // Cross-domain navigation for column
-          console.log(`🌐 Cross-domain column search: switching to "${targetDomain}" for table "${containingTable}"`);
-          handleDomainSwitchForTable(targetDomain, containingTable);
-        } else {
-          // Same domain - highlight the containing table
-          setPendingTableSelection(containingTable);
+        if (targetDomain) {
+          // Navigate to the domain with table parameter
+          navigate(`/projects/${params?.projectId}/erd?domain=${targetDomain}&table=${containingTable}`);
         }
       }
     } else if (type === 'relationship') {
@@ -365,12 +431,9 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         // Find domain for the first table (we'll switch to that domain)
         const targetDomain = findDomainForTable(sourceTable);
         
-        if (targetDomain && targetDomain !== selectedDomain) {
-          console.log(`🌐 Cross-domain relationship search: switching to "${targetDomain}" for relationship "${item}"`);
-          handleDomainSwitchForTable(targetDomain, sourceTable);
-        } else {
-          // Same domain - highlight the source table
-          setPendingTableSelection(sourceTable);
+        if (targetDomain) {
+          // Navigate to the domain with table parameter
+          navigate(`/projects/${params?.projectId}/erd?domain=${targetDomain}&table=${sourceTable}`);
         }
       }
     }
@@ -378,9 +441,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
     handleClearSearch();
   };
 
-  const handleTableSelectionComplete = () => {
-    setPendingTableSelection(null);
-  };
 
   const handleDomainChange = (domain: string) => {
     setSelectedDomain(domain);
@@ -421,44 +481,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
     return domains.length > 0 ? domains : ['overview'];
   };
 
-  // Helper function to find the primary domain for a table (for backward compatibility)
-  const findDomainForTable = (tableName: string): string | null => {
-    for (const [domainName, domainData] of Object.entries(domainResults)) {
-      if (domainData?.diagram) {
-        const diagram = domainData.diagram;
-        const lines = diagram.split('\n');
-        
-        for (const line of lines) {
-          const trimmedLine = line.trim();
-          // Check for table definition: "TableName {" or relationship references
-          if (trimmedLine.startsWith(tableName + ' {') || 
-              trimmedLine.includes(tableName + ' ||') ||
-              trimmedLine.includes('|| ' + tableName) ||
-              trimmedLine.includes(tableName + ' }')) {
-            return domainName;
-          }
-        }
-      }
-    }
-    
-    // Fallback to overview if not found in specific domains
-    if (domainResults.overview) {
-      return 'overview';
-    }
-    
-    return null;
-  };
 
-  const handleDomainSwitchForTable = (targetDomain: string, tableName: string) => {
-    console.log(`🔄 Switching domain from "${selectedDomain}" to "${targetDomain}" for table "${tableName}"`);
-    
-    // Switch to the target domain
-    setSelectedDomain(targetDomain);
-    
-    // Queue the table selection for after domain switch completes
-    // The ERDRenderer will automatically handle the table selection via selectedTableFromSearch
-    setPendingTableSelection(tableName);
-  };
 
   const handleFullPreview = () => {
     navigate(`/projects/${projectId}/preview`);
@@ -500,26 +523,20 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
       const tableName = tables[0];
       const targetDomain = findDomainForTable(tableName);
       
-      if (targetDomain && targetDomain !== selectedDomain) {
-        handleDomainSwitchForTable(targetDomain, tableName);
-      } else {
-        setPendingTableSelection(tableName);
+      if (targetDomain) {
+        // Navigate to the domain with table parameter
+        navigate(`/projects/${params?.projectId}/erd?domain=${targetDomain}&table=${tableName}`);
       }
     }
   };
 
   const handleRelationshipClick = (sourceTable: string, targetTable: string) => {
-    // Find domain that contains both tables or fallback to the source table's domain
+    // Find domain that contains the source table
     const sourceDomain = findDomainForTable(sourceTable);
-    const targetDomain = findDomainForTable(targetTable);
     
-    // Prefer domain that contains both tables, otherwise use source table's domain
-    const finalDomain = sourceDomain === targetDomain ? sourceDomain : sourceDomain;
-    
-    if (finalDomain && finalDomain !== selectedDomain) {
-      handleDomainSwitchForTable(finalDomain, sourceTable);
-    } else {
-      setPendingTableSelection(sourceTable);
+    if (sourceDomain) {
+      // Navigate to the domain with table parameter
+      navigate(`/projects/${params?.projectId}/erd?domain=${sourceDomain}&table=${sourceTable}`);
     }
   };
 
@@ -693,9 +710,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
                     isDarkMode={isDarkMode}
                     isLoading={isLoading || isDomainLoading}
                     domain={selectedDomain}
-                    selectedTableFromSearch={pendingTableSelection}
-                    onTableSelectionComplete={handleTableSelectionComplete}
-                    onDomainSwitch={handleDomainSwitchForTable}
+                    selectedTableFromSearch={selectedTable}
                     domainResults={domainResults}
                   />
                 </div>

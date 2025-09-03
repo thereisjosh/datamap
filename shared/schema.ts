@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, jsonb, boolean, timestamp, uuid, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, jsonb, boolean, timestamp, uuid, index, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -226,6 +226,7 @@ export const generateMermaidRequestSchema = z.object({
     theme: z.string().default("default"),
     direction: z.string().default("TB"),
   }).optional(),
+  projectId: z.string().optional(),
 });
 
 // Project schemas
@@ -234,6 +235,56 @@ export const projectSchema = z.object({
   description: z.string().optional(),
   settings: z.record(z.any()).optional(),
 });
+
+// Vector-Based Domain Clustering Tables
+export const projectDomains = pgTable("project_domains", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  domainName: varchar("domain_name").notNull(), // e.g., "payments_donations"
+  displayName: varchar("display_name").notNull(), // e.g., "Donations & Payments"
+  purpose: text("purpose"), // AI-generated business purpose description
+  confidenceScore: text("confidence_score"), // 0.0-1.0 confidence in domain grouping
+  businessMetrics: jsonb("business_metrics"), // completeness, independence, usability scores
+  aiEnhanced: boolean("ai_enhanced").notNull().default(true),
+  clusteringMethod: varchar("clustering_method").notNull().default("vector"), // "vector", "llm", "traditional"
+  modelVersion: varchar("model_version").default("all-MiniLM-L6-v2"), // Track embedding model used
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  projectIdx: index("project_domains_project_idx").on(table.projectId),
+  projectDomainIdx: index("project_domains_project_domain_idx").on(table.projectId, table.domainName),
+  methodIdx: index("project_domains_method_idx").on(table.clusteringMethod),
+  createdAtIdx: index("project_domains_created_at_idx").on(table.createdAt),
+}));
+
+export const projectDomainTables = pgTable("project_domain_tables", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  domainId: uuid("domain_id").notNull().references(() => projectDomains.id, { onDelete: "cascade" }),
+  tableName: varchar("table_name").notNull(),
+  relevanceScore: real("relevance_score").notNull().default(0.5), // 0.0-1.0 relevance to this domain
+  isJunctionTable: boolean("is_junction_table").notNull().default(false),
+  businessJustification: text("business_justification"), // Why this table belongs to this domain
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  domainIdx: index("project_domain_tables_domain_idx").on(table.domainId),
+  domainTableIdx: index("project_domain_tables_domain_table_idx").on(table.domainId, table.tableName),
+  tableIdx: index("project_domain_tables_table_idx").on(table.tableName),
+}));
+
+export const tableEmbeddings = pgTable("table_embeddings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  tableName: varchar("table_name").notNull(),
+  embedding: text("embedding").notNull(), // JSON array of embedding values
+  embeddingModel: varchar("embedding_model").notNull().default("all-MiniLM-L6-v2"),
+  metadata: jsonb("metadata"), // Additional metadata about the table
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  projectIdx: index("table_embeddings_project_idx").on(table.projectId),
+  tableIdx: index("table_embeddings_table_idx").on(table.tableName),
+  modelIdx: index("table_embeddings_model_idx").on(table.embeddingModel),
+  createdAtIdx: index("table_embeddings_created_at_idx").on(table.createdAt),
+}));
 
 // Insert schemas
 export const insertProjectSchema = createInsertSchema(projects).omit({
@@ -246,6 +297,22 @@ export const insertProjectFileSchema = createInsertSchema(projectFiles).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertProjectDomainSchema = createInsertSchema(projectDomains).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertProjectDomainTableSchema = createInsertSchema(projectDomainTables).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTableEmbeddingSchema = createInsertSchema(tableEmbeddings).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertTableSchema = createInsertSchema(tables).omit({

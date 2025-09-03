@@ -282,7 +282,7 @@ export class LLMService {
       
       return {
         explanation: response,
-        businessLogic: this.extractBusinessLogic(response),
+        structuralLogic: this.extractStructuralLogic(response),
         technicalDetails: this.extractTechnicalDetails(response),
         sqlExamples,
         bestPractices: this.extractBestPractices(response)
@@ -404,7 +404,7 @@ ${this.serializeERDContext(request.erdContext)}
 RELATIONSHIP TO EXPLAIN: ${request.sourceTable} ↔ ${request.targetTable}
 
 INSTRUCTIONS:
-1. Explain the business logic behind this relationship
+1. Explain the structural logic behind this relationship
 2. Describe the technical implementation (foreign keys, junction tables, etc.)
 3. Provide SQL examples for common operations
 4. Mention any design patterns or best practices
@@ -557,7 +557,7 @@ RESPONSE FORMAT:
   }
 
   /**
-   * Resolve junction table placement using business logic analysis
+   * Resolve junction table placement using structural logic analysis
    */
   public async resolveJunctionTablePlacement(
     tableName: string,
@@ -623,40 +623,40 @@ RESPONSE FORMAT:
    * Build prompt for table domain analysis
    */
   private buildTableAnalysisPrompt(tableContext: string): string {
-    return `You are an expert database architect specializing in business domain modeling. Analyze this database table for business domain classification.
+    return `You are an expert database architect specializing in structural domain modeling. Analyze this database table for structural pattern classification.
 
 Table Context: ${tableContext}
 
 Analyze and determine:
 
-1. PRIMARY_PURPOSE: What is this table's main business function? (1-2 sentences)
+1. PRIMARY_PURPOSE: What is this table's main structural function? (1-2 sentences)
 
-2. BUSINESS_DOMAINS: Which business areas does this serve? Choose the most relevant from:
-   - user_management (user accounts, authentication, roles, permissions)
-   - payments_donations (payments, transactions, donations, billing)
-   - opportunities (volunteer opportunities, registrations, skills)
-   - campaigns_marketing (campaigns, marketing content, events)
-   - system_configuration (system settings, logs, configurations)
-   - organization_management (organizations, entities, partnerships)
-   - content_management (documents, resources, templates)
+2. STRUCTURAL_PATTERNS: What structural patterns does this table exhibit? Choose the most relevant from:
+   - entity_aggregate (central hub with multiple relationships to other entities)
+   - transactional (records state changes, temporal ordering, process flows)
+   - hierarchical (parent-child tree structures, organizational levels)
+   - relational (many-to-many network patterns, association management)
+   - temporal (time-series data, audit trails, historical tracking)
+   - configuration (system settings, lookup data, static reference information)
+   - bridge_junction (connects other entities, enables many-to-many relationships)
 
 3. IS_JUNCTION: Is this a junction/bridge table connecting other entities? (true/false)
-   Indicators: multiple foreign keys, connects two business entities, enables many-to-many relationships
+   Indicators: multiple foreign keys, connects two primary entities, enables many-to-many relationships
 
-4. DOMAIN_ANALYSIS: For each relevant domain (max 3), provide:
+4. STRUCTURAL_ANALYSIS: For each relevant structural pattern (max 3), provide:
    - RELEVANCE: Score 0.0-1.0 where:
-     * 0.8+ = Core table (essential to domain)
-     * 0.4-0.8 = Contextual table (serves domain in specific context)
+     * 0.8+ = Core table (essential to structural pattern)
+     * 0.4-0.8 = Contextual table (supports pattern in specific context)
      * <0.4 = Not relevant (exclude)
-   - ROLE: What specific role does this table play in that domain?
-   - REASONING: Why does it belong to this domain? Focus on business purpose.
-   - COLUMNS: Which columns are most relevant to this domain? (max 5)
+   - ROLE: What specific role does this table play in that structural pattern?
+   - REASONING: Why does it exhibit this pattern? Focus on structural characteristics.
+   - COLUMNS: Which columns are most relevant to this pattern? (max 5)
 
 5. JUNCTION_ANALYSIS (only if IS_JUNCTION = true):
-   - CONNECTED_DOMAINS: Which domains does it connect?
-   - PRIMARY_DOMAIN: Which domain should own this junction table?
-   - BUSINESS_PROCESS: What primary business process does this enable?
-   - REASONING: Why should it belong to the primary domain over others?
+   - CONNECTED_PATTERNS: Which structural patterns does it connect?
+   - PRIMARY_PATTERN: Which pattern should own this junction table?
+   - STRUCTURAL_PURPOSE: What primary structural relationship does this enable?
+   - REASONING: Why should it belong to the primary pattern over others?
 
 Format your response exactly as:
 
@@ -670,10 +670,10 @@ DOMAIN_ANALYSIS:
 ${tableContext.includes('FK') ? `JUNCTION_ANALYSIS:
 - connected_domains=[domain1,domain2]
 - primary_domain=domain1
-- business_process="X"
+- structural_purpose="X"
 - reasoning="Y"` : ''}
 
-Important: Focus on business semantics over technical relationships. Consider what business users would expect.`;
+Important: Focus on structural patterns over technical relationships. Consider what data patterns would be most logical.`;
   }
 
   /**
@@ -685,7 +685,7 @@ Important: Focus on business semantics over technical relationships. Consider wh
     connectedEntities: string[],
     possibleDomains: string[]
   ): string {
-    return `You are a database design expert. This junction table connects multiple entities and could belong to different domains. Determine its PRIMARY domain based on business logic.
+    return `You are a database design expert. This junction table connects multiple entities and could belong to different domains. Determine its PRIMARY domain based on structural logic.
 
 Junction Table: ${tableName}
 Columns: ${columns.join(', ')}
@@ -693,15 +693,15 @@ Connected Entities: ${connectedEntities.join(', ')}
 Possible Domains: ${possibleDomains.join(', ')}
 
 Analysis Framework:
-1. What is the PRIMARY business process this table enables?
-2. What is the main purpose of the data it stores?
-3. Which domain would be incomplete without this table?
-4. What workflow does this table primarily support?
-5. From a business user perspective, which domain "owns" this relationship?
+1. What is the PRIMARY structural purpose this table enables?
+2. What is the main type of data relationships it manages?
+3. Which structural pattern would be incomplete without this table?
+4. What data flow does this table primarily support?
+5. From a structural perspective, which pattern "owns" this relationship?
 
 Consider these examples:
 - OrderItems → belongs to Orders domain (order fulfillment process)
-- CampaignDonations → belongs to Donations domain (donation recording process)
+- EntityAssignments → belongs to Assignment pattern (assignment tracking process)
 - UserRoles → belongs to User Management domain (access control process)
 
 Analyze the table's semantic purpose, not just its foreign key relationships.
@@ -714,7 +714,7 @@ BUSINESS_PROCESS: [primary workflow this enables]
 REASONING: [detailed explanation of why it belongs to primary domain]
 ALTERNATIVE_DOMAINS: [other domains it could serve, if any]
 
-Focus on the business meaning and primary use case.`;
+Focus on the structural meaning and primary data pattern.`;
   }
 
   /**
@@ -725,7 +725,7 @@ Focus on the business meaning and primary use case.`;
     tables: string[],
     relationships: string[]
   ): string {
-    return `You are a database architecture expert. Analyze this domain grouping for business coherence and suggest improvements.
+    return `You are a database architecture expert. Analyze this domain grouping for structural coherence and suggest improvements.
 
 Domain: ${domainName}
 Tables: ${tables.join(', ')}
@@ -733,15 +733,15 @@ Key Relationships: ${relationships.join(', ')}
 
 Evaluate:
 
-1. COHERENCE: Do these tables form a logical business domain?
-   - Do they serve related business functions?
+1. COHERENCE: Do these tables form a logical structural domain?
+   - Do they serve related structural functions?
    - Are there obvious outliers that don't belong?
    - Are there missing tables that should be included?
 
-2. COMPLETENESS: Is this domain complete for its business purpose?
-   - What business workflows would this domain support?
+2. COMPLETENESS: Is this domain complete for its structural purpose?
+   - What data patterns would this domain support?
    - Are any critical tables missing?
-   - Would a business user find this grouping useful?
+   - Would this grouping make structural sense?
 
 3. INDEPENDENCE: How well does this domain stand alone?
    - Are there excessive dependencies on other domains?
@@ -769,9 +769,9 @@ OPTIMIZATION_SUGGESTIONS:
 - [specific recommendation 2]
 - [specific recommendation 3]
 
-BUSINESS_USE_CASES: [what business analysis this domain enables]
+STRUCTURAL_USE_CASES: [what structural analysis this domain enables]
 
-Focus on practical business value and user experience.`;
+Focus on practical structural value and data organization.`;
   }
 
   /**
@@ -992,10 +992,10 @@ Focus on practical business value and user experience.`;
   }
 
   /**
-   * Extract business logic section from response
+   * Extract structural logic section from response
    */
-  private extractBusinessLogic(response: string): string {
-    const match = response.match(/\*\*Business Logic:\*\*([\s\S]*?)(?:\*\*|$)/);
+  private extractStructuralLogic(response: string): string {
+    const match = response.match(/\*\*Structural Logic:\*\*([\s\S]*?)(?:\*\*|$)/);
     return match ? match[1].trim() : '';
   }
 
