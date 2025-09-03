@@ -389,6 +389,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
   };
 
   const handleSearchResultClick = (type: string, item: string, domain?: string) => {
+    console.log(`🔍 Search result clicked: type=${type}, item=${typeof item === 'object' ? JSON.stringify(item) : item}, domain=${domain}`);
     
     if (type === 'table') {
       // Use provided domain or find which domain contains this table
@@ -405,8 +406,22 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         return;
       }
       
-      // Navigate to the domain with table parameter
-      navigate(`/projects/${params?.projectId}/erd?domain=${targetDomain}&table=${item}`);
+      console.log(`🎯 Navigating to domain "${targetDomain}" for table "${item}"`);
+      
+      // Update domain state and URL without full navigation
+      setSelectedDomain(targetDomain);
+      setSelectedTableFromSearch(item);
+      
+      // Update URL to reflect the change
+      const url = new URL(window.location.href);
+      if (targetDomain === 'overview') {
+        url.searchParams.delete('domain');
+      } else {
+        url.searchParams.set('domain', targetDomain);
+      }
+      url.searchParams.set('table', item);
+      window.history.replaceState({}, '', url.toString());
+      
     } else if (type === 'column') {
       // For enhanced column objects, we already have the table information
       const columnObj = typeof item === 'object' ? item : null;
@@ -417,8 +432,21 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         const targetDomain = findDomainForTable(containingTable);
         
         if (targetDomain) {
-          // Navigate to the domain with table parameter
-          navigate(`/projects/${params?.projectId}/erd?domain=${targetDomain}&table=${containingTable}`);
+          console.log(`🎯 Navigating to domain "${targetDomain}" for column table "${containingTable}"`);
+          
+          // Update domain state and URL without full navigation
+          setSelectedDomain(targetDomain);
+          setSelectedTableFromSearch(containingTable);
+          
+          // Update URL to reflect the change
+          const url = new URL(window.location.href);
+          if (targetDomain === 'overview') {
+            url.searchParams.delete('domain');
+          } else {
+            url.searchParams.set('domain', targetDomain);
+          }
+          url.searchParams.set('table', containingTable);
+          window.history.replaceState({}, '', url.toString());
         }
       }
     } else if (type === 'relationship') {
@@ -428,12 +456,27 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         const sourceTable = relationshipParts[0];
         const targetTable = relationshipParts[1];
         
+        console.log(`🔗 Relationship search: from "${sourceTable}" to "${targetTable}"`);
+        
         // Find domain for the first table (we'll switch to that domain)
         const targetDomain = findDomainForTable(sourceTable);
         
         if (targetDomain) {
-          // Navigate to the domain with table parameter
-          navigate(`/projects/${params?.projectId}/erd?domain=${targetDomain}&table=${sourceTable}`);
+          console.log(`🎯 Navigating to domain "${targetDomain}" for relationship source table "${sourceTable}"`);
+          
+          // Update domain state and URL without full navigation
+          setSelectedDomain(targetDomain);
+          setSelectedTableFromSearch(sourceTable);
+          
+          // Update URL to reflect the change
+          const url = new URL(window.location.href);
+          if (targetDomain === 'overview') {
+            url.searchParams.delete('domain');
+          } else {
+            url.searchParams.set('domain', targetDomain);
+          }
+          url.searchParams.set('table', sourceTable);
+          window.history.replaceState({}, '', url.toString());
         }
       }
     }

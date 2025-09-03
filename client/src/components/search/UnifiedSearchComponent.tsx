@@ -49,7 +49,9 @@ export const UnifiedSearchComponent: React.FC<UnifiedSearchComponentProps> = ({
     setIsSearchActive(query.length > 0);
     
     if (query.length > 0) {
-      const lowercaseQuery = query.toLowerCase();
+      // Use requestAnimationFrame to defer search processing for better performance
+      requestAnimationFrame(() => {
+        const lowercaseQuery = query.toLowerCase();
       
       // Search through real table names and create separate entries per domain
       const matchingTableEntries: Array<{ name: string; domain: string }> = [];
@@ -108,10 +110,11 @@ export const UnifiedSearchComponent: React.FC<UnifiedSearchComponentProps> = ({
         index === arr.findIndex(c => c.table === col.table && c.name === col.name)
       );
       
-      setSearchResults({
-        tables: matchingTableEntries,
-        columns: uniqueColumns,
-        relationships: [...new Set(matchingRelationships)]
+        setSearchResults({
+          tables: matchingTableEntries,
+          columns: uniqueColumns,
+          relationships: [...new Set(matchingRelationships)]
+        });
       });
     } else {
       setSearchResults({ tables: [], columns: [], relationships: [] });
