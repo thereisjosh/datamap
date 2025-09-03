@@ -289,9 +289,12 @@ export class StructuralDomainClusteringService {
     for (const [domainId, coreTables] of domainSeeds) {
       const referencedHubs = this.findReferencedHubs(coreTables, hubTables, relationships);
       
+      // Generate meaningful domain name based on hubs and core tables
+      const domainName = this.generateMeaningfulDomainName(domainId, [...coreTables, ...referencedHubs], referencedHubs);
+      
       domains.set(domainId, {
         id: domainId,
-        name: `Domain_${domainId}`,
+        name: domainName,
         coreTables,
         referencedHubs,
         masterHub: undefined,
@@ -418,6 +421,141 @@ export class StructuralDomainClusteringService {
     } else {
       return 0.3; // Poor size (too small or too large)
     }
+  }
+
+  /**
+   * Generate meaningful domain name based on hub tables and core tables
+   */
+  private generateMeaningfulDomainName(domainId: string, allTables: string[], hubTables: string[]): string {
+    if (domainId.startsWith('isolated_')) {
+      return `Isolated_Domain_${domainId.split('_')[1]}`;
+    }
+    
+    const domainSize = allTables.length;
+    const hubCount = hubTables.length;
+    
+    // Generate business-meaningful names based on primary hub table
+    if (hubCount > 0) {
+      const primaryHub = hubTables[0]; // Use the first hub as primary
+      
+      // Extract meaningful name from hub table
+      const businessName = this.extractBusinessNameFromTable(primaryHub);
+      
+      if (hubCount === 1) {
+        return `${businessName} Domain`;
+      } else {
+        return `${businessName} & Related Domains`;
+      }
+    } 
+    
+    // For domains without hubs, try to infer from table names
+    if (allTables.length > 0) {
+      const businessName = this.inferDomainNameFromTables(allTables);
+      if (businessName !== 'General') {
+        return `${businessName} Domain`;
+      }
+    }
+    
+    // Fallback to size-based naming
+    if (domainSize >= 20) {
+      return `Large Domain ${domainId}`;
+    } else if (domainSize <= 5) {
+      return `Small Domain ${domainId}`;
+    } else {
+      return `Mixed Domain ${domainId}`;
+    }
+  }
+
+  /**
+   * Extract business-meaningful name from table name
+   */
+  private extractBusinessNameFromTable(tableName: string): string {
+    if (!tableName) return 'General';
+    
+    // Handle common naming patterns
+    const businessTerms: Record<string, string> = {
+      'campaign': 'Campaign Management',
+      'user': 'User Management', 
+      'member': 'Membership',
+      'donation': 'Donation Processing',
+      'gift': 'Gift Management',
+      'giver': 'Donor Relations',
+      'volunteer': 'Volunteer Management',
+      'event': 'Event Management',
+      'organization': 'Organization',
+      'organisation': 'Organization',
+      'entitygroup': 'Organization',
+      'programme': 'Programme Management',
+      'program': 'Program Management',
+      'payment': 'Payment Processing',
+      'transaction': 'Transaction Processing',
+      'contact': 'Contact Management',
+      'account': 'Account Management',
+      'finance': 'Financial Management',
+      'report': 'Reporting',
+      'audit': 'Audit & Compliance',
+      'system': 'System Configuration',
+      'admin': 'Administration',
+      'log': 'Logging & Monitoring',
+      'file': 'File Management',
+      'opportunity': 'Opportunity Management'
+    };
+    
+    const lowerTableName = tableName.toLowerCase();
+    
+    // Find matching business term
+    for (const [key, businessName] of Object.entries(businessTerms)) {
+      if (lowerTableName.includes(key)) {
+        return businessName;
+      }
+    }
+    
+    // Clean up table name for display
+    return tableName.charAt(0).toUpperCase() + tableName.slice(1).replace(/[_-]/g, ' ');
+  }
+
+  /**
+   * Infer domain name from collection of table names
+   */
+  private inferDomainNameFromTables(tables: string[]): string {
+    const termCounts: Record<string, number> = {};
+    
+    const businessTerms = [
+      'campaign', 'user', 'member', 'donation', 'gift', 'giver', 
+      'volunteer', 'event', 'organization', 'organisation', 'entitygroup',
+      'programme', 'program', 'payment', 'transaction', 'contact', 
+      'account', 'finance', 'report', 'audit', 'system', 'admin', 'log',
+      'file', 'opportunity'
+    ];
+    
+    // Count occurrences of business terms across all tables
+    tables.forEach(tableName => {
+      const lowerName = tableName.toLowerCase();
+      businessTerms.forEach(term => {
+        if (lowerName.includes(term)) {
+          termCounts[term] = (termCounts[term] || 0) + 1;
+        }
+      });
+    });
+    
+    // Find most common term
+    let maxCount = 0;
+    let dominantTerm = '';
+    
+    Object.entries(termCounts).forEach(([term, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        dominantTerm = term;
+      }
+    });
+    
+    // Return meaningful name if dominant term found
+    if (dominantTerm && maxCount >= 2) {
+      const businessName = this.extractBusinessNameFromTable(dominantTerm);
+      return businessName.replace(' Domain', ''); // Remove 'Domain' suffix as it will be added later
+    }
+    
+    return 'General';
   }
 }
 
