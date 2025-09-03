@@ -5,7 +5,6 @@ import cors from "cors";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import { excelParserService } from "./services/excelParser";
-import { mermaidGeneratorService } from "./services/mermaidGenerator";
 import { AdvancedDomainBoundaryService } from "./services/AdvancedDomainBoundaryService";
 import { coreTableDiscoveryService } from "./services/coreTableDiscoveryService";
 import { generateMermaidRequestSchema, projectSchema, insertProjectSchema, insertProjectFileSchema, member, organization, user } from "@shared/schema";
@@ -317,64 +316,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Generate Mermaid endpoint
-  app.post("/api/generate-mermaid", async (req, res) => {
-    try {
-      // Validate request body
-      const validatedData = generateMermaidRequestSchema.parse(req.body);
-      
-      const { tables, relationships = [], options = {} } = validatedData;
-
-      // Sanitize and validate table data
-      const sanitizedTables = sanitizeTableData(tables);
-
-      // Convert relationships to the correct format for Mermaid generation
-      const formattedRelationships = relationships.map(rel => ({
-        id: '',
-        sourceTable: rel.sourceTable,
-        sourceColumn: rel.sourceColumn,
-        targetTable: rel.targetTable,
-        targetColumn: rel.targetColumn,
-        createdAt: new Date(),
-        projectId: null,
-        organizationId: null
-      }));
-
-      // Generate Mermaid diagram
-      const result = mermaidGeneratorService.generateMermaidDiagram(
-        sanitizedTables,
-        formattedRelationships,
-        options
-      );
-
-      // Log the generated diagram for debugging
-      console.log('Generated Mermaid diagram:', result.diagram);
-      console.log('Tables count:', tables.length);
-      console.log('Relationships count:', formattedRelationships.length);
-
-      // Validate the generated syntax
-      const validation = mermaidGeneratorService.validateMermaidSyntax(result.diagram);
-      
-      if (!validation.isValid) {
-        return res.status(500).json({
-          error: "Failed to generate valid Mermaid syntax",
-          code: 500,
-          details: validation.errors
-        });
-      }
-
-      res.json(result);
-
-    } catch (error) {
-      console.error('Generate Mermaid error:', error);
-      
-      res.status(400).json({
-        error: "Invalid request data for Mermaid generation",
-        code: 400,
-        details: error instanceof Error ? error.message : "Unknown error"
-      });
-    }
-  });
 
   // Generate domain-specific Mermaid diagrams endpoint - SIMPLIFIED VERSION
   app.post("/api/generate-domain-mermaid", async (req, res) => {
@@ -619,37 +560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get domain configuration and styling information
-  app.get("/api/domain-config", async (req, res) => {
-    try {
-      res.json({
-        domains: mermaidGeneratorService.getDomainConfigs()
-      });
-    } catch (error) {
-      console.error('Domain config error:', error);
-      res.status(500).json({ 
-        error: 'Failed to get domain configuration',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  });
 
-  // Generate domain-specific CSS
-  app.get("/api/domain-css/:domain?", async (req, res) => {
-    try {
-      const { domain } = req.params;
-      const css = mermaidGeneratorService.generateDomainCSS(domain);
-      
-      res.setHeader('Content-Type', 'text/css');
-      res.send(css);
-    } catch (error) {
-      console.error('Domain CSS generation error:', error);
-      res.status(500).json({ 
-        error: 'Failed to generate domain CSS',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  });
 
   // Get parsed tables (for frontend integration)
   app.get("/api/tables", async (req, res) => {
