@@ -12,6 +12,7 @@ interface ERDRendererProps {
   domain?: string;
   selectedTableFromSearch?: string | null;
   domainResults?: Record<string, any>;
+  onExternalTableClick?: (tableName: string, targetDomain: string) => void;
 }
 
 
@@ -21,7 +22,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   isLoading = false,
   domain,
   selectedTableFromSearch = null,
-  domainResults = {}
+  domainResults = {},
+  onExternalTableClick
 }) => {
   
   // State for Direct SVG Rendering pattern
@@ -1883,6 +1885,97 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [svgContent, handleViewModeChange, handleReset, handleFit, handleDomainFocus, handleClearSelection, handleZoomIn, handleZoomOut, handleToggleCompactView, handleToggleRelationshipLabels, handleToggleAttributeDetails]);
 
+  // Helper function to identify external table references
+  const identifyExternalTables = useCallback((currentDomainTables: string[]): Set<string> => {
+    const externalTables = new Set<string>();
+    
+    if (!domainResults || Object.keys(domainResults).length === 0) {
+      return externalTables;
+    }
+    
+    // Parse the current domain's mermaid diagram to find FK references
+    if (mermaidCode) {
+      const lines = mermaidCode.split('\n');
+      
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        
+        // Look for FK column definitions: "foreign_key_name type FK"
+        // or relationship definitions: "TableA ||--o{ TableB : relationship"
+        if (trimmedLine.includes(' FK') || trimmedLine.includes('||') || trimmedLine.includes('}o')) {
+          // Extract referenced table names from relationships
+          const relationshipMatch = trimmedLine.match(/(\w+)\s*\|\|[^|]*\{\s*(\w+)/);
+          if (relationshipMatch) {
+            const [, sourceTable, targetTable] = relationshipMatch;
+            
+            // Check if target table is external (not in current domain)
+            if (!currentDomainTables.includes(targetTable) && targetTable !== sourceTable) {
+              externalTables.add(targetTable);
+              console.log(`🔗 Found external table reference: "${targetTable}" (not in current domain)`);
+            }
+          }
+          
+          // Also check FK column names for patterns like "user_id" -> "User" table
+          if (trimmedLine.includes(' FK')) {
+            const fkMatch = trimmedLine.match(/(\w+)_id\s+\w+\s+FK/);
+            if (fkMatch) {
+              const [, baseTableName] = fkMatch;
+              // Convert snake_case to PascalCase for table name
+              const possibleTableName = baseTableName.charAt(0).toUpperCase() + baseTableName.slice(1);
+              
+              // Check if this table exists in any other domain
+              for (const [domainName, domainData] of Object.entries(domainResults)) {
+                if (domainName === domain || domainName === 'overview') continue;
+                
+                if (domainData?.diagram && domainData.diagram.includes(`${possibleTableName} {`)) {
+                  externalTables.add(possibleTableName);
+                  console.log(`🔗 Found external table reference from FK: "${possibleTableName}" (from ${baseTableName}_id FK)`);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    return externalTables;
+  }, [domainResults, mermaidCode, domain]);
+
+  // Handle clicks on external table references
+  const handleExternalTableClick = useCallback((tableName: string, event?: MouseEvent) => {
+    console.log(`🔗 External table clicked: "${tableName}"`);
+    
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
+    // Find which domain contains this external table
+    let targetDomain = null;
+    
+    for (const [domainName, domainData] of Object.entries(domainResults)) {
+      if (domainName === domain) continue; // Skip current domain
+      
+      if (domainData?.diagram && domainData.diagram.includes(`${tableName} {`)) {
+        targetDomain = domainName;
+        console.log(`🎯 External table "${tableName}" found in domain "${domainName}"`);
+        break;
+      }
+    }
+    
+    if (targetDomain) {
+      console.log(`🚀 Navigating to domain "${targetDomain}" for table "${tableName}"`);
+      if (onExternalTableClick) {
+        onExternalTableClick(tableName, targetDomain);
+      } else {
+        console.warn(`⚠️ No onExternalTableClick handler provided`);
+      }
+    } else {
+      console.warn(`⚠️ Could not find domain for external table "${tableName}"`);
+    }
+  }, [domainResults, domain]);
+
   // Direct SVG manipulation to apply domain styling - bypasses Mermaid CSS system
   // Clean table detection and click handling - NO styling applied
   const applySVGDomainStyling = useCallback((svgString: string): string => {
@@ -1967,21 +2060,77 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       console.log(`✅ Clean setup complete - ${tablesFound.length} clickable tables: [${tablesFound.join(', ')}]`);
       
+      // Now handle external table references (FK references to tables in other domains)
+      const externalTables = identifyExternalTables(tablesFound);
+      let externalReferencesAdded = 0;
+      
+      if (externalTables.size > 0) {
+        console.log(`🔗 Found ${externalTables.size} external table references: [${Array.from(externalTables).join(', ')}]`);
+        
+        // Find text elements that might contain FK column names
+        const textElements = Array.from(svgElement.querySelectorAll('text, span, tspan'));
+        
+        textElements.forEach(textElement => {
+          const content = textElement.textContent?.trim();
+          if (content && content.includes('FK')) {
+            // Look for external table names in the text content
+            externalTables.forEach(externalTable => {
+              // Check if this text content relates to the external table
+              // This could be enhanced with more sophisticated pattern matching
+              if (content.toLowerCase().includes(externalTable.toLowerCase()) || 
+                  content.toLowerCase().includes(externalTable.toLowerCase() + '_id')) {
+                
+                // Create a clickable element for the external table reference
+                const clickableSpan = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+                clickableSpan.textContent = `→ ${externalTable}`;
+                clickableSpan.setAttribute('fill', '#888');
+                clickableSpan.setAttribute('font-style', 'italic');
+                clickableSpan.setAttribute('cursor', 'pointer');
+                clickableSpan.setAttribute('data-external-table', externalTable);
+                
+                // Position near the FK text
+                const bbox = textElement.getBBox ? textElement.getBBox() : { x: 0, y: 0 };
+                clickableSpan.setAttribute('x', (bbox.x + 100).toString());
+                clickableSpan.setAttribute('y', bbox.y.toString());
+                
+                // Add click handler for external table navigation
+                clickableSpan.addEventListener('click', (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleExternalTableClick(externalTable, event);
+                });
+                
+                // Add to the SVG
+                const parentElement = textElement.parentNode;
+                if (parentElement) {
+                  parentElement.appendChild(clickableSpan);
+                  externalReferencesAdded++;
+                }
+                
+                console.log(`  ✅ Added clickable external reference: "${externalTable}"`);
+              }
+            });
+          }
+        });
+        
+        console.log(`✅ Added ${externalReferencesAdded} clickable external table references`);
+      }
+      
       // Update debugging info
       setClickableTablesCount(clickableCount);
       setDetectedTables(tablesFound);
       
-      // Return the clean SVG with no styling changes
+      // Return the enhanced SVG with external table references
       const serializer = new XMLSerializer();
-      const cleanSvg = serializer.serializeToString(svgDoc);
+      const enhancedSvg = serializer.serializeToString(svgDoc);
       
-      return cleanSvg;
+      return enhancedSvg;
       
     } catch (error) {
       console.error('Error setting up table detection:', error);
       return svgString; // Return original if setup fails
     }
-  }, [handleTableClick]);
+  }, [handleTableClick, identifyExternalTables, handleExternalTableClick]);
 
   // Note: Removed CSS injection-based styling to prevent conflicts with direct DOM styling
 

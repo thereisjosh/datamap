@@ -755,6 +755,23 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
                     domain={selectedDomain}
                     selectedTableFromSearch={selectedTable}
                     domainResults={domainResults}
+                    onExternalTableClick={(tableName, targetDomain) => {
+                      console.log(`🔗 External table navigation: "${tableName}" in domain "${targetDomain}"`);
+                      
+                      // Update domain state and URL without full navigation
+                      setSelectedDomain(targetDomain);
+                      setSelectedTableFromSearch(tableName);
+                      
+                      // Update URL to reflect the change
+                      const url = new URL(window.location.href);
+                      if (targetDomain === 'overview') {
+                        url.searchParams.delete('domain');
+                      } else {
+                        url.searchParams.set('domain', targetDomain);
+                      }
+                      url.searchParams.set('table', tableName);
+                      window.history.replaceState({}, '', url.toString());
+                    }}
                   />
                 </div>
               </CardContent>
