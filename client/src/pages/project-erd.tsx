@@ -410,7 +410,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
       
       // Update domain state and URL without full navigation
       setSelectedDomain(targetDomain);
-      setSelectedTableFromSearch(item);
+      setSelectedTable(item);
       
       // Update URL to reflect the change
       const url = new URL(window.location.href);
@@ -425,9 +425,9 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
     } else if (type === 'column') {
       // For enhanced column objects, we already have the table information
       const columnObj = typeof item === 'object' ? item : null;
-      const containingTable = columnObj ? columnObj.table : null;
+      const containingTable = columnObj?.table || null;
       
-      if (containingTable) {
+      if (containingTable && columnObj) {
         console.log(`📋 Column search: found "${columnObj.name}" in table "${containingTable}"`);
         const targetDomain = findDomainForTable(containingTable);
         
@@ -436,7 +436,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
           
           // Update domain state and URL without full navigation
           setSelectedDomain(targetDomain);
-          setSelectedTableFromSearch(containingTable);
+          setSelectedTable(containingTable);
           
           // Update URL to reflect the change
           const url = new URL(window.location.href);
@@ -448,6 +448,8 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
           url.searchParams.set('table', containingTable);
           window.history.replaceState({}, '', url.toString());
         }
+      } else {
+        console.error(`❌ Invalid column object or missing table information:`, columnObj);
       }
     } else if (type === 'relationship') {
       // For relationships, extract table names and highlight both
@@ -466,7 +468,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
           
           // Update domain state and URL without full navigation
           setSelectedDomain(targetDomain);
-          setSelectedTableFromSearch(sourceTable);
+          setSelectedTable(sourceTable);
           
           // Update URL to reflect the change
           const url = new URL(window.location.href);
@@ -760,7 +762,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
                       
                       // Update domain state and URL without full navigation
                       setSelectedDomain(targetDomain);
-                      setSelectedTableFromSearch(tableName);
+                      setSelectedTable(tableName);
                       
                       // Update URL to reflect the change
                       const url = new URL(window.location.href);
