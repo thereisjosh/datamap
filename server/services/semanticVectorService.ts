@@ -1,7 +1,6 @@
 import type { TableInfo } from './coreTableDiscoveryService';
 import type { Relationship } from '@shared/schema';
 import { RateLimitedEmbeddingClient } from './rateLimitedEmbeddingClient';
-import { vectorClusteringService } from './vectorClusteringService';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -172,27 +171,17 @@ export class SemanticVectorService {
     let embeddingSource: TableVector['embeddingSource'];
 
     try {
-      if (this.localOnlyMode || (this.useLocalFirst && !this.rateLimitedClient)) {
-        // LOCAL-ONLY: Use local Xenova transformer model (384D)
-        embedding = await this.generateLocalEmbedding(tableText);
-        embeddingSource = 'sentence-transformers';
-        this.metrics.localEmbeddingsGenerated++;
-        console.log(`   🏠 Local embedding generated for ${table.name} (${embedding.length} dimensions)`);
-      } else if (!this.useLocalFirst && this.rateLimitedClient) {
-        // PRIMARY: Use OpenAI API for 1536D embeddings (enterprise mode)
-        embedding = await this.rateLimitedClient.generateEmbedding(tableText);
-        embeddingSource = 'openai';
-        this.metrics.apiEmbeddingsGenerated++;
-        console.log(`   ☁️ OpenAI embedding generated for ${table.name} (${embedding.length} dimensions)`);
-      } else {
-        // FALLBACK: Use local if OpenAI unavailable
-        embedding = await this.generateLocalEmbedding(tableText);
-        embeddingSource = 'sentence-transformers';
-        this.metrics.localEmbeddingsGenerated++;
-        console.log(`   🏠 Local fallback embedding generated for ${table.name} (${embedding.length} dimensions)`);
+      if (!this.rateLimitedClient) {
+        throw new Error('OpenAI API client not initialized. Please ensure OPENAI_API_KEY is set.');
       }
+      
+      // Use OpenAI API for high-quality 1536D embeddings
+      embedding = await this.rateLimitedClient.generateEmbedding(tableText);
+      embeddingSource = 'openai';
+      this.metrics.apiEmbeddingsGenerated++;
+      console.log(`   ☁️ OpenAI embedding generated for ${table.name} (${embedding.length} dimensions)`);
     } catch (error) {
-      console.error(`   ❌ Primary embedding generation failed for ${table.name}:`, error);
+      console.error(`   ❌ OpenAI embedding generation failed for ${table.name}:`, error);
       
       // Log rate limiting metrics if available
       if (this.rateLimitedClient) {
@@ -202,30 +191,11 @@ export class SemanticVectorService {
         }
       }
       
-      // Try alternative embedding method
-      if (!this.localOnlyMode) {
-        try {
-          if (embeddingSource !== 'openai' && this.rateLimitedClient) {
-            console.log(`   🔄 Trying OpenAI fallback for ${table.name}`);
-            embedding = await this.rateLimitedClient.generateEmbedding(tableText);
-            embeddingSource = 'openai';
-            this.metrics.apiEmbeddingsGenerated++;
-          } else {
-            console.log(`   🔄 Trying local fallback for ${table.name}`);
-            embedding = await this.generateLocalEmbedding(tableText);
-            embeddingSource = 'sentence-transformers';
-            this.metrics.localEmbeddingsGenerated++;
-          }
-        } catch (fallbackError) {
-          console.error(`   ❌ Fallback embedding also failed for ${table.name}:`, fallbackError);
-          embedding = await this.generateSimpleEmbedding(tableText);
-          embeddingSource = 'sentence-transformers';
-        }
-      } else {
-        embedding = await this.generateSimpleEmbedding(tableText);
-        embeddingSource = 'sentence-transformers';
-      }
-      console.log(`   🔄 Using emergency embedding generation`);
+      // Use simple hash-based embedding as last resort
+      console.log(`   🔄 Using simple embedding fallback for ${table.name}`);
+      embedding = await this.generateSimpleEmbedding(tableText);
+      embeddingSource = 'sentence-transformers';
+      this.metrics.fallbackEmbeddingsGenerated++;
     }
 
     // Classify table semantically
@@ -314,28 +284,6 @@ export class SemanticVectorService {
     return this.rateLimitedClient.getMetrics();
   }
 
-  /**
-   * Generate local embedding using Xenova transformer model (HIGH QUALITY)
-   */
-  private async generateLocalEmbedding(text: string): Promise<number[]> {
-    // Use the existing vectorClusteringService which has Xenova/all-MiniLM-L6-v2 loaded
-    await vectorClusteringService['ensureEmbedderReady']();
-    
-    try {
-      // Use the same embedder as vectorClusteringService
-      const embedder = vectorClusteringService['embedder'];
-      if (!embedder) {
-        throw new Error('Local embedder not initialized');
-      }
-      
-      // Generate embedding with same configuration as vectorClusteringService
-      const embedding = await embedder(text, { pooling: 'mean', normalize: true });
-      return Array.from(embedding.data);
-    } catch (error) {
-      console.error('   ❌ Local Xenova embedding failed:', error);
-      throw error;
-    }
-  }
 
   /**
    * Generate simple hash-based embedding as last resort fallback
