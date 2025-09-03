@@ -1,5 +1,36 @@
-import type { HybridCluster } from '../services/hybridClusteringEngine';
 import type { TableData, Relationship } from '@shared/schema';
+
+// Local interface definition (previously imported from hybridClusteringEngine)
+export interface HybridCluster {
+  clusterId: string;
+  clusterName: string;
+  coreTable: string;
+  tables: string[];
+  hybridScore: number;
+  connectivityScore: number;
+  semanticScore: number;
+  coherenceScore: number;
+  confidenceScore: number;
+  businessDomain?: string;
+  junctionTables?: string[];
+  containerDetections?: any[];
+  semanticStructure?: {
+    hasMultipleSemanticGroups: boolean;
+    subClusters: any[];
+    semanticGaps: number[];
+    recommendedAction: string;
+    confidenceScore: number;
+    overallCoherence: number;
+    splitThreshold: number;
+  };
+  qualityAnalysis?: {
+    coreTableCentrality: number;
+    semanticDensity: number;
+    structuralIntegrity: number;
+    outlierTables: string[];
+    recommendedAction: string;
+  };
+}
 
 interface MermaidResponse {
   diagram: string;
