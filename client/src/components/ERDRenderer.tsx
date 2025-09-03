@@ -611,14 +611,24 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const centerOnTable = useCallback((tableName: string, retryCount: number = 0) => {
     console.log(`🎯 centerOnTable called for: ${tableName} (attempt ${retryCount + 1})`);
     
-    // Special debugging for problematic tables
-    if (tableName.toLowerCase().includes('opportunity')) {
-      console.log(`🔍 Special handling for Opportunity table (high relationship count)`);
+    // Enhanced error checking and validation
+    if (!tableName || typeof tableName !== 'string') {
+      console.error(`❌ Invalid table name provided:`, tableName);
+      return;
     }
     
     if (!svgContainerRef.current) {
       console.warn(`❌ Cannot center on table ${tableName}: Container not available`);
+      if (retryCount < 2) {
+        console.log(`⏳ Retrying centerOnTable in 100ms...`);
+        setTimeout(() => centerOnTable(tableName, retryCount + 1), 100);
+      }
       return;
+    }
+    
+    // Special debugging for problematic tables
+    if (tableName.toLowerCase().includes('opportunity')) {
+      console.log(`🔍 Special handling for Opportunity table (high relationship count)`);
     }
     
     const svgContainer = svgContainerRef.current;
@@ -869,12 +879,21 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         }
         
       } catch (error) {
-        console.warn('Could not center on table:', error);
-        zoomToScale(3.0);
+        console.error(`❌ Exception in centerOnTable for "${tableName}":`, error);
+        console.log(`🔄 Applying fallback zoom due to error`);
+        zoomToScale(2.5); // Slightly less aggressive fallback
       }
     } else {
-      console.warn(`Could not find entity element for table: ${tableName}`);
-      zoomToScale(3.0);
+      console.warn(`⚠️ Table element not found for: "${tableName}"`);
+      console.log(`🔍 Available tables in current domain:`, Array.from(svgContainer.querySelectorAll('g[data-table-name]')).map(el => el.getAttribute('data-table-name')).slice(0, 10));
+      
+      if (retryCount < 2) {
+        console.log(`⏳ Retrying to find table element in 200ms...`);
+        setTimeout(() => centerOnTable(tableName, retryCount + 1), 200);
+      } else {
+        console.log(`🔄 Applying fallback zoom after failed table search`);
+        zoomToScale(2.5);
+      }
     }
   }, [zoomToScale]);
 
@@ -1690,20 +1709,50 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // Get the actual SVG content bounds
       try {
         const svgBBox = svgRef.current.getBBox();
-        const scaleX = containerRect.width / svgBBox.width;
-        const scaleY = containerRect.height / svgBBox.height;
-        let fitScale = Math.min(scaleX, scaleY, 1) * 0.95; // 95% padding instead of 90%
         
-        // Set minimum zoom level for readability - especially important for 'All' view
-        fitScale = Math.max(fitScale, 0.8); // Minimum 80% zoom level
-        
-        zoomToScale(fitScale, svgBBox.x + svgBBox.width / 2, svgBBox.y + svgBBox.height / 2);
-        
-        console.log(`📏 HandleFit: calculated scale=${(Math.min(scaleX, scaleY, 1) * 0.95).toFixed(3)}, applied scale=${fitScale.toFixed(3)}`);
+        // Enhanced bounds calculation for better centering
+        if (svgBBox.width > 0 && svgBBox.height > 0) {
+          const scaleX = containerRect.width / svgBBox.width;
+          const scaleY = containerRect.height / svgBBox.height;
+          let fitScale = Math.min(scaleX, scaleY, 1) * 0.9; // 90% padding for better visibility
+          
+          // Set more reasonable minimum zoom level for readability
+          fitScale = Math.max(fitScale, 0.3); // Minimum 30% zoom level for large diagrams
+          
+          // Calculate proper center point for the fit operation
+          const centerX = svgBBox.x + svgBBox.width / 2;
+          const centerY = svgBBox.y + svgBBox.height / 2;
+          
+          zoomToScale(fitScale, centerX, centerY);
+          
+          console.log(`📏 HandleFit: bbox=(${svgBBox.x}, ${svgBBox.y}, ${svgBBox.width}x${svgBBox.height}), center=(${centerX}, ${centerY}), scale=${fitScale.toFixed(3)}`);
+        } else {
+          console.warn('Invalid SVG bbox dimensions, using fallback');
+          zoomToScale(0.5); // Fallback zoom
+        }
       } catch (error) {
-        // Fallback to reasonable zoom level
-        console.warn('SVG getBBox failed, using fallback zoom');
-        zoomToScale(0.5); // 50% zoom as fallback instead of 100%
+        console.warn('SVG getBBox failed, using enhanced fallback strategy:', error);
+        
+        // Enhanced fallback: try to get viewBox dimensions
+        const svg = svgRef.current;
+        const viewBox = svg.getAttribute('viewBox');
+        
+        if (viewBox) {
+          const [x, y, width, height] = viewBox.split(' ').map(Number);
+          if (width > 0 && height > 0) {
+            const containerRect = svgContainerRef.current!.getBoundingClientRect();
+            const scaleX = containerRect.width / width;
+            const scaleY = containerRect.height / height;
+            const fallbackScale = Math.min(scaleX, scaleY, 1) * 0.9;
+            
+            zoomToScale(Math.max(fallbackScale, 0.3), x + width / 2, y + height / 2);
+            console.log(`📏 Fallback fit using viewBox: scale=${fallbackScale.toFixed(3)}`);
+            return;
+          }
+        }
+        
+        // Final fallback
+        zoomToScale(0.5);
       }
     }
   }, [zoomToScale]);
@@ -1741,6 +1790,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // handleTableClick moved earlier in component to fix initialization order
 
   const handleClearSelection = useCallback(() => {
+    const previousSelection = selectedTable;
+    
     // Remove selection handles
     removeSelectionHandles();
     
@@ -1759,11 +1810,15 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     setHighlightedTables(new Set());
     setViewMode('overview');
     
+    // Clear any pending search/centering operations
+    setSearchTargetTable(null);
+    setIsSearchTriggered(false);
     
+    // Use the enhanced fit function to properly center all tables
     handleFit();
     
-    console.log('🧹 Cleared table selection, handles, and DOM states');
-  }, [handleFit, removeSelectionHandles]);
+    console.log(`🧹 Cleared table selection "${previousSelection || 'none'}" and reset to overview with proper fit`);
+  }, [selectedTable, handleFit, removeSelectionHandles]);
 
   const handleDomainFocus = useCallback(() => {
     // Focus on the current domain by fitting and centering
@@ -2234,28 +2289,47 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     }
   }, [selectedTableFromSearch, selectedTable, handleTableClick]);
 
-  // Immediate centering for search results after ERD content changes
+  // Enhanced centering for search results with cross-domain support and retry mechanism
   useEffect(() => {
     console.log(`🎯 Search centering useEffect: searchTargetTable="${searchTargetTable}", isSearchTriggered=${isSearchTriggered}, svgContent=${!!svgContent}, baseSvgContent=${!!baseSvgContent}`);
     
     if (searchTargetTable && isSearchTriggered && svgContent && baseSvgContent) {
       console.log(`🎯 Search-triggered centering: targeting table "${searchTargetTable}"`);
       
-      // Wait for DOM to be ready, then center immediately
-      const timeoutId = setTimeout(() => {
-        console.log(`🔄 About to call centerOnTable("${searchTargetTable}")`);
-        centerOnTable(searchTargetTable);
+      // Enhanced centering function with retry mechanism
+      const attemptCentering = (attempt: number = 1, maxAttempts: number = 3) => {
+        console.log(`🔄 Centering attempt ${attempt}/${maxAttempts} for table "${searchTargetTable}"`);
         
-        // Clear search target after successful centering
-        setSearchTargetTable(null);
-        setIsSearchTriggered(false);
+        // Check if table element exists before attempting to center
+        const svgContainer = svgContainerRef.current;
+        const tableElement = svgContainer?.querySelector(`g[data-table-name="${searchTargetTable}"]`);
         
-        console.log(`✅ Search centering completed for table: ${searchTargetTable}`);
-        
-        // Centering is complete
-        console.log(`✅ Table centering completed`);
-      }, 200); // Shorter delay for immediate response
+        if (tableElement) {
+          console.log(`✅ Table element found, proceeding with centering`);
+          centerOnTable(searchTargetTable);
+          
+          // Clear search target after successful centering
+          setSearchTargetTable(null);
+          setIsSearchTriggered(false);
+          console.log(`✅ Search centering completed for table: ${searchTargetTable}`);
+        } else if (attempt < maxAttempts) {
+          console.log(`⚠️ Table element not found, retrying in ${200 * attempt}ms (attempt ${attempt + 1}/${maxAttempts})`);
+          setTimeout(() => attemptCentering(attempt + 1, maxAttempts), 200 * attempt);
+        } else {
+          console.error(`❌ Failed to find table "${searchTargetTable}" after ${maxAttempts} attempts`);
+          // Clear search target even if centering failed to prevent infinite retry
+          setSearchTargetTable(null);
+          setIsSearchTriggered(false);
+        }
+      };
       
+      // Use longer timeout for cross-domain navigation, shorter for same-domain
+      const isLikelyCrossDomain = !svgContainerRef.current?.querySelector(`g[data-table-name="${searchTargetTable}"]`);
+      const initialDelay = isLikelyCrossDomain ? 500 : 200; // 500ms for cross-domain, 200ms for same-domain
+      
+      console.log(`⏱️ Using ${initialDelay}ms delay for ${isLikelyCrossDomain ? 'cross-domain' : 'same-domain'} centering`);
+      
+      const timeoutId = setTimeout(() => attemptCentering(), initialDelay);
       return () => clearTimeout(timeoutId);
     }
   }, [svgContent, searchTargetTable, isSearchTriggered, baseSvgContent, centerOnTable]);
@@ -2268,6 +2342,34 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       setIsSearchTriggered(true);
     }
   }, [svgContent, searchTargetTable, isSearchTriggered]);
+
+  // Background click handler to clear selection
+  useEffect(() => {
+    const handleBackgroundClick = (event: MouseEvent) => {
+      const target = event.target as Element;
+      
+      // Only handle clicks within the SVG container
+      if (!svgContainerRef.current?.contains(target)) {
+        return;
+      }
+      
+      // Check if the click was on a table element or any of its children
+      const clickedTable = target.closest('g[data-table-name]');
+      
+      // If no table was clicked and we have a selection, clear it
+      if (!clickedTable && selectedTable) {
+        console.log(`🎯 Background click detected, clearing selection: "${selectedTable}"`);
+        handleClearSelection();
+      }
+    };
+    
+    // Add event listener for background clicks
+    document.addEventListener('click', handleBackgroundClick, true);
+    
+    return () => {
+      document.removeEventListener('click', handleBackgroundClick, true);
+    };
+  }, [selectedTable, handleClearSelection]);
 
   const createSimplifiedERD = (fullCode: string): string => {
     // Analyze relationships to find key tables by domain
