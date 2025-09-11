@@ -898,12 +898,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   }, [zoomToScale]);
 
   // Define handleTableClick before it's used in event delegation
-  const handleTableClick = useCallback((tableName: string, event?: MouseEvent) => {
-    console.log(`🎯 Selected table: ${tableName}`);
+  const handleTableClick = useCallback((tableName: string, event?: MouseEvent, isFromSearch: boolean = false) => {
+    console.log(`🎯 Selected table: ${tableName} ${isFromSearch ? '(from search)' : '(direct click)'}`);
     
-    // Domain detection: Check if table exists in current domain
+    // Domain detection: Check if table exists in current domain (skip for search calls)
     const svgContainer = svgContainerRef.current;
-    if (svgContainer) {
+    if (svgContainer && !isFromSearch) {
       const tableElement = svgContainer.querySelector(`g[data-table-name="${tableName}"]`);
       
       if (!tableElement) {
@@ -945,6 +945,11 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         
         if (targetDomain && targetDomain !== domain) {
           console.log(`🎯 Table "${tableName}" is in domain "${targetDomain}" (current: "${domain}")`);
+          if (onExternalTableClick) {
+            onExternalTableClick(tableName, targetDomain);
+          } else {
+            console.warn(`⚠️ No onExternalTableClick handler provided`);
+          }
           return; // Don't proceed with centering since table is in different domain
         } else {
           console.warn(`⚠️ Could not determine domain for table "${tableName}" - proceeding in current domain`);
@@ -1152,16 +1157,25 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           event.preventDefault();
           event.stopPropagation();
           
-          console.log(`🎯 DELEGATED TABLE CLICK: ${tableName}`);
-          console.log(`  Event details:`, {
-            type: event.type,
-            target: target.tagName,
-            entityElement: entityParent.tagName,
-            detectionStrategy: entityParent.closest('g[class*="node"]') ? 'closest(g[class*="node"])' : 'manual traversal'
-          });
+          // Check if this is a ghost table
+          const isGhostTable = entityParent.getAttribute('data-ghost-table') === 'true';
+          const targetDomain = entityParent.getAttribute('data-target-domain');
           
-          // Call the table click handler directly
-          handleTableClick(tableName);
+          if (isGhostTable && targetDomain) {
+            console.log(`👻 GHOST TABLE CLICK: "${tableName}" -> navigating to domain "${targetDomain}"`);
+            handleExternalTableClick(tableName, event);
+          } else {
+            console.log(`🎯 DELEGATED TABLE CLICK: ${tableName}`);
+            console.log(`  Event details:`, {
+              type: event.type,
+              target: target.tagName,
+              entityElement: entityParent.tagName,
+              detectionStrategy: entityParent.closest('g[class*="node"]') ? 'closest(g[class*="node"])' : 'manual traversal'
+            });
+            
+            // Call the table click handler directly
+            handleTableClick(tableName);
+          }
         } else {
           console.log(`  ❌ No table found for this click - debugging info:`);
           console.log(`    Target data-table-name:`, target.getAttribute('data-table-name'));
@@ -1710,14 +1724,45 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       try {
         const svgBBox = svgRef.current.getBBox();
         
-        // Enhanced bounds calculation for better centering
+        // Enhanced bounds calculation for optimal fitting
         if (svgBBox.width > 0 && svgBBox.height > 0) {
           const scaleX = containerRect.width / svgBBox.width;
           const scaleY = containerRect.height / svgBBox.height;
-          let fitScale = Math.min(scaleX, scaleY, 1) * 0.9; // 90% padding for better visibility
           
-          // Set more reasonable minimum zoom level for readability
-          fitScale = Math.max(fitScale, 0.3); // Minimum 30% zoom level for large diagrams
+          // Calculate optimal fit scale - remove arbitrary constraints
+          let fitScale = Math.min(scaleX, scaleY);
+          
+          // Dynamic padding based on content size and complexity
+          let padding;
+          if (fitScale > 2.0) {
+            // Small content: minimal padding to maximize zoom
+            padding = 0.95; // 5% padding
+          } else if (fitScale > 1.0) {
+            // Medium content: moderate padding
+            padding = 0.9; // 10% padding
+          } else if (fitScale > 0.3) {
+            // Large content: more padding for readability
+            padding = 0.85; // 15% padding
+          } else {
+            // Very large content: minimal padding to allow closer zoom
+            padding = 0.95; // 5% padding for massive diagrams
+          }
+          
+          fitScale = fitScale * padding;
+          
+          // Get real table count from domain metadata instead of estimating
+          const svgContainer = svgContainerRef.current;
+          const actualTableCount = domainResults?.[domain || 'overview']?.metadata?.tables_count || 
+            svgContainer?.querySelectorAll('g[data-table-name]').length || 1;
+          
+          // Smart minimum with much higher, usable zoom levels (considering focus mode is 300%)
+          const intelligentMinimum = actualTableCount <= 5 ? 1.0 :      // Very small: 100% (no zoom out)
+                                    actualTableCount <= 15 ? 0.8 :     // Small domains: 80% min
+                                    actualTableCount <= 50 ? 0.5 :     // Medium domains: 50% min  
+                                    actualTableCount <= 100 ? 0.3 :    // Large domains: 30% min
+                                    0.15;                               // Very large: 15% min
+          
+          fitScale = Math.max(fitScale, intelligentMinimum);
           
           // Calculate proper center point for the fit operation
           const centerX = svgBBox.x + svgBBox.width / 2;
@@ -1725,10 +1770,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           
           zoomToScale(fitScale, centerX, centerY);
           
-          console.log(`📏 HandleFit: bbox=(${svgBBox.x}, ${svgBBox.y}, ${svgBBox.width}x${svgBBox.height}), center=(${centerX}, ${centerY}), scale=${fitScale.toFixed(3)}`);
+          console.log(`📏 OptimalFit: bbox=(${svgBBox.x}, ${svgBBox.y}, ${svgBBox.width}x${svgBBox.height}), container=(${containerRect.width}x${containerRect.height}), actualTables=${actualTableCount}, minZoom=${(intelligentMinimum * 100).toFixed(0)}%, finalScale=${fitScale.toFixed(3)}, padding=${(padding * 100).toFixed(0)}%`);
         } else {
           console.warn('Invalid SVG bbox dimensions, using fallback');
-          zoomToScale(0.5); // Fallback zoom
+          zoomToScale(0.8); // Better fallback zoom
         }
       } catch (error) {
         console.warn('SVG getBBox failed, using enhanced fallback strategy:', error);
@@ -1743,16 +1788,32 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             const containerRect = svgContainerRef.current!.getBoundingClientRect();
             const scaleX = containerRect.width / width;
             const scaleY = containerRect.height / height;
-            const fallbackScale = Math.min(scaleX, scaleY, 1) * 0.9;
+            let fallbackScale = Math.min(scaleX, scaleY);
             
-            zoomToScale(Math.max(fallbackScale, 0.3), x + width / 2, y + height / 2);
+            // Apply same dynamic padding and minimum logic for fallback
+            const padding = fallbackScale > 2.0 ? 0.95 : fallbackScale > 1.0 ? 0.9 : fallbackScale > 0.3 ? 0.85 : 0.95;
+            
+            // Use same real table count logic for fallback
+            const svgContainer = svgContainerRef.current;
+            const actualTableCount = domainResults?.[domain || 'overview']?.metadata?.tables_count || 
+              svgContainer?.querySelectorAll('g[data-table-name]').length || 1;
+              
+            const intelligentMinimum = actualTableCount <= 5 ? 1.0 :
+                                      actualTableCount <= 15 ? 0.8 :
+                                      actualTableCount <= 50 ? 0.5 :
+                                      actualTableCount <= 100 ? 0.3 :
+                                      0.15;
+            
+            fallbackScale = Math.max(fallbackScale * padding, intelligentMinimum);
+            
+            zoomToScale(fallbackScale, x + width / 2, y + height / 2);
             console.log(`📏 Fallback fit using viewBox: scale=${fallbackScale.toFixed(3)}`);
             return;
           }
         }
         
-        // Final fallback
-        zoomToScale(0.5);
+        // Final fallback - better default
+        zoomToScale(0.8);
       }
     }
   }, [zoomToScale]);
@@ -1789,6 +1850,36 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
 
   // handleTableClick moved earlier in component to fix initialization order
 
+  // Clear selection only (used for background clicks)
+  const handleClearSelectionOnly = useCallback(() => {
+    const previousSelection = selectedTable;
+    
+    // Remove selection handles
+    removeSelectionHandles();
+    
+    // Clear all visual selection states
+    const svgContainer = svgContainerRef.current;
+    if (svgContainer) {
+      // Remove any aria-pressed states from table elements
+      const selectedElements = svgContainer.querySelectorAll('[aria-pressed="true"]');
+      selectedElements.forEach(element => {
+        element.setAttribute('aria-pressed', 'false');
+      });
+    }
+    
+    // Reset React state
+    setSelectedTable(null);
+    setHighlightedTables(new Set());
+    setViewMode('overview');
+    
+    // Clear any pending search/centering operations
+    setSearchTargetTable(null);
+    setIsSearchTriggered(false);
+    
+    console.log(`🧹 Cleared table selection "${previousSelection || 'none'}" (background click - no zoom)`);
+  }, [selectedTable, removeSelectionHandles]);
+
+  // Clear selection with zoom (used for control panel clear button)
   const handleClearSelection = useCallback(() => {
     const previousSelection = selectedTable;
     
@@ -2118,6 +2209,47 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       console.log(`✅ Clean setup complete - ${tablesFound.length} clickable tables: [${tablesFound.join(', ')}]`);
       
+      // Handle ghost tables (cross-domain references) before external table references
+      let ghostTablesFound = 0;
+      tablesFound.forEach(tableName => {
+        const tableElement = svgElement.querySelector(`g[data-table-name="${tableName}"]`);
+        if (tableElement) {
+          // Check if this is a ghost table by looking for ghost table indicators
+          const tableTexts = Array.from(tableElement.querySelectorAll('text, tspan'));
+          const isGhostTable = tableTexts.some(textEl => 
+            textEl.textContent?.includes('Ghost-Table') || 
+            textEl.textContent?.includes('Click-to-navigate-to')
+          );
+          
+          if (isGhostTable) {
+            // Apply ghost table styling
+            tableElement.classList.add('ghost-table');
+            tableElement.setAttribute('data-ghost-table', 'true');
+            
+            // Extract target domain from the text
+            let targetDomain = null;
+            tableTexts.forEach(textEl => {
+              const text = textEl.textContent || '';
+              const domainMatch = text.match(/Click-to-navigate-to-(.+?)/);
+              if (domainMatch) {
+                targetDomain = domainMatch[1];
+              }
+            });
+            
+            if (targetDomain) {
+              tableElement.setAttribute('data-target-domain', targetDomain);
+            }
+            
+            ghostTablesFound++;
+            console.log(`  👻 Styled ghost table: "${tableName}" -> ${targetDomain}`);
+          }
+        }
+      });
+      
+      if (ghostTablesFound > 0) {
+        console.log(`👻 Found and styled ${ghostTablesFound} ghost tables`);
+      }
+      
       // Now handle external table references (FK references to tables in other domains)
       const externalTables = identifyExternalTables(tablesFound);
       let externalReferencesAdded = 0;
@@ -2278,7 +2410,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // Clear any legacy centering requests since we're handling this via search centering
       setNeedsCenteringAfterStyling(null);
       
-      handleTableClick(selectedTableFromSearch);
+      handleTableClick(selectedTableFromSearch, undefined, true);
       
       // Centering will be handled by the effect that watches searchTargetTable
       console.log(`⏳ Allowing centering to complete`);
@@ -2308,6 +2440,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           console.log(`✅ Table element found, proceeding with centering`);
           centerOnTable(searchTargetTable);
           
+          // Trigger table selection after successful centering
+          handleTableClick(searchTargetTable, undefined, true);
+          
           // Clear search target after successful centering
           setSearchTargetTable(null);
           setIsSearchTriggered(false);
@@ -2332,7 +2467,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const timeoutId = setTimeout(() => attemptCentering(), initialDelay);
       return () => clearTimeout(timeoutId);
     }
-  }, [svgContent, searchTargetTable, isSearchTriggered, baseSvgContent, centerOnTable]);
+  }, [svgContent, searchTargetTable, isSearchTriggered, baseSvgContent, centerOnTable, handleTableClick]);
 
   // Enhanced domain switch completion detection
   useEffect(() => {
@@ -2359,7 +2494,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // If no table was clicked and we have a selection, clear it
       if (!clickedTable && selectedTable) {
         console.log(`🎯 Background click detected, clearing selection: "${selectedTable}"`);
-        handleClearSelection();
+        handleClearSelectionOnly();
       }
     };
     
@@ -2759,7 +2894,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 <div className="border-t pt-2 mt-2">
                   <div className="text-xs text-muted-foreground px-1">Domain</div>
                   <div className="text-xs font-medium px-1 capitalize">
-                    {domain.replace('-', ' ')}
+                    {domainResults[domain]?.displayName || domain.replace(/[-_]/g, ' ')}
                   </div>
                 </div>
               )}

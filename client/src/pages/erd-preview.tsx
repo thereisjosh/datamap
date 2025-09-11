@@ -138,18 +138,17 @@ const ERDPreview = () => {
       if (!tableFoundInCurrentDomain) {
         const domainEntries = Object.entries(domainResults);
         
-        // Sort by domain priority to ensure consistent domain assignment
-        const domainPriority = ['user-management', 'donations-payments', 'opportunities', 'campaigns', 'system'];
-        const sortedEntries = domainEntries.sort(([a], [b]) => {
-          const aPriority = domainPriority.indexOf(a);
-          const bPriority = domainPriority.indexOf(b);
-          return (aPriority === -1 ? 999 : aPriority) - (bPriority === -1 ? 999 : bPriority);
-        });
+        // Simple approach: Check domains in order, excluding overview until the end
+        const specificDomains = domainEntries.filter(([domainId]) => domainId !== 'overview');
+        const overviewDomain = domainEntries.filter(([domainId]) => domainId === 'overview');
+        const sortedEntries = [...specificDomains, ...overviewDomain];
         
         for (const [domainId, domainData] of sortedEntries) {
           if (domainData && (domainData as any).diagram) {
-            // Precise matching: look for table as entity definition, not just substring
-            const entityPattern = new RegExp(`^\\s*${result}\\s*\\{`, 'm');
+            // Escape special regex characters in table name
+            const escapedTableName = result.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const entityPattern = new RegExp(`^\\s*${escapedTableName}\\s*\\{`, 'm');
+            
             if (entityPattern.test((domainData as any).diagram)) {
               targetDomain = domainId;
               console.log(`📊 Table "${result}" primary domain found: "${domainId}"`);
@@ -177,12 +176,7 @@ const ERDPreview = () => {
     }
   };
 
-  const handleTableSelectionComplete = () => {
-    // Clear pending selection after ERDRenderer processes it
-    setPendingTableSelection(null);
-  };
-
-  const handleDomainSwitchForTable = (targetDomain: string, tableName: string) => {
+  const handleDomainSwitchForTable = (tableName: string, targetDomain: string) => {
     console.log(`🎯 Domain switch requested: ${targetDomain} for table: ${tableName}`);
     
     // Switch to the target domain
@@ -366,8 +360,8 @@ const ERDPreview = () => {
             mermaidCode={currentMermaidCode} 
             domain={selectedDomain}
             selectedTableFromSearch={pendingTableSelection}
-            onTableSelectionComplete={handleTableSelectionComplete}
-            onDomainSwitch={handleDomainSwitchForTable}
+            domainResults={domainResults}
+            onExternalTableClick={handleDomainSwitchForTable}
           />
         </div>
 

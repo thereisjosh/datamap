@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
@@ -22,6 +22,7 @@ interface UnifiedSearchComponentProps {
   relationships: any[];
   onSearchResultClick: (type: string, item: string | object, domain?: string) => void;
   findDomainsForTable: (tableName: string) => string[];
+  domainResults?: Record<string, any>; // For displaying proper domain names
   className?: string;
   placeholder?: string;
   layout?: 'floating' | 'card'; // floating for preview page, card for ERD page
@@ -32,6 +33,7 @@ export const UnifiedSearchComponent: React.FC<UnifiedSearchComponentProps> = ({
   relationships,
   onSearchResultClick,
   findDomainsForTable,
+  domainResults = {},
   className = '',
   placeholder = 'Search tables, columns, relationships...',
   layout = 'floating'
@@ -47,7 +49,62 @@ export const UnifiedSearchComponent: React.FC<UnifiedSearchComponentProps> = ({
   // Debounce timer ref
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Optimized search function with debouncing
+  // Pre-computed search indices for better performance
+  const searchIndices = useMemo(() => {
+    // Create searchable table entries with domains
+    const tableEntries: Array<{ name: string; domain: string; searchKey: string }> = [];
+    tables.forEach(table => {
+      const tableName = table.name;
+      const domains = findDomainsForTable(tableName);
+      domains.forEach(domain => {
+        tableEntries.push({
+          name: tableName,
+          domain: domain,
+          searchKey: tableName.toLowerCase()
+        });
+      });
+    });
+
+    // Create searchable column entries
+    const columnEntries: Array<{
+      name: string;
+      table: string;
+      type: string;
+      isPK: boolean;
+      isFK: boolean;
+      searchKey: string;
+    }> = [];
+    tables.forEach(table => {
+      const columns = table.columns || table.attributes || [];
+      if (Array.isArray(columns)) {
+        columns.forEach(col => {
+          const columnName = (typeof col === 'object' && col?.name) ? col.name : String(col);
+          columnEntries.push({
+            name: columnName,
+            table: table.name,
+            type: (typeof col === 'object' && col?.type) ? col.type : 'text',
+            isPK: (typeof col === 'object' && col?.isPrimaryKey) ? col.isPrimaryKey : false,
+            isFK: (typeof col === 'object' && col?.isForeignKey) ? col.isForeignKey : false,
+            searchKey: columnName.toLowerCase()
+          });
+        });
+      }
+    });
+
+    // Create searchable relationship entries
+    const relationshipEntries = relationships.map(rel => ({
+      name: `${rel.sourceTable}-${rel.targetTable}`,
+      searchKey: `${rel.sourceTable}-${rel.targetTable}`.toLowerCase()
+    }));
+
+    return {
+      tables: tableEntries,
+      columns: columnEntries,
+      relationships: relationshipEntries
+    };
+  }, [tables, relationships, findDomainsForTable]);
+
+  // Optimized search function with pre-computed indices
   const performSearch = useCallback((query: string) => {
     if (query.length === 0) {
       setSearchResults({ tables: [], columns: [], relationships: [] });
@@ -56,69 +113,36 @@ export const UnifiedSearchComponent: React.FC<UnifiedSearchComponentProps> = ({
 
     const lowercaseQuery = query.toLowerCase();
       
-      // Search through real table names and create separate entries per domain
-      const matchingTableEntries: Array<{ name: string; domain: string }> = [];
-      const matchingTableNames = tables
-        .map(table => table.name)
-        .filter(tableName => 
-          tableName.toLowerCase().includes(lowercaseQuery)
-        );
+    // Fast search through pre-computed indices
+    const matchingTableEntries = searchIndices.tables.filter(entry => 
+      entry.searchKey.includes(lowercaseQuery)
+    ).map(entry => ({ name: entry.name, domain: entry.domain }));
+    
+    const matchingColumns = searchIndices.columns.filter(entry => 
+      entry.searchKey.includes(lowercaseQuery)
+    ).map(entry => ({
+      name: entry.name,
+      table: entry.table,
+      type: entry.type,
+      isPK: entry.isPK,
+      isFK: entry.isFK
+    }));
+    
+    const matchingRelationships = searchIndices.relationships
+      .filter(entry => entry.searchKey.includes(lowercaseQuery))
+      .map(entry => entry.name);
       
-      // For each matching table, create separate entries for each domain it appears in
-      matchingTableNames.forEach(tableName => {
-        const domains = findDomainsForTable(tableName);
-        domains.forEach(domain => {
-          matchingTableEntries.push({
-            name: tableName,
-            domain: domain
-          });
-        });
-      });
-      
-      // Search through real column names with table context
-      const matchingColumns: Array<{
-        name: string;
-        table: string;
-        type: string;
-        isPK: boolean;
-        isFK: boolean;
-      }> = [];
-      tables.forEach(table => {
-        const columns = table.columns || table.attributes || [];
-        if (Array.isArray(columns)) {
-          columns.forEach(col => {
-            const columnName = (typeof col === 'object' && col?.name) ? col.name : String(col);
-            if (columnName.toLowerCase().includes(lowercaseQuery)) {
-              matchingColumns.push({
-                name: columnName,
-                table: table.name,
-                type: (typeof col === 'object' && col?.type) ? col.type : 'text',
-                isPK: (typeof col === 'object' && col?.isPrimaryKey) ? col.isPrimaryKey : false,
-                isFK: (typeof col === 'object' && col?.isForeignKey) ? col.isForeignKey : false
-              });
-            }
-          });
-        }
-      });
-      
-      // Search through real relationships
-      const matchingRelationships = relationships
-        .map(rel => `${rel.sourceTable}-${rel.targetTable}`)
-        .filter(relName => 
-          relName.toLowerCase().includes(lowercaseQuery)
-        );
-      
-      // Remove duplicates (for columns, dedupe by table.column combination)
-      const uniqueColumns = matchingColumns.filter((col, index, arr) => 
-        index === arr.findIndex(c => c.table === col.table && c.name === col.name)
-      );
+    // Remove duplicates (for columns, dedupe by table.column combination)
+    const uniqueColumns = matchingColumns.filter((col, index, arr) => 
+      index === arr.findIndex(c => c.table === col.table && c.name === col.name)
+    );
       
     setSearchResults({
       tables: matchingTableEntries,
       columns: uniqueColumns,
       relationships: [...new Set(matchingRelationships)]
     });
-  }, [tables, relationships, findDomainsForTable]);
+  }, [searchIndices]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -195,7 +219,12 @@ export const UnifiedSearchComponent: React.FC<UnifiedSearchComponentProps> = ({
             <div className="p-2 border-b border-border">
               <div className="text-xs font-medium text-muted-foreground mb-1">Tables</div>
               {searchResults.tables.map((tableEntry, index) => {
-                const domainText = tableEntry.domain?.replace('-', ' ') || 'overview';
+                // Get proper domain display name from domain results
+                const getDomainDisplayName = (domainId: string) => {
+                  if (domainId === 'overview') return 'Overview';
+                  return domainResults[domainId]?.displayName || domainId.replace(/[-_]/g, ' ');
+                };
+                const domainText = getDomainDisplayName(tableEntry.domain || 'overview');
                 
                 return (
                   <div

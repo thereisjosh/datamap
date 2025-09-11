@@ -39,6 +39,71 @@ import {
 } from "./middleware/securityLogger";
 import { parseExcelRequestSchema } from "@shared/validation-schemas";
 
+/**
+ * Select the dominant hub from merged domains based on original community size
+ * This ensures that when domains are consolidated, the hub with the most original 
+ * community tables in the merged domain becomes the primary hub.
+ */
+function selectDominantHub(hubTables: string[], domainTables: string[], originalHubs: string[]): string {
+  if (!hubTables || hubTables.length === 0) {
+    return domainTables?.[0] || 'Unknown';
+  }
+  
+  // If only one hub, return it
+  if (hubTables.length === 1) {
+    return hubTables[0];
+  }
+  
+  // For multiple hubs, use heuristics to find the dominant one
+  let dominantHub = hubTables[0]; // fallback to first
+  let maxScore = 0;
+  
+  for (const hub of hubTables) {
+    let score = 0;
+    
+    // Score based on hub-related tables in domain
+    const hubRelatedTables = domainTables.filter(tableName => {
+      // Check if table name starts with or contains hub name
+      const hubLower = hub.toLowerCase();
+      const tableLower = tableName.toLowerCase();
+      
+      // Direct prefix match (e.g., Campaign -> CampaignDonation)
+      if (tableLower.startsWith(hubLower)) {
+        return true;
+      }
+      
+      // Contains hub name (e.g., Campaign -> DonationCampaign)
+      if (tableLower.includes(hubLower)) {
+        return true;
+      }
+      
+      return false;
+    });
+    
+    score = hubRelatedTables.length;
+    
+    // Boost score if this hub is in the original hub list
+    if (originalHubs.includes(hub)) {
+      score += 0.5;
+    }
+    
+    // Boost score if the hub table itself is in the domain
+    if (domainTables.includes(hub)) {
+      score += 1;
+    }
+    
+    console.log(`  🎯 Hub ${hub}: ${hubRelatedTables.length} related tables, total score: ${score} (tables: [${hubRelatedTables.slice(0, 3).join(', ')}${hubRelatedTables.length > 3 ? '...' : ''}])`);
+    
+    if (score > maxScore) {
+      maxScore = score;
+      dominantHub = hub;
+    }
+  }
+  
+  console.log(`  ✅ Selected dominant hub: ${dominantHub} (score: ${maxScore})`);
+  return dominantHub;
+}
+
 // Utility function to sanitize and validate table data
 function sanitizeTableData(tables: any[]): any[] {
   if (!Array.isArray(tables)) {
@@ -442,21 +507,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Transform AI-enhanced domains to legacy format for frontend compatibility  
       const hybridResult = {
-        hybridClusters: advancedResult.domains.map(domain => ({
-          clusterId: domain.id,
-          clusterName: domain.name,
-          tables: domain.tables,
-          coreTable: domain.tables[0], // First table as core table
-          confidenceScore: domain.confidence,
-          coherenceScore: domain.coherenceScore,
-          businessDomain: domain.businessContext || domain.name,
-          algorithmUsed: domain.algorithmUsed || 'AI-enhanced',
-          hubTables: domain.hubTables,
-          // AI enhancement indicators
-          aiEnhanced: true,
-          semanticScore: advancedResult.semanticAnalysis?.averageSimilarity || 0,
-          dependencyDriven: !!advancedResult.dependencyAnalysis
-        })),
+        hybridClusters: advancedResult.domains.map(domain => {
+          // Use smart hub selection to preserve original community hubs
+          const actualHubTable = selectDominantHub(domain.hubTables || [], domain.tables, advancedResult.hubDetection?.hubTables || []);
+          
+          console.log(`🎯 Domain "${domain.name}": Hub table set to "${actualHubTable}" (from hubTables: [${domain.hubTables?.join(', ') || 'none'}])`);
+          
+          return {
+            clusterId: domain.id,
+            clusterName: domain.name,
+            tables: domain.tables,
+            coreTable: actualHubTable, // Use actual hub table
+            confidenceScore: domain.confidence,
+            coherenceScore: domain.coherenceScore,
+            businessDomain: domain.businessContext || domain.name,
+            algorithmUsed: domain.algorithmUsed || 'AI-enhanced',
+            hubTables: domain.hubTables,
+            // AI enhancement indicators
+            aiEnhanced: true,
+            semanticScore: advancedResult.semanticAnalysis?.averageSimilarity || 0,
+            dependencyDriven: !!advancedResult.dependencyAnalysis
+          };
+        }),
         clusteringMetrics: {
           averageQuality: advancedResult.validation.overallQuality.overallScore,
           totalProcessingTime: advancedResult.performance?.totalProcessingTime || 0,
@@ -470,6 +542,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           aiEnhanced: true
         }
       };
+
+      // Generate simple domain names using hub table pattern
+      console.log('📝 Generating domain names using [Hub Name] Domain pattern...');
+      
+      hybridResult.hybridClusters.forEach((cluster, index) => {
+        // Use the hub table (coreTable) to create domain name
+        const hubTableName = cluster.coreTable || 'Unknown';
+        const domainName = `${hubTableName} Domain`;
+        
+        cluster.clusterName = domainName;
+        cluster.businessDomain = domainName;
+        
+        console.log(`  ✨ Domain ${index + 1}: "${domainName}" (hub: ${hubTableName})`);
+      });
+      
+      console.log(`✅ Generated ${hybridResult.hybridClusters.length} domain names successfully`);
 
       // Import transformer function
       const { transformHybridClustersToDomainsResponse } = await import('./utils/domainTransformer');
@@ -502,7 +590,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               confidence: cluster.confidenceScore,
               coherence: cluster.coherenceScore,
               businessDomain: cluster.businessDomain || cluster.clusterName,
-              purpose: `Domain containing ${cluster.coreTable} and related entities`
+              purpose: cluster.llmMetadata?.description || `Domain containing ${cluster.coreTable} and related entities`,
+              // Store LLM metadata for enhanced domain information
+              llmEnhanced: !!cluster.llmMetadata,
+              llmConfidence: cluster.llmMetadata?.confidence,
+              llmReasoning: cluster.llmMetadata?.reasoning
             })),
             overallMetrics: {
               clusterCount: hybridResult.hybridClusters.length,

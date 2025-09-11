@@ -149,7 +149,7 @@ export const useERDChat = ({
             const systemMessage: ChatMessage = {
               id: Math.random().toString(36).substr(2, 9),
               role: 'system',
-              content: `🔄 **Domain Context Changed**\n\nSwitched from "${lastDomain.replace('-', ' ')}" to "${currentDomain.replace('-', ' ')}" domain.\n\nThe AI assistant now has access to ${currentDomain === 'overview' ? 'the complete schema' : `tables and relationships specific to the ${currentDomain.replace('-', ' ')} domain`}.`,
+              content: `🔄 **Domain Context Changed**\n\nSwitched from "${lastDomain.replace(/[-_]/g, ' ')}" to "${currentDomain.replace(/[-_]/g, ' ')}" domain.\n\nThe AI assistant now has access to ${currentDomain === 'overview' ? 'the complete schema' : `tables and relationships specific to the ${currentDomain.replace(/[-_]/g, ' ')} domain`}.`,
               timestamp: new Date(),
               metadata: {
                 messageType: 'general'

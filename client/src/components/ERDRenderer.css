@@ -13,6 +13,37 @@
   animation: table-pulse 2s ease-in-out infinite !important;
 }
 
+/* Ghost Table Styles (Cross-Domain References) */
+.ghost-table {
+  opacity: 0.6 !important;
+  filter: grayscale(0.7) !important;
+}
+
+.ghost-table rect,
+.ghost-table foreignObject {
+  stroke: rgba(156, 163, 175, 0.8) !important;
+  stroke-width: 2px !important;
+  stroke-dasharray: 5,5 !important;
+  fill: rgba(229, 231, 235, 0.3) !important;
+}
+
+.ghost-table text {
+  fill: rgba(107, 114, 128, 0.8) !important;
+  font-style: italic !important;
+}
+
+.ghost-table:hover {
+  opacity: 0.8 !important;
+  filter: grayscale(0.4) !important;
+  cursor: pointer !important;
+}
+
+.ghost-table:hover rect,
+.ghost-table:hover foreignObject {
+  stroke: rgba(59, 130, 246, 0.6) !important;
+  fill: rgba(59, 130, 246, 0.1) !important;
+}
+
 @keyframes table-pulse {
   0%, 100% { 
     stroke-opacity: 0.8;

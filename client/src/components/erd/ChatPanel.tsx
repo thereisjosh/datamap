@@ -24,6 +24,7 @@ interface ChatPanelProps {
   onRelationshipClick?: (sourceTable: string, targetTable: string) => void;
   className?: string;
   currentDomain?: string;
+  domainResults?: Record<string, any>;
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -36,7 +37,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   onTableMentioned,
   onRelationshipClick,
   className = '',
-  currentDomain = 'overview'
+  currentDomain = 'overview',
+  domainResults = {}
 }) => {
   const chatWidgetRef = useRef<HTMLDivElement>(null);
   const erdChatRef = useRef<any>(null);
@@ -119,7 +121,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                     AI
                   </Badge>
                   <Badge variant="outline" className="text-xs capitalize">
-                    {currentDomain.replace('-', ' ')}
+                    {domainResults[currentDomain]?.displayName || currentDomain.replace(/[-_]/g, ' ')}
                   </Badge>
                   {/* Conversation History Dropdown */}
                   <DropdownMenu>

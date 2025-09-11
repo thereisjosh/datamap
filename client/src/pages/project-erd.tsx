@@ -690,6 +690,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
                     relationships={relationships}
                     onSearchResultClick={handleSearchResultClick}
                     findDomainsForTable={findDomainsForTable}
+                    domainResults={domainResults}
                     placeholder="Search tables, columns, relationships..."
                     layout="card"
                   />
@@ -793,6 +794,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         onTableMentioned={handleTableMentioned}
         onRelationshipClick={handleRelationshipClick}
         currentDomain={selectedDomain}
+        domainResults={domainResults}
       />
     </div>
   );
