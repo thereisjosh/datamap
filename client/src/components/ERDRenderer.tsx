@@ -1254,6 +1254,25 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         
         // Starting Mermaid Direct SVG Rendering
         
+        // Debug Mermaid input before rendering
+        console.log('🐛 [DEBUG] Mermaid Input Analysis:');
+        console.log('  📝 Mermaid code length:', mermaidCode.length);
+        console.log('  👻 Looking for ghost table indicators...');
+        
+        const hasGhostTables = mermaidCode.includes('Ghost-Table') || mermaidCode.includes('Click-to-navigate-to');
+        const hasGhostClass = mermaidCode.includes('classDef ghostTable') || mermaidCode.includes('class ') && mermaidCode.includes('ghostTable');
+        
+        console.log('  👻 Ghost table content found:', hasGhostTables);
+        console.log('  🎨 Ghost class definition found:', hasGhostClass);
+        
+        if (hasGhostTables) {
+          // Extract ghost table references for debugging
+          const ghostMatches = mermaidCode.match(/Click-to-navigate-to-([^"]+)/g);
+          if (ghostMatches) {
+            console.log('  👻 Ghost table references found:', ghostMatches);
+          }
+        }
+
         // Use proper Mermaid render API - returns SVG string directly
         const { svg } = await mermaid.render(uniqueId, mermaidCode);
         
@@ -1272,10 +1291,55 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           const svgElement = svgDoc.querySelector('svg');
           
           if (svgElement) {
-            // Comprehensive SVG structure analysis
+            // Debug Mermaid DOM structure after render
+            console.log('🐛 [DEBUG] Mermaid SVG Structure Analysis:');
             
             // Analyze all elements and their attributes
             const allElements = Array.from(svgElement.querySelectorAll('*'));
+            console.log('  📊 Total SVG elements:', allElements.length);
+            
+            // Look for entity-related elements specifically
+            const entityElements = allElements.filter(el => {
+              const id = el.getAttribute('id') || '';
+              const className = el.getAttribute('class') || '';
+              return id.includes('entity') || className.includes('entity') || 
+                     id.includes('Entity') || className.includes('Entity');
+            });
+            
+            console.log('  🏢 Entity-related elements found:', entityElements.length);
+            entityElements.forEach((el, i) => {
+              if (i < 5) { // Log first 5 for debugging
+                console.log(`    ${i + 1}. ${el.tagName}#${el.getAttribute('id')} .${el.getAttribute('class')}`);
+              }
+            });
+            
+            // Look for text elements that might contain ghost table content
+            const textElements = Array.from(svgElement.querySelectorAll('text, tspan'));
+            const ghostTextElements = textElements.filter(el => {
+              const content = el.textContent || '';
+              return content.includes('Ghost-Table') || content.includes('Click-to-navigate-to');
+            });
+            
+            console.log('  👻 Ghost table text elements found:', ghostTextElements.length);
+            ghostTextElements.forEach((el, i) => {
+              console.log(`    👻 ${i + 1}. "${el.textContent}" (parent: ${el.parentElement?.tagName}#${el.parentElement?.getAttribute('id')})`);
+            });
+            
+            // Analyze g elements (groups) which typically contain table structures
+            const groupElements = Array.from(svgElement.querySelectorAll('g'));
+            console.log('  📦 Group elements found:', groupElements.length);
+            
+            const elementsWithIds = groupElements.filter(el => el.getAttribute('id'));
+            console.log('  🆔 Groups with IDs:', elementsWithIds.length);
+            elementsWithIds.forEach((el, i) => {
+              if (i < 10) { // Log first 10 for debugging
+                const id = el.getAttribute('id');
+                const hasGhostContent = Array.from(el.querySelectorAll('text, tspan'))
+                  .some(textEl => (textEl.textContent || '').includes('Ghost-Table'));
+                console.log(`    ${i + 1}. g#${id} ${hasGhostContent ? '👻 (has ghost content)' : ''}`);
+              }
+            });
+            
             const elementAnalysis = new Map();
             
             allElements.forEach((el: Element, i: number) => {
@@ -2165,14 +2229,28 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       console.log(`🔍 Setting up clean table detection (no styling applied)...`);
       
+      // Debug: Count all potential entity containers first
+      const allPotentialBoxes = Array.from(svgElement.querySelectorAll('g'));
+      console.log(`🐛 [DEBUG] Total g elements found: ${allPotentialBoxes.length}`);
+      
+      const nodeClassBoxes = Array.from(svgElement.querySelectorAll('g.node, g[class="node default"], g[class="node"]'));
+      console.log(`🐛 [DEBUG] G elements with 'node' class: ${nodeClassBoxes.length}`);
+      
       // Find individual entity nodes for click handling only (exclude containers)
       // Target specific node classes but exclude plural "nodes" container
-      const entityBoxes = Array.from(svgElement.querySelectorAll('g.node, g[class="node default"], g[class="node"]')).filter(box => {
+      const entityBoxes = nodeClassBoxes.filter(box => {
         const className = (box as any).className?.baseVal || box.className || '';
         // Exclude containers like "nodes" - only include individual "node" elements
         return !className.includes('nodes') && (className.includes('node'));
       });
       console.log(`🔍 Found ${entityBoxes.length} individual table nodes for detection...`);
+      
+      // Debug: Show the first few boxes to understand structure
+      entityBoxes.slice(0, 3).forEach((box, i) => {
+        const id = box.getAttribute('id');
+        const className = (box as any).className?.baseVal || box.className || '';
+        console.log(`🐛 [DEBUG] Box ${i + 1}: id="${id}", class="${className}"`);
+      });
       
       let clickableCount = 0;
       let tablesFound: string[] = [];
@@ -2237,32 +2315,80 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       console.log(`✅ Clean setup complete - ${tablesFound.length} clickable tables: [${tablesFound.join(', ')}]`);
       
       // Handle ghost tables (cross-domain references) before external table references
+      console.log(`🐛 [DEBUG] Starting ghost table detection for ${tablesFound.length} tables...`);
       let ghostTablesFound = 0;
+      
+      // First, find all text elements with ghost content for debugging
+      const allTextElements = Array.from(svgElement.querySelectorAll('text, tspan'));
+      const ghostContentElements = allTextElements.filter(el => {
+        const content = el.textContent || '';
+        return content.includes('Ghost-Table') || content.includes('Click-to-navigate-to');
+      });
+      
+      console.log(`🐛 [DEBUG] Found ${ghostContentElements.length} elements with ghost content in entire SVG`);
+      ghostContentElements.forEach((el, i) => {
+        const content = el.textContent || '';
+        const parentId = el.parentElement?.getAttribute('id') || 'no-parent-id';
+        console.log(`🐛 [DEBUG] Ghost content ${i + 1}: "${content}" (parent: ${parentId})`);
+      });
+      
       tablesFound.forEach(tableName => {
+        console.log(`🐛 [DEBUG] Checking table "${tableName}" for ghost properties...`);
+        
         // Environment-specific entity ID pattern detection (verified approach)
         const entitySelectors = [
           `g[data-table-name="${tableName}"]`,           // Current pattern
           `[id^="entity-${tableName}"]`,                // Mermaid Live pattern  
           `[id^="${tableName}-"]`,                       // Alternative pattern
-          `g[id*="${tableName}"]`                        // Fallback pattern
+          `g[id*="${tableName}"]`,                       // Fallback pattern
+          `g[id="entity-${tableName}"]`                  // Exact match pattern
         ];
 
         let tableElement = null;
+        let usedSelector = null;
         for (const selector of entitySelectors) {
           tableElement = svgElement.querySelector(selector);
           if (tableElement) {
-            console.log(`🎯 Found ghost table "${tableName}" using selector: ${selector}`);
+            usedSelector = selector;
+            console.log(`🐛 [DEBUG] Found element for "${tableName}" using selector: ${selector}`);
             break;
+          }
+        }
+        
+        if (!tableElement) {
+          console.log(`🐛 [DEBUG] No element found for "${tableName}" - trying alternative approach...`);
+          // Try to find by text content in the actual detected boxes
+          const boxesWithThisTable = entityBoxes.filter(box => {
+            const textElements = Array.from(box.querySelectorAll('text, tspan, span'));
+            return textElements.some(textEl => (textEl.textContent || '').trim() === tableName);
+          });
+          
+          if (boxesWithThisTable.length > 0) {
+            tableElement = boxesWithThisTable[0];
+            usedSelector = 'text-content-match';
+            console.log(`🐛 [DEBUG] Found element for "${tableName}" via text content match`);
           }
         }
         
         if (tableElement) {
           // Check if this is a ghost table by looking for ghost table indicators
           const tableTexts = Array.from(tableElement.querySelectorAll('text, tspan'));
+          console.log(`🐛 [DEBUG] "${tableName}" element found, checking ${tableTexts.length} text elements for ghost content...`);
+          
+          // Debug: Show all text content in this element
+          tableTexts.forEach((textEl, i) => {
+            const content = textEl.textContent || '';
+            if (content.trim()) {
+              console.log(`🐛 [DEBUG]   Text ${i + 1}: "${content}"`);
+            }
+          });
+          
           const isGhostTable = tableTexts.some(textEl => 
             textEl.textContent?.includes('Ghost-Table') || 
             textEl.textContent?.includes('Click-to-navigate-to')
           );
+          
+          console.log(`🐛 [DEBUG] "${tableName}" is ${isGhostTable ? '' : 'NOT '}a ghost table`);
           
           if (isGhostTable) {
             // Apply ghost table styling

@@ -237,6 +237,7 @@ function generateDomainDiagram(
     criticalRefs.forEach(ref => {
       console.log(`    → ${ref.sourceTable} --FK--> ${ref.targetTable} (${ref.targetDomain}, importance: ${ref.importance})`);
     });
+    console.log(`🐛 [DEBUG] Domain references will use frontend-compatible IDs (domain_1, domain_2, etc.)`);
     
     if (criticalRefs.length > 0) {
       diagram += `\n  %% Ghost Tables (Cross-Domain References)\n`;
@@ -264,9 +265,13 @@ function generateDomainDiagram(
       
       // Apply ghost class to all ghost tables
       const ghostTableNames = Array.from(addedGhostTables);
+      console.log(`🐛 [DEBUG] Generated ${ghostTableNames.length} ghost tables: [${ghostTableNames.join(', ')}]`);
+      
       if (ghostTableNames.length > 0) {
         const sanitizedGhostNames = ghostTableNames.map(name => sanitizeTableName(name));
-        diagram += `  class ${sanitizedGhostNames.join(',')} ghostTable\n`;
+        const classDefinition = `  class ${sanitizedGhostNames.join(',')} ghostTable\n`;
+        console.log(`🐛 [DEBUG] Ghost class definition: "${classDefinition.trim()}"`);
+        diagram += classDefinition;
       }
     }
   }
@@ -354,10 +359,14 @@ function findCriticalExternalReferences(
             // Calculate importance based on connectivity
             const importance = calculateTableImportance(targetTable, allTables);
             
+            // Find the domain index for this cluster to match frontend domain IDs
+            const targetClusterIndex = allClusters.findIndex(c => c.clusterId === targetCluster.clusterId);
+            const targetDomainId = targetClusterIndex >= 0 ? `domain_${targetClusterIndex + 1}` : (targetCluster.clusterName || targetCluster.clusterId);
+            
             criticalRefs.push({
               sourceTable: table.name,
               targetTable: targetTable,
-              targetDomain: targetCluster.clusterName || targetCluster.clusterId,
+              targetDomain: targetDomainId,
               fkColumn: attr.name,
               importance: importance
             });
