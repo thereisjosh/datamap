@@ -31,17 +31,43 @@ async function getDb() {
 
     dbInstance = drizzle(sql, { schema });
     
-    // Test the connection
-    try {
-      await sql`SELECT 1`;
-      console.log('✅ Connected to PostgreSQL database');
-    } catch (error) {
-      console.error('❌ Database connection failed:', error);
-      console.error('The server will start but database features will be unavailable');
-      // Don't throw error - let the server start without database
-      sql = null;
-      dbInstance = null;
-      return null;
+    // Test the connection with retry logic
+    let connectionAttempts = 0;
+    const maxRetries = 3;
+    
+    while (connectionAttempts < maxRetries) {
+      try {
+        connectionAttempts++;
+        console.log(`🔄 Database connection attempt ${connectionAttempts}/${maxRetries}...`);
+        
+        await sql`SELECT 1`;
+        console.log('✅ Connected to PostgreSQL database');
+        break; // Success, exit retry loop
+        
+      } catch (error) {
+        console.error(`❌ Database connection attempt ${connectionAttempts} failed:`, {
+          error: error instanceof Error ? error.message : error,
+          code: (error as any)?.code,
+          errno: (error as any)?.errno,
+          address: (error as any)?.address,
+          port: (error as any)?.port,
+          connectionString: connectionString.replace(/:([^:@]{8})[^:@]*@/, ':$1****@')
+        });
+        
+        if (connectionAttempts >= maxRetries) {
+          console.error('❌ Max database connection retries exceeded');
+          console.error('The server will start but database features will be unavailable');
+          // Don't throw error - let the server start without database
+          sql = null;
+          dbInstance = null;
+          return null;
+        } else {
+          // Wait before retry (exponential backoff)
+          const waitTime = Math.pow(2, connectionAttempts) * 1000;
+          console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
     }
   }
   

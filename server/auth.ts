@@ -9,6 +9,14 @@ async function getAuth() {
   if (!authInstance) {
     try {
       console.log('🔧 Initializing BetterAuth instance...');
+      console.log('🔍 Environment check:', {
+        nodeEnv: process.env.NODE_ENV,
+        hasPostgresUrl: !!process.env.POSTGRES_URL,
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+        hasAuthCookieDomain: !!process.env.AUTH_COOKIE_DOMAIN,
+        hasTrustedOrigins: !!process.env.AUTH_TRUSTED_ORIGINS
+      });
+      
       const db = await getDb();
       
       if (!db) {
