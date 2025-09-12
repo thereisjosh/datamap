@@ -97,11 +97,13 @@ export function transformHybridClustersToDomainsResponse(
   });
   
   // Debug logging to see what domains are being created
-  console.log(`🔍 [DEBUG] Domain transformer creating domains:`, Object.keys(results));
-  console.log(`🔍 [DEBUG] Domain names:`, Object.keys(results).map(key => ({
-    id: key,
-    displayName: results[key].displayName
-  })));
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`🔍 [DEBUG] Domain transformer creating domains:`, Object.keys(results));
+    console.log(`🔍 [DEBUG] Domain names:`, Object.keys(results).map(key => ({
+      id: key,
+      displayName: results[key].displayName
+    })));
+  }
   
   return results;
 }
@@ -183,12 +185,14 @@ function generateDomainDiagram(
   if (allTables && allClusters) {
     const criticalRefs = findCriticalExternalReferences(tables, allTables, allClusters);
     
-    console.log(`\n👻 Ghost Table Analysis for ${cluster.clusterName || cluster.clusterId}:`);
-    console.log(`  Found ${criticalRefs.length} critical cross-domain references:`);
-    criticalRefs.forEach(ref => {
-      console.log(`    → ${ref.sourceTable} --FK--> ${ref.targetTable} (${ref.targetDomain}, importance: ${ref.importance})`);
-    });
-    console.log(`🐛 [DEBUG] Domain references will use frontend-compatible IDs (domain_1, domain_2, etc.)`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`\n👻 Ghost Table Analysis for ${cluster.clusterName || cluster.clusterId}:`);
+      console.log(`  Found ${criticalRefs.length} critical cross-domain references:`);
+      criticalRefs.forEach(ref => {
+        console.log(`    → ${ref.sourceTable} --FK--> ${ref.targetTable} (${ref.targetDomain}, importance: ${ref.importance})`);
+      });
+      console.log(`🐛 [DEBUG] Domain references will use frontend-compatible IDs (domain_1, domain_2, etc.)`);
+    }
     
     if (criticalRefs.length > 0) {
       diagram += `\n  %% Ghost Tables (Cross-Domain References)\n`;
@@ -207,7 +211,10 @@ function generateDomainDiagram(
           
           addedGhostTables.add(ref.targetTable);
           
-          console.log(`  👻 Added ghost table: ${ref.targetTable} (importance: ${ref.importance}, domain: ${ref.targetDomain})`);
+          // Only log ghost table details in development
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`  👻 Added ghost table: ${ref.targetTable} (importance: ${ref.importance}, domain: ${ref.targetDomain})`);
+          }
         }
       });
       
@@ -217,7 +224,12 @@ function generateDomainDiagram(
       
       // Apply ghost class to all ghost tables (individual applications for Mermaid compatibility)
       const ghostTableNames = Array.from(addedGhostTables);
-      console.log(`🐛 [DEBUG] Generated ${ghostTableNames.length} ghost tables: [${ghostTableNames.join(', ')}]`);
+      // Consolidated logging for ghost tables
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`🐛 [DEBUG] Generated ${ghostTableNames.length} ghost tables: [${ghostTableNames.join(', ')}]`);
+      } else if (ghostTableNames.length > 0) {
+        console.log(`👻 Generated ${ghostTableNames.length} ghost tables for cross-domain references`);
+      }
       
       if (ghostTableNames.length > 0) {
         const sanitizedGhostNames = ghostTableNames.map(name => sanitizeTableName(name));
@@ -225,7 +237,10 @@ function generateDomainDiagram(
         sanitizedGhostNames.forEach(tableName => {
           const classApplication = `  class ${tableName} ghostTable\n`;
           diagram += classApplication;
-          console.log(`🐛 [DEBUG] Applied ghost class to: ${tableName}`);
+          // Only log individual class applications in development
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`🐛 [DEBUG] Applied ghost class to: ${tableName}`);
+          }
         });
       }
     }
@@ -248,7 +263,9 @@ function generateDomainDiagram(
   // Add relationships to ghost tables (using solid lines for compatibility)
   if (allTables && allClusters) {
     const criticalRefs = findCriticalExternalReferences(tables, allTables, allClusters);
-    console.log(`🐛 [DEBUG] Adding ${criticalRefs.length} ghost table relationships...`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`🐛 [DEBUG] Adding ${criticalRefs.length} ghost table relationships...`);
+    }
     
     criticalRefs.forEach(ref => {
       const sanitizedSource = sanitizeTableName(ref.sourceTable);
@@ -258,7 +275,9 @@ function generateDomainDiagram(
       // Use solid line syntax for ghost relationships (dotted may not be supported)
       const ghostRelationship = `  ${sanitizedSource} }o--|| ${sanitizedTarget} : "External: ${sanitizedColumn}"\n`;
       diagram += ghostRelationship;
-      console.log(`🐛 [DEBUG] Added ghost relationship: ${sanitizedSource} -> ${sanitizedTarget}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`🐛 [DEBUG] Added ghost relationship: ${sanitizedSource} -> ${sanitizedTarget}`);
+      }
     });
   }
   
@@ -475,8 +494,26 @@ function sanitizeTableName(name: string): string {
   // Ensure it's not a Mermaid reserved word
   const reservedWords = ['erDiagram', 'PK', 'FK', 'int', 'string', 'boolean', 'date'];
   if (reservedWords.includes(sanitized.toLowerCase())) {
+    const originalName = sanitized;
     sanitized = `${sanitized}_`;
-    console.log(`⚠️ Table name "${name}" conflicts with Mermaid reserved word, sanitized to "${sanitized}"`);
+    
+    // Use debug level for common reserved words to reduce log spam
+    const commonReservedWords = ['boolean', 'date', 'string', 'int'];
+    const isCommonReserved = commonReservedWords.includes(originalName.toLowerCase());
+    
+    if (isCommonReserved && process.env.NODE_ENV === 'production') {
+      // Only log once per session for common reserved words in production
+      if (!global.loggedReservedWords) {
+        global.loggedReservedWords = new Set();
+      }
+      if (!global.loggedReservedWords.has(originalName.toLowerCase())) {
+        console.warn(`🔧 Preserving hub table name: "${name}" (no sanitization)`);
+        global.loggedReservedWords.add(originalName.toLowerCase());
+      }
+    } else {
+      // Always log for uncommon reserved words or in development
+      console.log(`⚠️ Table name "${name}" conflicts with Mermaid reserved word, sanitized to "${sanitized}"`);
+    }
   }
   
   return sanitized;

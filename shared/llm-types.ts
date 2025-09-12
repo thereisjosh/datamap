@@ -331,7 +331,9 @@ export const LLM_MODELS = {
     'gpt-3.5-turbo': { maxTokens: 16384, costPerToken: 0.0000015 },
   },
   ANTHROPIC: {
-    'claude-3-sonnet-20240229': { maxTokens: 200000, costPerToken: 0.000015 },
+    'claude-3-5-sonnet-20241022': { maxTokens: 200000, costPerToken: 0.000015 },
+    'claude-3-5-haiku-20241022': { maxTokens: 200000, costPerToken: 0.00000025 },
+    'claude-3-sonnet-20240229': { maxTokens: 200000, costPerToken: 0.000015 }, // Deprecated - EOL July 21, 2025
     'claude-3-haiku-20240307': { maxTokens: 200000, costPerToken: 0.00000025 },
     'claude-3-opus-20240229': { maxTokens: 200000, costPerToken: 0.000075 },
   }

@@ -561,9 +561,15 @@ router.get('/health', async (req: Request, res: Response) => {
       health.recommendations.push('No API key configured - LLM features will not work');
     }
 
-    // Set HTTP status based on overall health
-    const httpStatus = overallStatus === 'healthy' ? 200 : 
-                      overallStatus === 'degraded' ? 200 : 503;
+    // Set HTTP status based on overall health - use 200 for degraded to reduce alert noise
+    const httpStatus = overallStatus === 'unhealthy' ? 503 : 200;
+
+    // Only log unhealthy status as warning in production to reduce noise
+    if (overallStatus === 'unhealthy' && process.env.NODE_ENV === 'production') {
+      console.warn('⚠️ ERD Chat service is unhealthy:', llmHealth.details);
+    } else if (overallStatus === 'degraded') {
+      console.log('📊 ERD Chat service is degraded:', llmHealth.details);
+    }
 
     res.status(httpStatus).json(health);
     

@@ -21,9 +21,19 @@ export class LLMService {
   private config: LLMConfig;
 
   constructor(config?: Partial<LLMConfig>) {
+    const provider = (process.env.LLM_PROVIDER as 'openai' | 'anthropic') || 'openai';
+    
+    // Use modern default models based on provider
+    const getDefaultModel = (provider: string) => {
+      if (provider === 'anthropic') {
+        return 'claude-3-5-sonnet-20241022'; // Modern Claude 3.5 Sonnet
+      }
+      return 'gpt-4-turbo-preview'; // Modern GPT-4 Turbo
+    };
+
     this.config = {
-      provider: (process.env.LLM_PROVIDER as 'openai' | 'anthropic') || 'openai',
-      model: process.env.LLM_MODEL || 'gpt-4-turbo-preview',
+      provider,
+      model: process.env.LLM_MODEL || getDefaultModel(provider),
       apiKey: process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || '',
       maxTokens: parseInt(process.env.LLM_MAX_TOKENS || '4000'),
       temperature: parseFloat(process.env.LLM_TEMPERATURE || '0.1'),
