@@ -56,7 +56,7 @@ export const useERDChat = ({
   projectId,
   onSQLGenerated,
   onTableMentioned,
-  currentDomain = 'overview'
+  currentDomain = 'domain_1'
 }: UseERDChatProps): UseERDChatReturn => {
   // Generate storage key for project+domain scoped persistence
   const getStorageKey = useCallback(() => {
@@ -149,7 +149,7 @@ export const useERDChat = ({
             const systemMessage: ChatMessage = {
               id: Math.random().toString(36).substr(2, 9),
               role: 'system',
-              content: `🔄 **Domain Context Changed**\n\nSwitched from "${lastDomain.replace(/[-_]/g, ' ')}" to "${currentDomain.replace(/[-_]/g, ' ')}" domain.\n\nThe AI assistant now has access to ${currentDomain === 'overview' ? 'the complete schema' : `tables and relationships specific to the ${currentDomain.replace(/[-_]/g, ' ')} domain`}.`,
+              content: `🔄 **Domain Context Changed**\n\nSwitched from "${lastDomain.replace(/[-_]/g, ' ')}" to "${currentDomain.replace(/[-_]/g, ' ')}" domain.\n\nThe AI assistant now has access to tables and relationships specific to the ${currentDomain.replace(/[-_]/g, ' ')} domain.`,
               timestamp: new Date(),
               metadata: {
                 messageType: 'general'

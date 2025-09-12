@@ -70,18 +70,7 @@ export function transformHybridClustersToDomainsResponse(
   // Create a map for quick table lookup
   const tableMap = new Map(allTables.map(t => [t.name, t]));
   
-  // Add overview domain
-  results['overview'] = {
-    diagram: generateOverviewDiagram(allTables, allRelationships),
-    displayName: 'Overview',
-    metadata: {
-      tables_count: allTables.length,
-      relationships_count: allRelationships.length,
-      domain: 'overview'
-    }
-  };
-  
-  // Convert each cluster to a domain
+  // Convert each cluster to a domain (no overview domain)
   clusters.forEach((cluster, index) => {
     const domainId = `domain_${index + 1}`;
     const domainTables = cluster.tables.map(tableName => tableMap.get(tableName)).filter(Boolean) as TableData[];
@@ -106,6 +95,13 @@ export function transformHybridClustersToDomainsResponse(
       }
     };
   });
+  
+  // Debug logging to see what domains are being created
+  console.log(`🔍 [DEBUG] Domain transformer creating domains:`, Object.keys(results));
+  console.log(`🔍 [DEBUG] Domain names:`, Object.keys(results).map(key => ({
+    id: key,
+    displayName: results[key].displayName
+  })));
   
   return results;
 }
@@ -141,51 +137,6 @@ function filterRelationshipsForTables(
   );
 }
 
-/**
- * Generate overview diagram showing all domains
- */
-function generateOverviewDiagram(
-  tables: TableData[],
-  relationships: Relationship[]
-): string {
-  let diagram = 'erDiagram\n';
-  
-  // Add tables with their attributes
-  tables.forEach(table => {
-    const sanitizedName = sanitizeTableName(table.name);
-    diagram += `  ${sanitizedName} {\n`;
-    
-    const attributes = table.attributes || table.columns || [];
-    attributes.forEach(attr => {
-      const sanitizedAttr = sanitizeTableName(attr.name);
-      const sanitizedType = sanitizeTableName(attr.type || 'string');
-      let keyIndicator = '';
-      
-      if (attr.isPrimaryKey) keyIndicator = ' PK';
-      else if (attr.isForeignKey) keyIndicator = ' FK';
-      
-      diagram += `    ${sanitizedAttr} ${sanitizedType}${keyIndicator}\n`;
-    });
-    
-    diagram += '  }\n';
-  });
-  
-  // Add relationships
-  const processedRelationships = new Set<string>();
-  relationships.forEach(rel => {
-    const relKey = `${rel.sourceTable}-${rel.targetTable}`;
-    if (!processedRelationships.has(relKey)) {
-      const sanitizedSource = sanitizeTableName(rel.sourceTable);
-      const sanitizedTarget = sanitizeTableName(rel.targetTable);
-      const sanitizedColumn = sanitizeTableName(rel.sourceColumn);
-      
-      diagram += `  ${sanitizedSource} }o--|| ${sanitizedTarget} : "FK ${sanitizedColumn}"\n`;
-      processedRelationships.add(relKey);
-    }
-  });
-  
-  return diagram;
-}
 
 /**
  * Generate domain-specific diagram with selective ghost tables
@@ -247,9 +198,8 @@ function generateDomainDiagram(
         if (!addedGhostTables.has(ref.targetTable)) {
           const sanitizedTarget = sanitizeTableName(ref.targetTable);
           
-          // Add ghost table with minimal structure - header only, no metadata columns
+          // Add ghost table with no columns - header only
           diagram += `  ${sanitizedTarget} {\n`;
-          diagram += `    id string PK\n`;
           diagram += `  }\n`;
           
           // Store ghost table metadata for frontend detection (not as table columns)
@@ -324,6 +274,31 @@ function generateDomainDiagram(
       }
       return acc;
     }, new Set()).size : 0;
+  
+  // Check diagram size limits to prevent Mermaid overflow (after variables are declared)
+  const diagramLength = diagram.length;
+  const lineCount = diagram.split('\n').length;
+  
+  // Mermaid size limits (conservative estimates)
+  const MAX_DIAGRAM_LENGTH = 100000; // ~100KB text limit
+  const MAX_DIAGRAM_LINES = 2000;    // ~2000 lines limit
+  const MAX_TABLES_PER_DIAGRAM = 100; // Practical table limit
+  
+  if (diagramLength > MAX_DIAGRAM_LENGTH) {
+    console.warn(`⚠️ Diagram size (${diagramLength} chars) exceeds recommended limit (${MAX_DIAGRAM_LENGTH}), truncating...`);
+    // Truncate to safe size but keep structure intact
+    const truncatedLines = diagram.split('\n').slice(0, MAX_DIAGRAM_LINES);
+    diagram = truncatedLines.join('\n') + '\n  %% Diagram truncated due to size limits\n';
+  } else if (lineCount > MAX_DIAGRAM_LINES) {
+    console.warn(`⚠️ Diagram line count (${lineCount}) exceeds limit (${MAX_DIAGRAM_LINES}), truncating...`);
+    const truncatedLines = diagram.split('\n').slice(0, MAX_DIAGRAM_LINES);
+    diagram = truncatedLines.join('\n') + '\n  %% Diagram truncated due to line count\n';
+  } else if (expectedTableCount + expectedGhostCount > MAX_TABLES_PER_DIAGRAM) {
+    console.warn(`⚠️ Table count (${expectedTableCount + expectedGhostCount}) exceeds practical limit (${MAX_TABLES_PER_DIAGRAM})`);
+    // Let it proceed but warn about potential performance issues
+  }
+  
+  console.log(`📊 Diagram size check: ${diagramLength} chars, ${lineCount} lines, ${expectedTableCount + expectedGhostCount} tables`);
   
   // Validate diagram structure
   const tableMatches = diagram.match(/^\s*\w+\s*\{/gm) || [];

@@ -47,32 +47,6 @@
   animation: ghost-pulse 1s ease-in-out !important;
 }
 
-/* Enhanced visual indicator for external tables */
-.ghost-table::after {
-  content: "🔗";
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  background: rgba(59, 130, 246, 0.8);
-  color: white;
-  border-radius: 50%;
-  width: 16px;
-  height: 16px;
-  font-size: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  z-index: 1000;
-  opacity: 0.9;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.ghost-table:hover::after {
-  background: rgba(59, 130, 246, 1);
-  animation: external-link-pulse 1s ease-in-out;
-  transform: scale(1.1);
-}
 
 @keyframes table-pulse {
   0%, 100% { 
@@ -97,17 +71,6 @@
   }
 }
 
-/* External link indicator pulse */
-@keyframes external-link-pulse {
-  0%, 100% { 
-    transform: scale(1.1);
-    opacity: 0.9;
-  }
-  50% { 
-    transform: scale(1.2);
-    opacity: 1;
-  }
-}
 
 /* Dim non-selected tables when a table is selected */
 .has-selection .table-entity:not(.table-selected) {

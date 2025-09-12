@@ -1189,7 +1189,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           
           if (isGhostTable && targetDomain) {
             console.log(`👻 GHOST TABLE CLICK: "${tableName}" -> navigating to domain "${targetDomain}"`);
-            handleExternalTableClick(tableName, event);
+            // Directly navigate to target domain (we already know it from metadata)
+            if (onExternalTableClick) {
+              onExternalTableClick(tableName, targetDomain);
+              console.log(`🚀 Navigated to domain "${targetDomain}" for ghost table "${tableName}"`);
+            } else {
+              console.warn('onExternalTableClick handler not available for ghost table navigation');
+            }
+            return; // Prevent further processing
           } else {
             console.log(`🎯 DELEGATED TABLE CLICK: ${tableName}`);
             console.log(`  Event details:`, {
@@ -1810,9 +1817,54 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const container = svgContainerRef.current;
       const containerRect = container.getBoundingClientRect();
       
-      // Get the actual SVG content bounds
+      // Get the actual SVG content bounds from table elements, not entire SVG
       try {
-        const svgBBox = svgRef.current.getBBox();
+        let svgBBox;
+        
+        // First try to get bounds from transform group (content group)
+        const transformGroup = transformGroupRef.current;
+        if (transformGroup) {
+          svgBBox = transformGroup.getBBox();
+          console.log(`📊 Using transform group bbox: ${svgBBox.width}x${svgBBox.height}`);
+        } else {
+          // Fallback: calculate bounds from actual table elements
+          const svg = svgRef.current;
+          const tableElements = svg.querySelectorAll('g[data-table-name], g[class*="node"], g[id*="entity-"]');
+          
+          if (tableElements.length > 0) {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            
+            tableElements.forEach(element => {
+              try {
+                const elementBBox = element.getBBox();
+                minX = Math.min(minX, elementBBox.x);
+                minY = Math.min(minY, elementBBox.y);
+                maxX = Math.max(maxX, elementBBox.x + elementBBox.width);
+                maxY = Math.max(maxY, elementBBox.y + elementBBox.height);
+              } catch (e) {
+                // Skip elements that can't provide bbox
+              }
+            });
+            
+            if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)) {
+              svgBBox = {
+                x: minX,
+                y: minY,
+                width: maxX - minX,
+                height: maxY - minY
+              };
+              console.log(`📊 Calculated bbox from ${tableElements.length} table elements: ${svgBBox.width}x${svgBBox.height}`);
+            } else {
+              // Final fallback to entire SVG
+              svgBBox = svgRef.current.getBBox();
+              console.log(`📊 Using fallback SVG bbox: ${svgBBox.width}x${svgBBox.height}`);
+            }
+          } else {
+            // No table elements found, use entire SVG
+            svgBBox = svgRef.current.getBBox();
+            console.log(`📊 No table elements found, using entire SVG bbox: ${svgBBox.width}x${svgBBox.height}`);
+          }
+        }
         
         // Enhanced bounds calculation for optimal fitting
         if (svgBBox.width > 0 && svgBBox.height > 0) {
@@ -1943,27 +1995,176 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Clear selection only (used for background clicks)
   const handleClearSelectionOnly = useCallback(() => {
     const previousSelection = selectedTable;
+    console.log(`🔍 [DEBUG] handleClearSelectionOnly called for: "${previousSelection}"`);
     
     // Remove selection handles
     removeSelectionHandles();
     
-    // Clear all visual selection states
+    // Clear all visual selection states with comprehensive cleanup
     const svgContainer = svgContainerRef.current;
     if (svgContainer) {
+      console.log(`🔍 [DEBUG] SVG container found, proceeding with clearing`);
+      
       // Remove any aria-pressed states from table elements
       const selectedElements = svgContainer.querySelectorAll('[aria-pressed="true"]');
+      console.log(`🔍 [DEBUG] Found ${selectedElements.length} elements with aria-pressed="true"`);
+      
       selectedElements.forEach(element => {
         element.setAttribute('aria-pressed', 'false');
       });
       
-      // Remove visual selection CSS classes
+      // Remove visual selection CSS classes and stop animations - WITH DEBUGGING
       const tableSelectedElements = svgContainer.querySelectorAll('.table-selected');
-      tableSelectedElements.forEach(element => {
+      console.log(`🔍 [DEBUG] Selection clearing found ${tableSelectedElements.length} elements with .table-selected class`);
+      
+      tableSelectedElements.forEach((element, index) => {
+        console.log(`🔍 [DEBUG] Processing element ${index + 1}:`, element);
+        console.log(`🔍 [DEBUG] Element tag:`, element.tagName, 'ID:', element.id, 'Classes:', element.className);
+        
+        // Stop any running animations first
+        element.style.animation = 'none';
+        
+        // Remove the class
+        const hadClass = element.classList.contains('table-selected');
         element.classList.remove('table-selected');
+        const stillHasClass = element.classList.contains('table-selected');
+        
+        console.log(`🔍 [DEBUG] Had .table-selected: ${hadClass}, Still has: ${stillHasClass}`);
+        console.log(`🔍 [DEBUG] Classes after removal:`, element.className);
+        
+        // Log all inline styles before clearing
+        console.log(`🔍 [DEBUG] Inline styles before clearing:`, element.getAttribute('style'));
+        
+        // Force clear ALL possible visual effect styles
+        const stylesToClear = [
+          'filter', 'opacity', 'animation', 'transform', 'box-shadow', 
+          'stroke', 'stroke-width', 'stroke-dasharray', 'fill', 'fill-opacity',
+          'stroke-opacity', 'visibility', 'display'
+        ];
+        
+        stylesToClear.forEach(prop => {
+          element.style.removeProperty(prop);
+        });
+        
+        // Force stop animations and clear computed styles
+        element.style.setProperty('animation-play-state', 'paused', 'important');
+        element.style.setProperty('animation', 'none', 'important');
+        element.style.setProperty('filter', 'none', 'important');
+        element.style.setProperty('opacity', '1', 'important');
+        
+        // Get computed styles and override any that might be causing visual effects
+        const computedStyle = getComputedStyle(element);
+        console.log(`🔍 [DEBUG] Computed filter: ${computedStyle.filter}`);
+        console.log(`🔍 [DEBUG] Computed animation: ${computedStyle.animation}`);
+        
+        // Force override computed styles that might persist
+        if (computedStyle.filter && computedStyle.filter !== 'none') {
+          element.style.setProperty('filter', 'none', 'important');
+        }
+        
+        console.log(`🔍 [DEBUG] Inline styles after clearing:`, element.getAttribute('style'));
+        
+        // Clear browser focus states and debug CSS pseudo-classes
+        console.log(`🔍 [DEBUG] Checking CSS pseudo-classes:`);
+        console.log(`  - :focus: ${element.matches(':focus')}`);
+        console.log(`  - :focus-visible: ${element.matches(':focus-visible')}`);
+        console.log(`  - :hover: ${element.matches(':hover')}`);
+        console.log(`  - tabindex: ${element.getAttribute('tabindex')}`);
+        
+        // Force remove focus and blur the element
+        if (element.matches(':focus')) {
+          (element as HTMLElement).blur();
+          console.log(`🔍 [DEBUG] Blurred focused element`);
+        }
+        
+        // Temporarily clear tabindex to prevent focus
+        const originalTabIndex = element.getAttribute('tabindex');
+        if (originalTabIndex !== null) {
+          element.setAttribute('tabindex', '-1');
+          console.log(`🔍 [DEBUG] Set tabindex to -1 (was: ${originalTabIndex})`);
+        }
+        
+        // Clear SVG presentation attributes (not just CSS styles)
+        const svgAttributes = ['stroke', 'stroke-width', 'stroke-dasharray', 'stroke-opacity', 'fill', 'fill-opacity', 'filter'];
+        console.log(`🔍 [DEBUG] Clearing SVG presentation attributes...`);
+        
+        svgAttributes.forEach(attr => {
+          if (element.hasAttribute(attr)) {
+            const oldValue = element.getAttribute(attr);
+            element.removeAttribute(attr);
+            console.log(`🔍 [DEBUG] Removed SVG attribute ${attr}: ${oldValue}`);
+          }
+        });
+        
+        // Also clear selection styles from child elements
+        const childRects = element.querySelectorAll('rect, foreignObject');
+        console.log(`🔍 [DEBUG] Found ${childRects.length} child rect/foreignObject elements`);
+        
+        childRects.forEach((child, childIndex) => {
+          console.log(`🔍 [DEBUG] Clearing child ${childIndex + 1} styles:`, child.getAttribute('style'));
+          
+          // Clear all possible SVG styling properties
+          const svgStylesToClear = [
+            'animation', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-opacity',
+            'fill', 'fill-opacity', 'filter', 'opacity', 'transform', 'visibility'
+          ];
+          
+          svgStylesToClear.forEach(prop => {
+            child.style.removeProperty(prop);
+          });
+          
+          // Force clear critical styling with !important and pause animations
+          child.style.setProperty('animation-play-state', 'paused', 'important');
+          child.style.setProperty('animation', 'none', 'important');
+          child.style.setProperty('filter', 'none', 'important');
+          child.style.setProperty('stroke', '', 'important');
+          child.style.setProperty('stroke-width', '', 'important');
+          
+          // Also clear SVG presentation attributes on child elements
+          svgAttributes.forEach(attr => {
+            if (child.hasAttribute(attr)) {
+              const oldValue = child.getAttribute(attr);
+              child.removeAttribute(attr);
+              console.log(`🔍 [DEBUG] Removed child SVG attribute ${attr}: ${oldValue}`);
+            }
+          });
+          
+          console.log(`🔍 [DEBUG] Child ${childIndex + 1} after clearing:`, child.getAttribute('style'));
+        });
+        
+        console.log(`🔍 [DEBUG] Applied forced style clearing with !important`);
+      });
+      
+      // Final comprehensive style reset using cssText
+      console.log(`🔍 [DEBUG] Applying final comprehensive style reset...`);
+      
+      const allAffectedElements = svgContainer.querySelectorAll('.table-entity, g[data-table-name]');
+      allAffectedElements.forEach((el, index) => {
+        // Complete style reset
+        const currentCssText = el.style.cssText;
+        console.log(`🔍 [DEBUG] Element ${index + 1} cssText before reset: ${currentCssText}`);
+        
+        // Keep only essential styles and reset everything else
+        el.style.cssText = 'cursor: pointer; pointer-events: auto;';
+        
+        console.log(`🔍 [DEBUG] Element ${index + 1} cssText after reset: ${el.style.cssText}`);
       });
       
       // Remove has-selection class from container
       svgContainer.classList.remove('has-selection');
+      
+      // Force comprehensive browser repaint using requestAnimationFrame
+      requestAnimationFrame(() => {
+        // Force layout recalculation
+        svgContainer.offsetHeight;
+        
+        // Reset any inline styles that might persist
+        const allTableElements = svgContainer.querySelectorAll('.table-entity');
+        allTableElements.forEach(element => {
+          element.style.animation = '';
+          element.style.filter = '';
+        });
+      });
     }
     
     // Reset React state
@@ -1985,7 +2186,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     // Remove selection handles
     removeSelectionHandles();
     
-    // Clear all visual selection states
+    // Clear all visual selection states with comprehensive cleanup
     const svgContainer = svgContainerRef.current;
     if (svgContainer) {
       // Remove any aria-pressed states from table elements
@@ -1994,14 +2195,38 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         element.setAttribute('aria-pressed', 'false');
       });
       
-      // Remove visual selection CSS classes
+      // Remove visual selection CSS classes and stop animations
       const tableSelectedElements = svgContainer.querySelectorAll('.table-selected');
       tableSelectedElements.forEach(element => {
+        // Stop any running animations first
+        element.style.animation = 'none';
         element.classList.remove('table-selected');
+        
+        // Also clear selection styles from child elements
+        const childRects = element.querySelectorAll('rect, foreignObject');
+        childRects.forEach(child => {
+          child.style.animation = 'none';
+          if (child instanceof SVGElement) {
+            child.style.filter = '';
+          }
+        });
       });
       
       // Remove has-selection class from container
       svgContainer.classList.remove('has-selection');
+      
+      // Force comprehensive browser repaint using requestAnimationFrame
+      requestAnimationFrame(() => {
+        // Force layout recalculation
+        svgContainer.offsetHeight;
+        
+        // Reset any inline styles that might persist
+        const allTableElements = svgContainer.querySelectorAll('.table-entity');
+        allTableElements.forEach(element => {
+          element.style.animation = '';
+          element.style.filter = '';
+        });
+      });
     }
     
     // Reset React state
@@ -2233,9 +2458,15 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Direct SVG manipulation to apply domain styling - bypasses Mermaid CSS system
   // Clean table detection and click handling - NO styling applied
   const applySVGDomainStyling = useCallback((svgString: string): string => {
+    console.log(`🔍 [DEBUG] applySVGDomainStyling function called for domain: ${domain || 'undefined'}`);
+    console.log(`🔍 [DEBUG] SVG string length: ${svgString?.length || 0}`);
+    
     if (!svgString) {
+      console.log(`🔍 [DEBUG] applySVGDomainStyling: svgString is empty, returning early`);
       return svgString;
     }
+    
+    console.log(`🔍 [DEBUG] applySVGDomainStyling: proceeding with SVG processing for domain: ${domain || 'undefined'}...`);
     
     try {
       const parser = new DOMParser();
@@ -2331,8 +2562,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       console.log(`✅ Clean setup complete - ${tablesFound.length} clickable tables: [${tablesFound.join(', ')}]`);
       
+      
+      
       // Handle ghost tables (cross-domain references) before external table references
-      console.log(`🐛 [DEBUG] Starting ghost table detection for ${tablesFound.length} tables...`);
+      console.log(`👻 Starting ghost table detection for ${tablesFound.length} tables in ${domain || 'undefined'}`);
       let ghostTablesFound = 0;
       
       // Extract ghost table metadata from Mermaid source (new approach)
@@ -2341,20 +2574,22 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       if (mermaidCode.includes('GHOST-META:')) {
         const ghostMetaMatches = mermaidCode.match(/%% GHOST-META: (\w+) -> (domain_\d+)/g);
         if (ghostMetaMatches) {
-          ghostMetaMatches.forEach(match => {
+          ghostMetaMatches.forEach((match) => {
             const [, tableName, targetDomain] = match.match(/%% GHOST-META: (\w+) -> (domain_\d+)/) || [];
             if (tableName && targetDomain) {
               ghostTableMap.set(tableName, targetDomain);
-              console.log(`🐛 [DEBUG] Registered ghost table: ${tableName} -> ${targetDomain}`);
             }
           });
         }
       }
       
-      console.log(`🐛 [DEBUG] Found ${ghostTableMap.size} ghost tables from metadata`);
+      console.log(`👻 Found ${ghostTableMap.size} ghost table references`);
+      
+      if (ghostTableMap.size === 0) {
+        console.log(`👻 [DEBUG] No ghost tables found in metadata - this might be the issue!`);
+      }
       
       tablesFound.forEach(tableName => {
-        console.log(`🐛 [DEBUG] Checking table "${tableName}" for ghost properties...`);
         
         // Environment-specific entity ID pattern detection (verified approach)
         const entitySelectors = [
@@ -2396,43 +2631,65 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           const isGhostTable = ghostTableMap.has(tableName);
           const targetDomain = ghostTableMap.get(tableName);
           
-          console.log(`🐛 [DEBUG] "${tableName}" is ${isGhostTable ? '' : 'NOT '}a ghost table${targetDomain ? ` (target: ${targetDomain})` : ''}`);
           
           if (isGhostTable && targetDomain) {
-            // Apply ghost table styling
-            tableElement.classList.add('ghost-table');
-            tableElement.setAttribute('data-ghost-table', 'true');
-            tableElement.setAttribute('data-target-domain', targetDomain);
+            console.log(`👻 Setting up ghost table styling: ${tableName}`);
             
-            // Add HTML title attribute for native browser tooltip (GitHub issue verified approach)
-            const formattedDomain = targetDomain.replace(/domain_(\d+)/, 'Domain $1').replace(/[-_]/g, ' ');
-            tableElement.setAttribute('title', `External table from ${formattedDomain}. Click to navigate.`);
             
-            // Add pointer cursor for better UX
-            tableElement.style.cursor = 'pointer';
-            
-            // Add specific click handler for ghost table navigation
-            tableElement.addEventListener('click', (event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              console.log(`👻 Ghost table clicked: "${tableName}" -> ${targetDomain}`);
+            try {
+              // Apply ghost table styling
+              tableElement.classList.add('ghost-table');
+              tableElement.setAttribute('data-ghost-table', 'true');
+              tableElement.setAttribute('data-target-domain', targetDomain);
+              tableElement.style.pointerEvents = 'auto';
               
-              // Trigger ghost table navigation
-              if (typeof handleExternalTableClick === 'function') {
-                handleExternalTableClick(tableName, event);
-              } else {
-                console.warn('handleExternalTableClick function not available');
-              }
-            });
             
-            ghostTablesFound++;
-            console.log(`  👻 Styled ghost table: "${tableName}" -> ${targetDomain}`);
+              // Set pointer cursor for ghost table navigation
+              tableElement.style.cursor = 'pointer';
+              
+              // Add click handler for ghost table navigation
+              tableElement.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                console.log(`👻 Ghost table clicked: "${tableName}" -> ${targetDomain}`);
+                
+                if (onExternalTableClick) {
+                  onExternalTableClick(tableName, targetDomain);
+                }
+              });
+              
+              ghostTablesFound++;
+              
+            } catch (error) {
+              console.error(`👻 [ERROR] Failed to set up ghost table "${tableName}":`, error);
+            }
+          } else {
+            // Log why this table wasn't processed as a ghost table
+            if (!isGhostTable) {
+              console.log(`🐛 [DEBUG] ❌ "${tableName}" not found in ghostTableMap`);
+            }
+            if (!targetDomain) {
+              console.log(`🐛 [DEBUG] ❌ "${tableName}" has no target domain`);
+            }
           }
         }
       });
       
+      console.log(`🏁 [SUMMARY] Ghost table detection completed for domain: ${domain || 'undefined'}`);
+      console.log(`🏁 [SUMMARY] Total tables checked: ${tablesFound.length}`);
+      console.log(`🏁 [SUMMARY] Ghost tables found in metadata: ${ghostTableMap.size}`);
+      console.log(`🏁 [SUMMARY] Ghost tables successfully configured: ${ghostTablesFound}`);
+      
       if (ghostTablesFound > 0) {
-        console.log(`👻 Found and styled ${ghostTablesFound} ghost tables`);
+        console.log(`👻 ✅ Found and styled ${ghostTablesFound} ghost tables`);
+        
+      } else {
+        console.log(`👻 ❌ No ghost tables were found or configured`);
+        if (ghostTableMap.size > 0) {
+          console.log(`👻 🔍 Ghost tables were in metadata but not found in DOM - check element selectors`);
+        } else {
+          console.log(`👻 🔍 No ghost tables in metadata - check mermaidCode content`);
+        }
       }
       
       // Now handle external table references (FK references to tables in other domains)
@@ -2505,20 +2762,38 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       console.error('Error setting up table detection:', error);
       return svgString; // Return original if setup fails
     }
-  }, [handleTableClick, identifyExternalTables, handleExternalTableClick]);
+  }, [handleTableClick, identifyExternalTables, handleExternalTableClick, domain, mermaidCode]);
 
   // Note: Removed CSS injection-based styling to prevent conflicts with direct DOM styling
 
-  // Apply clean SVG content without styling
+  // Apply clean SVG content without styling - including domain change detection
   useEffect(() => {
+    console.log(`🔍 [DEBUG] SVG styling useEffect triggered:`);
+    console.log(`  - originalSvgContent exists: ${!!originalSvgContent}`);
+    console.log(`  - originalSvgContent length: ${originalSvgContent?.length || 0}`);
+    console.log(`  - current domain: ${domain || 'undefined'}`);
+    console.log(`  - isInitialStylingComplete: ${isInitialStylingComplete}`);
+    console.log(`  - Will call applySVGDomainStyling: ${!!(originalSvgContent && !isInitialStylingComplete)}`);
+    
     if (originalSvgContent && !isInitialStylingComplete) {
+      console.log(`🔍 [DEBUG] Calling applySVGDomainStyling for domain: ${domain || 'undefined'}...`);
       const cleanSvg = applySVGDomainStyling(originalSvgContent);
       const wrappedSvg = wrapSVGWithTransformGroup(cleanSvg);
       setBaseSvgContent(wrappedSvg);
       setSvgContent(wrappedSvg);
       setIsInitialStylingComplete(true);
+      console.log(`🔍 [DEBUG] applySVGDomainStyling completed for domain: ${domain || 'undefined'}`);
+    } else {
+      console.log(`🔍 [DEBUG] applySVGDomainStyling skipped - conditions not met`);
     }
-  }, [originalSvgContent, applySVGDomainStyling, wrapSVGWithTransformGroup, isInitialStylingComplete]);
+  }, [originalSvgContent, applySVGDomainStyling, wrapSVGWithTransformGroup, isInitialStylingComplete, domain]);
+  
+  // Reset styling completion flag when domain changes to ensure ghost table detection runs
+  useEffect(() => {
+    console.log(`🌐 [DEBUG] Domain change detected: ${domain || 'undefined'}`);
+    console.log(`🌐 [DEBUG] Resetting isInitialStylingComplete to force ghost table detection`);
+    setIsInitialStylingComplete(false);
+  }, [domain]);
   
   // Apply selection styling when selection changes - consolidated with domain styling
   useEffect(() => {

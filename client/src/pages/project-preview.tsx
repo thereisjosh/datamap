@@ -34,10 +34,10 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
   // State management
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Initialize selectedDomain from URL parameter or default to 'overview'
+  // Initialize selectedDomain from URL parameter or default to first available domain
   const getInitialDomain = () => {
     const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('domain') || 'overview';
+    return urlParams.get('domain') || 'domain_1'; // Default to first domain instead of overview
   };
   const [selectedDomain, setSelectedDomain] = useState(getInitialDomain());
   const [searchResults, setSearchResults] = useState<{
@@ -197,17 +197,13 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
         // Validate selected domain from URL parameter
         const domains = Object.keys(response.domains);
         if (domains.length > 0 && !domains.includes(selectedDomain)) {
-          // If URL domain is invalid, fallback to overview or first available domain
-          const fallbackDomain = domains.includes('overview') ? 'overview' : domains[0];
+          // If URL domain is invalid, fallback to first available domain
+          const fallbackDomain = domains[0]; // Always use first domain, no overview
           setSelectedDomain(fallbackDomain);
           
           // Update URL to reflect the valid domain
           const url = new URL(window.location.href);
-          if (fallbackDomain === 'overview') {
-            url.searchParams.delete('domain');
-          } else {
-            url.searchParams.set('domain', fallbackDomain);
-          }
+          url.searchParams.set('domain', fallbackDomain); // Always set domain parameter, no special overview case
           window.history.replaceState({}, '', url.toString());
         }
       } else {
