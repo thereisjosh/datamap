@@ -228,8 +228,8 @@ function generateDomainDiagram(
     diagram += '  }\n';
   });
   
-  // TEMPORARILY DISABLED: Add critical cross-domain ghost tables if context is available
-  if (false && allTables && allClusters) {
+  // Add critical cross-domain ghost tables if context is available
+  if (allTables && allClusters) {
     const criticalRefs = findCriticalExternalReferences(tables, allTables, allClusters);
     
     console.log(`\n👻 Ghost Table Analysis for ${cluster.clusterName || cluster.clusterId}:`);
@@ -257,6 +257,17 @@ function generateDomainDiagram(
           console.log(`  👻 Added ghost table: ${ref.targetTable} (importance: ${ref.importance}, domain: ${ref.targetDomain})`);
         }
       });
+      
+      // Add class definitions and styling (official Mermaid ER syntax)
+      diagram += `\n  %% Ghost Table Class Definition\n`;
+      diagram += `  classDef ghostTable fill:rgba(229,231,235,0.3),stroke:rgba(156,163,175,0.8),stroke-width:2px,stroke-dasharray:5 5,color:rgba(107,114,128,0.8),font-style:italic\n`;
+      
+      // Apply ghost class to all ghost tables
+      const ghostTableNames = Array.from(addedGhostTables);
+      if (ghostTableNames.length > 0) {
+        const sanitizedGhostNames = ghostTableNames.map(name => sanitizeTableName(name));
+        diagram += `  class ${sanitizedGhostNames.join(',')} ghostTable\n`;
+      }
     }
   }
   
@@ -274,8 +285,8 @@ function generateDomainDiagram(
     }
   });
   
-  // TEMPORARILY DISABLED: Add relationships to ghost tables
-  if (false && allTables && allClusters) {
+  // Add relationships to ghost tables
+  if (allTables && allClusters) {
     const criticalRefs = findCriticalExternalReferences(tables, allTables, allClusters);
     criticalRefs.forEach(ref => {
       const sanitizedSource = sanitizeTableName(ref.sourceTable);

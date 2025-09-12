@@ -17,6 +17,7 @@
 .ghost-table {
   opacity: 0.6 !important;
   filter: grayscale(0.7) !important;
+  position: relative !important;
 }
 
 .ghost-table rect,
@@ -25,6 +26,7 @@
   stroke-width: 2px !important;
   stroke-dasharray: 5,5 !important;
   fill: rgba(229, 231, 235, 0.3) !important;
+  transition: all 0.3s ease !important;
 }
 
 .ghost-table text {
@@ -42,6 +44,34 @@
 .ghost-table:hover foreignObject {
   stroke: rgba(59, 130, 246, 0.6) !important;
   fill: rgba(59, 130, 246, 0.1) !important;
+  animation: ghost-pulse 1s ease-in-out !important;
+}
+
+/* Enhanced visual indicator for external tables */
+.ghost-table::after {
+  content: "🔗";
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: rgba(59, 130, 246, 0.8);
+  color: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0.9;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.ghost-table:hover::after {
+  background: rgba(59, 130, 246, 1);
+  animation: external-link-pulse 1s ease-in-out;
+  transform: scale(1.1);
 }
 
 @keyframes table-pulse {
@@ -52,6 +82,30 @@
   50% { 
     stroke-opacity: 1;
     filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.7));
+  }
+}
+
+/* Ghost table pulse animation */
+@keyframes ghost-pulse {
+  0%, 100% { 
+    stroke-opacity: 0.6;
+    transform: scale(1);
+  }
+  50% { 
+    stroke-opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+/* External link indicator pulse */
+@keyframes external-link-pulse {
+  0%, 100% { 
+    transform: scale(1.1);
+    opacity: 0.9;
+  }
+  50% { 
+    transform: scale(1.2);
+    opacity: 1;
   }
 }
 

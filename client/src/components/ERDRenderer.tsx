@@ -88,6 +88,33 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         theme: isDarkMode ? 'dark' : 'default',
         securityLevel: 'loose',
         fontFamily: 'Arial, sans-serif',
+        // Ghost table styling via themeCSS (verified approach)
+        themeCSS: `
+          /* Ghost table styling using verified entity ID selectors */
+          .ghostTable .er.entityBox { 
+            fill: rgba(229, 231, 235, 0.3) !important; 
+            stroke: rgba(156, 163, 175, 0.8) !important;
+            stroke-width: 2px !important;
+            stroke-dasharray: 5,5 !important;
+          }
+          .ghostTable .er.entityBox text,
+          .ghostTable text { 
+            fill: rgba(107, 114, 128, 0.8) !important;
+            font-style: italic !important;
+          }
+          /* Environment-specific entity ID targeting */
+          [id^="entity-"] .ghostTable .er.entityBox { 
+            fill: rgba(229, 231, 235, 0.3) !important; 
+            stroke: rgba(156, 163, 175, 0.8) !important;
+            stroke-dasharray: 5,5 !important;
+          }
+          /* Hover effects for ghost tables */
+          .ghostTable .er.entityBox:hover {
+            stroke: rgba(59, 130, 246, 0.6) !important;
+            fill: rgba(59, 130, 246, 0.1) !important;
+            cursor: pointer !important;
+          }
+        `,
         // Industry standard responsive configuration
         er: {
           layoutDirection: 'TB',
@@ -2212,7 +2239,23 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // Handle ghost tables (cross-domain references) before external table references
       let ghostTablesFound = 0;
       tablesFound.forEach(tableName => {
-        const tableElement = svgElement.querySelector(`g[data-table-name="${tableName}"]`);
+        // Environment-specific entity ID pattern detection (verified approach)
+        const entitySelectors = [
+          `g[data-table-name="${tableName}"]`,           // Current pattern
+          `[id^="entity-${tableName}"]`,                // Mermaid Live pattern  
+          `[id^="${tableName}-"]`,                       // Alternative pattern
+          `g[id*="${tableName}"]`                        // Fallback pattern
+        ];
+
+        let tableElement = null;
+        for (const selector of entitySelectors) {
+          tableElement = svgElement.querySelector(selector);
+          if (tableElement) {
+            console.log(`🎯 Found ghost table "${tableName}" using selector: ${selector}`);
+            break;
+          }
+        }
+        
         if (tableElement) {
           // Check if this is a ghost table by looking for ghost table indicators
           const tableTexts = Array.from(tableElement.querySelectorAll('text, tspan'));
@@ -2238,6 +2281,13 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             
             if (targetDomain) {
               tableElement.setAttribute('data-target-domain', targetDomain);
+              
+              // Add HTML title attribute for native browser tooltip (GitHub issue verified approach)
+              const formattedDomain = targetDomain.replace(/[-_]/g, ' ');
+              tableElement.setAttribute('title', `External table from ${formattedDomain} Domain. Click to navigate.`);
+              
+              // Add pointer cursor for better UX
+              tableElement.style.cursor = 'pointer';
             }
             
             ghostTablesFound++;
