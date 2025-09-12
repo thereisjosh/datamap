@@ -189,6 +189,23 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Canonical domain redirect - redirect www to non-www
+  app.use((req, res, next) => {
+    const host = req.headers.host;
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    
+    // Only redirect in production and if host starts with www.
+    if (process.env.NODE_ENV === 'production' && host && host.startsWith('www.')) {
+      const canonicalHost = host.replace(/^www\./, '');
+      const canonicalUrl = `${protocol}://${canonicalHost}${req.originalUrl}`;
+      
+      console.log(`🔄 Redirecting www to canonical domain: ${host} → ${canonicalHost}`);
+      return res.redirect(301, canonicalUrl);
+    }
+    
+    next();
+  });
+
   // Configure CORS
   app.use(cors({
     origin: true, // Allow all origins in development
