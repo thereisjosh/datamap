@@ -46,11 +46,34 @@ async function getUserFromRequest(req: AuthenticatedRequest): Promise<{ id: stri
   }
   
   try {
+    // Enhanced debugging for WWW vs non-WWW domain issues
+    const host = req.headers.host || 'unknown';
+    const origin = req.headers.origin || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const cookies = req.headers.cookie || 'no-cookies';
+    
+    console.log('🔍 Session extraction debug:', {
+      host,
+      origin, 
+      userAgent: userAgent.substring(0, 50) + '...',
+      hasCookies: !!req.headers.cookie,
+      cookieCount: cookies.split(';').length,
+      cookiePreview: cookies.substring(0, 100) + '...'
+    });
+
     // Use BetterAuth to get session
     const { getAuth } = await import('./auth');
     const auth = await getAuth();
     
     const sessionData = await auth.api.getSession({ headers: req.headers });
+    
+    console.log('🔍 BetterAuth session result:', {
+      hasSession: !!sessionData,
+      hasUser: !!sessionData?.user,
+      userId: sessionData?.user?.id,
+      userEmail: sessionData?.user?.email,
+      sessionId: sessionData?.session?.id
+    });
     
     if (sessionData?.user) {
       const user = {
@@ -59,15 +82,66 @@ async function getUserFromRequest(req: AuthenticatedRequest): Promise<{ id: stri
         name: sessionData.user.name,
       };
       
+      console.log('✅ Successfully extracted user from session:', {
+        userId: user.id,
+        email: user.email,
+        host,
+        origin
+      });
+      
       // Cache user on request for subsequent middleware
       req.user = user;
       return user;
+    } else {
+      console.warn('⚠️ No user found in session data:', {
+        host,
+        origin,
+        sessionDataExists: !!sessionData,
+        cookiesExist: !!req.headers.cookie
+      });
+      
+      // Manual cookie parsing fallback for debugging
+      if (req.headers.cookie) {
+        console.log('🔍 Attempting manual cookie parsing for debugging...');
+        const cookieObj = parseCookies(req.headers.cookie);
+        console.log('🔍 Parsed cookies:', {
+          cookieNames: Object.keys(cookieObj),
+          betterAuthSession: cookieObj['better-auth.session_token'] ? 'present' : 'missing',
+          sessionTokenPreview: cookieObj['better-auth.session_token']?.substring(0, 20) + '...' || 'not found'
+        });
+        
+        // If we have a session token but Better-Auth couldn't parse it, there might be a domain issue
+        if (cookieObj['better-auth.session_token']) {
+          console.warn('⚠️ Session token exists in cookies but Better-Auth failed to extract user. This suggests a domain/path configuration issue.');
+        }
+      }
     }
   } catch (error) {
-    console.error('Failed to extract user from session:', error);
+    console.error('❌ Failed to extract user from session:', {
+      error: error instanceof Error ? error.message : error,
+      host: req.headers.host,
+      origin: req.headers.origin,
+      stack: error instanceof Error ? error.stack : undefined
+    });
   }
   
   return null;
+}
+
+/**
+ * Parse cookie string into key-value pairs
+ */
+function parseCookies(cookieHeader: string): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  
+  cookieHeader.split(';').forEach(cookie => {
+    const [key, ...valueParts] = cookie.trim().split('=');
+    if (key && valueParts.length > 0) {
+      cookies[key] = valueParts.join('=');
+    }
+  });
+  
+  return cookies;
 }
 
 /**
@@ -857,7 +931,22 @@ export function registerOrganizationAPI(app: Express) {
     async (req: AuthenticatedRequest, res: Response) => {
       try {
         const user = req.user!;
-        console.log('🔍 Loading organizations for user:', user.email, 'ID:', user.id);
+        const host = req.headers.host || 'unknown';
+        const origin = req.headers.origin || 'unknown';
+        const referer = req.headers.referer || 'unknown';
+        
+        console.log('🔍 Organizations API Request:', {
+          userId: user.id,
+          email: user.email,
+          host,
+          origin,
+          referer,
+          isWWW: host.startsWith('www.'),
+          domain: host.replace(/^www\./, ''),
+          timestamp: new Date().toISOString()
+        });
+        
+        console.log('🔍 Loading organizations for user:', user.email, 'ID:', user.id, 'from:', host);
         
         const tenantManager = await createTenantContextManager();
 
@@ -905,7 +994,14 @@ export function registerOrganizationAPI(app: Express) {
           return transformedResults;
         });
 
-        console.log('✅ Returning organizations:', userOrganizations.length);
+        console.log('✅ Returning organizations:', {
+          count: userOrganizations.length,
+          orgNames: userOrganizations.map(org => org.organization.name),
+          userId: user.id,
+          host,
+          timestamp: new Date().toISOString()
+        });
+        
         res.json({ organizations: userOrganizations });
       } catch (error) {
         console.error('❌ Failed to list user organizations:', error);
