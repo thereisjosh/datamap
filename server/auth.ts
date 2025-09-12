@@ -18,6 +18,13 @@ async function getAuth() {
         const cookieDomain = process.env.AUTH_COOKIE_DOMAIN || undefined;
         const trustedOrigins = process.env.AUTH_TRUSTED_ORIGINS?.split(',') || ["http://localhost:3000"];
         
+        console.log('🔍 BetterAuth configuration (no DB):', {
+          isProduction,
+          cookieDomain,
+          trustedOrigins,
+          nodeEnv: process.env.NODE_ENV
+        });
+        
         authInstance = betterAuth({
           emailAndPassword: {
             enabled: true,
@@ -44,6 +51,13 @@ async function getAuth() {
         const isProduction = process.env.NODE_ENV === 'production';
         const cookieDomain = process.env.AUTH_COOKIE_DOMAIN || undefined;
         const trustedOrigins = process.env.AUTH_TRUSTED_ORIGINS?.split(',') || ["http://localhost:3000"];
+        
+        console.log('🔍 BetterAuth configuration:', {
+          isProduction,
+          cookieDomain,
+          trustedOrigins,
+          nodeEnv: process.env.NODE_ENV
+        });
         
         authInstance = betterAuth({
           database: drizzleAdapter(db, {

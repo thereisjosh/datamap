@@ -65,6 +65,13 @@ async function getUserFromRequest(req: AuthenticatedRequest): Promise<{ id: stri
     const { getAuth } = await import('./auth');
     const auth = await getAuth();
     
+    console.log('🔍 Calling BetterAuth getSession with headers:', {
+      host,
+      hasAuthHeader: !!req.headers.authorization,
+      hasCookieHeader: !!req.headers.cookie,
+      cookieNames: req.headers.cookie ? Object.keys(parseCookies(req.headers.cookie)) : []
+    });
+    
     const sessionData = await auth.api.getSession({ headers: req.headers });
     
     console.log('🔍 BetterAuth session result:', {
@@ -148,10 +155,37 @@ function parseCookies(cookieHeader: string): Record<string, string> {
  * Middleware to verify user is authenticated
  */
 async function requireAuth(req: AuthenticatedRequest, res: Response, next: Function) {
+  const host = req.headers.host || 'unknown';
+  const origin = req.headers.origin || 'unknown';
+  const hasCookies = !!req.headers.cookie;
+  
+  console.log('🔐 requireAuth middleware called:', {
+    method: req.method,
+    path: req.path,
+    host,
+    origin,
+    hasCookies,
+    timestamp: new Date().toISOString()
+  });
+
   const user = await getUserFromRequest(req);
   if (!user) {
+    console.warn('❌ Authentication failed in requireAuth:', {
+      host,
+      origin,
+      hasCookies,
+      path: req.path
+    });
     return res.status(401).json({ error: 'Authentication required' });
   }
+  
+  console.log('✅ Authentication successful in requireAuth:', {
+    userId: user.id,
+    email: user.email,
+    host,
+    path: req.path
+  });
+  
   req.user = user;
   next();
 }
