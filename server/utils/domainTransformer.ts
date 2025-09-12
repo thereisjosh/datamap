@@ -247,11 +247,13 @@ function generateDomainDiagram(
         if (!addedGhostTables.has(ref.targetTable)) {
           const sanitizedTarget = sanitizeTableName(ref.targetTable);
           
-          // Add ghost table with minimal structure - just the header
+          // Add ghost table with minimal structure - header only, no metadata columns
           diagram += `  ${sanitizedTarget} {\n`;
-          diagram += `    id string PK "Ghost-Table"\n`;
-          diagram += `    navigate string "Click-to-navigate-to-${ref.targetDomain}"\n`;
+          diagram += `    id string PK\n`;
           diagram += `  }\n`;
+          
+          // Store ghost table metadata for frontend detection (not as table columns)
+          diagram += `  %% GHOST-META: ${sanitizedTarget} -> ${ref.targetDomain}\n`;
           
           addedGhostTables.add(ref.targetTable);
           
@@ -259,19 +261,22 @@ function generateDomainDiagram(
         }
       });
       
-      // Add class definitions and styling (official Mermaid ER syntax)
+      // Add class definitions and styling (valid Mermaid ER syntax with hex colors)
       diagram += `\n  %% Ghost Table Class Definition\n`;
-      diagram += `  classDef ghostTable fill:rgba(229,231,235,0.3),stroke:rgba(156,163,175,0.8),stroke-width:2px,stroke-dasharray:5 5,color:rgba(107,114,128,0.8),font-style:italic\n`;
+      diagram += `  classDef ghostTable fill:#e5e7eb,stroke:#9ca3af,stroke-width:2px,color:#6b7280\n`;
       
-      // Apply ghost class to all ghost tables
+      // Apply ghost class to all ghost tables (individual applications for Mermaid compatibility)
       const ghostTableNames = Array.from(addedGhostTables);
       console.log(`🐛 [DEBUG] Generated ${ghostTableNames.length} ghost tables: [${ghostTableNames.join(', ')}]`);
       
       if (ghostTableNames.length > 0) {
         const sanitizedGhostNames = ghostTableNames.map(name => sanitizeTableName(name));
-        const classDefinition = `  class ${sanitizedGhostNames.join(',')} ghostTable\n`;
-        console.log(`🐛 [DEBUG] Ghost class definition: "${classDefinition.trim()}"`);
-        diagram += classDefinition;
+        // Apply class to each table individually (more reliable than bulk assignment)
+        sanitizedGhostNames.forEach(tableName => {
+          const classApplication = `  class ${tableName} ghostTable\n`;
+          diagram += classApplication;
+          console.log(`🐛 [DEBUG] Applied ghost class to: ${tableName}`);
+        });
       }
     }
   }
@@ -290,21 +295,72 @@ function generateDomainDiagram(
     }
   });
   
-  // Add relationships to ghost tables
+  // Add relationships to ghost tables (using solid lines for compatibility)
   if (allTables && allClusters) {
     const criticalRefs = findCriticalExternalReferences(tables, allTables, allClusters);
+    console.log(`🐛 [DEBUG] Adding ${criticalRefs.length} ghost table relationships...`);
+    
     criticalRefs.forEach(ref => {
       const sanitizedSource = sanitizeTableName(ref.sourceTable);
       const sanitizedTarget = sanitizeTableName(ref.targetTable);
       const sanitizedColumn = sanitizeTableName(ref.fkColumn);
       
-      diagram += `  ${sanitizedSource} }o..o| ${sanitizedTarget} : "FK ${sanitizedColumn} Cross-Domain"\n`;
+      // Use solid line syntax for ghost relationships (dotted may not be supported)
+      const ghostRelationship = `  ${sanitizedSource} }o--|| ${sanitizedTarget} : "External: ${sanitizedColumn}"\n`;
+      diagram += ghostRelationship;
+      console.log(`🐛 [DEBUG] Added ghost relationship: ${sanitizedSource} -> ${sanitizedTarget}`);
     });
   }
   
-  // Validate Mermaid syntax before returning
+  // Comprehensive Mermaid syntax validation before returning
+  console.log(`🔍 Validating Mermaid syntax for ${cluster.clusterName || cluster.clusterId}...`);
+  
+  // Count expected elements
+  const expectedTableCount = tables.length;
+  const expectedGhostCount = allTables && allClusters ? 
+    findCriticalExternalReferences(tables, allTables, allClusters).reduce((acc, ref) => {
+      if (!acc.has(ref.targetTable)) {
+        acc.add(ref.targetTable);
+      }
+      return acc;
+    }, new Set()).size : 0;
+  
+  // Validate diagram structure
+  const tableMatches = diagram.match(/^\s*\w+\s*\{/gm) || [];
+  const relationshipMatches = diagram.match(/^\s*\w+\s*}o--\|\|\s*\w+/gm) || [];
+  const classDefMatches = diagram.match(/^\s*classDef\s+/gm) || [];
+  const classApplyMatches = diagram.match(/^\s*class\s+\w+\s+\w+/gm) || [];
+  
+  console.log(`🐛 [DEBUG] Mermaid validation results:`);
+  console.log(`  📊 Expected: ${expectedTableCount} regular + ${expectedGhostCount} ghost = ${expectedTableCount + expectedGhostCount} total tables`);
+  console.log(`  📊 Found: ${tableMatches.length} table definitions`);
+  console.log(`  🔗 Found: ${relationshipMatches.length} relationships`);
+  console.log(`  🎨 Found: ${classDefMatches.length} class definitions, ${classApplyMatches.length} class applications`);
+  
+  // Check for common syntax issues
+  const issues: string[] = [];
+  
   if (diagram.includes('[') || diagram.includes(']')) {
-    console.warn(`⚠️ Potential Mermaid syntax issue: diagram contains square brackets`);
+    issues.push('Contains square brackets (potential syntax issue)');
+  }
+  
+  if (diagram.includes('rgba(')) {
+    issues.push('Contains rgba() colors (use hex instead)');
+  }
+  
+  if (diagram.includes('}o..o|')) {
+    issues.push('Contains dotted relationships (may not be supported)');
+  }
+  
+  if (tableMatches.length !== expectedTableCount + expectedGhostCount) {
+    issues.push(`Table count mismatch: expected ${expectedTableCount + expectedGhostCount}, found ${tableMatches.length}`);
+  }
+  
+  if (issues.length > 0) {
+    console.warn(`⚠️ Mermaid syntax issues found:`);
+    issues.forEach(issue => console.warn(`  - ${issue}`));
+  } else {
+    console.log(`✅ Mermaid syntax validation passed`);
   }
   
   console.log(`📋 Generated Mermaid diagram for ${cluster.clusterName || cluster.clusterId} (${diagram.split('\n').length} lines)`);

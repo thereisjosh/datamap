@@ -88,30 +88,29 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         theme: isDarkMode ? 'dark' : 'default',
         securityLevel: 'loose',
         fontFamily: 'Arial, sans-serif',
-        // Ghost table styling via themeCSS (verified approach)
+        // Ghost table styling via themeCSS (valid hex colors for Mermaid compatibility)
         themeCSS: `
           /* Ghost table styling using verified entity ID selectors */
           .ghostTable .er.entityBox { 
-            fill: rgba(229, 231, 235, 0.3) !important; 
-            stroke: rgba(156, 163, 175, 0.8) !important;
+            fill: #e5e7eb !important; 
+            stroke: #9ca3af !important;
             stroke-width: 2px !important;
-            stroke-dasharray: 5,5 !important;
           }
           .ghostTable .er.entityBox text,
           .ghostTable text { 
-            fill: rgba(107, 114, 128, 0.8) !important;
+            fill: #6b7280 !important;
             font-style: italic !important;
           }
           /* Environment-specific entity ID targeting */
           [id^="entity-"] .ghostTable .er.entityBox { 
-            fill: rgba(229, 231, 235, 0.3) !important; 
-            stroke: rgba(156, 163, 175, 0.8) !important;
-            stroke-dasharray: 5,5 !important;
+            fill: #e5e7eb !important; 
+            stroke: #9ca3af !important;
+            stroke-width: 2px !important;
           }
           /* Hover effects for ghost tables */
           .ghostTable .er.entityBox:hover {
-            stroke: rgba(59, 130, 246, 0.6) !important;
-            fill: rgba(59, 130, 246, 0.1) !important;
+            stroke: #3b82f6 !important;
+            fill: #dbeafe !important;
             cursor: pointer !important;
           }
         `,
@@ -1259,17 +1258,17 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         console.log('  📝 Mermaid code length:', mermaidCode.length);
         console.log('  👻 Looking for ghost table indicators...');
         
-        const hasGhostTables = mermaidCode.includes('Ghost-Table') || mermaidCode.includes('Click-to-navigate-to');
+        const hasGhostTables = mermaidCode.includes('GHOST-META:');
         const hasGhostClass = mermaidCode.includes('classDef ghostTable') || mermaidCode.includes('class ') && mermaidCode.includes('ghostTable');
         
         console.log('  👻 Ghost table content found:', hasGhostTables);
         console.log('  🎨 Ghost class definition found:', hasGhostClass);
         
         if (hasGhostTables) {
-          // Extract ghost table references for debugging
-          const ghostMatches = mermaidCode.match(/Click-to-navigate-to-([^"]+)/g);
-          if (ghostMatches) {
-            console.log('  👻 Ghost table references found:', ghostMatches);
+          // Extract ghost table metadata for debugging (new format)
+          const ghostMetaMatches = mermaidCode.match(/%% GHOST-META: (\w+) -> (domain_\d+)/g);
+          if (ghostMetaMatches) {
+            console.log('  👻 Ghost table metadata found:', ghostMetaMatches);
           }
         }
 
@@ -1956,6 +1955,15 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       selectedElements.forEach(element => {
         element.setAttribute('aria-pressed', 'false');
       });
+      
+      // Remove visual selection CSS classes
+      const tableSelectedElements = svgContainer.querySelectorAll('.table-selected');
+      tableSelectedElements.forEach(element => {
+        element.classList.remove('table-selected');
+      });
+      
+      // Remove has-selection class from container
+      svgContainer.classList.remove('has-selection');
     }
     
     // Reset React state
@@ -1985,6 +1993,15 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       selectedElements.forEach(element => {
         element.setAttribute('aria-pressed', 'false');
       });
+      
+      // Remove visual selection CSS classes
+      const tableSelectedElements = svgContainer.querySelectorAll('.table-selected');
+      tableSelectedElements.forEach(element => {
+        element.classList.remove('table-selected');
+      });
+      
+      // Remove has-selection class from container
+      svgContainer.classList.remove('has-selection');
     }
     
     // Reset React state
@@ -2318,19 +2335,23 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       console.log(`🐛 [DEBUG] Starting ghost table detection for ${tablesFound.length} tables...`);
       let ghostTablesFound = 0;
       
-      // First, find all text elements with ghost content for debugging
-      const allTextElements = Array.from(svgElement.querySelectorAll('text, tspan'));
-      const ghostContentElements = allTextElements.filter(el => {
-        const content = el.textContent || '';
-        return content.includes('Ghost-Table') || content.includes('Click-to-navigate-to');
-      });
+      // Extract ghost table metadata from Mermaid source (new approach)
+      const ghostTableMap = new Map<string, string>();
       
-      console.log(`🐛 [DEBUG] Found ${ghostContentElements.length} elements with ghost content in entire SVG`);
-      ghostContentElements.forEach((el, i) => {
-        const content = el.textContent || '';
-        const parentId = el.parentElement?.getAttribute('id') || 'no-parent-id';
-        console.log(`🐛 [DEBUG] Ghost content ${i + 1}: "${content}" (parent: ${parentId})`);
-      });
+      if (mermaidCode.includes('GHOST-META:')) {
+        const ghostMetaMatches = mermaidCode.match(/%% GHOST-META: (\w+) -> (domain_\d+)/g);
+        if (ghostMetaMatches) {
+          ghostMetaMatches.forEach(match => {
+            const [, tableName, targetDomain] = match.match(/%% GHOST-META: (\w+) -> (domain_\d+)/) || [];
+            if (tableName && targetDomain) {
+              ghostTableMap.set(tableName, targetDomain);
+              console.log(`🐛 [DEBUG] Registered ghost table: ${tableName} -> ${targetDomain}`);
+            }
+          });
+        }
+      }
+      
+      console.log(`🐛 [DEBUG] Found ${ghostTableMap.size} ghost tables from metadata`);
       
       tablesFound.forEach(tableName => {
         console.log(`🐛 [DEBUG] Checking table "${tableName}" for ghost properties...`);
@@ -2371,50 +2392,38 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         }
         
         if (tableElement) {
-          // Check if this is a ghost table by looking for ghost table indicators
-          const tableTexts = Array.from(tableElement.querySelectorAll('text, tspan'));
-          console.log(`🐛 [DEBUG] "${tableName}" element found, checking ${tableTexts.length} text elements for ghost content...`);
+          // Check if this is a ghost table using metadata map (new approach)
+          const isGhostTable = ghostTableMap.has(tableName);
+          const targetDomain = ghostTableMap.get(tableName);
           
-          // Debug: Show all text content in this element
-          tableTexts.forEach((textEl, i) => {
-            const content = textEl.textContent || '';
-            if (content.trim()) {
-              console.log(`🐛 [DEBUG]   Text ${i + 1}: "${content}"`);
-            }
-          });
+          console.log(`🐛 [DEBUG] "${tableName}" is ${isGhostTable ? '' : 'NOT '}a ghost table${targetDomain ? ` (target: ${targetDomain})` : ''}`);
           
-          const isGhostTable = tableTexts.some(textEl => 
-            textEl.textContent?.includes('Ghost-Table') || 
-            textEl.textContent?.includes('Click-to-navigate-to')
-          );
-          
-          console.log(`🐛 [DEBUG] "${tableName}" is ${isGhostTable ? '' : 'NOT '}a ghost table`);
-          
-          if (isGhostTable) {
+          if (isGhostTable && targetDomain) {
             // Apply ghost table styling
             tableElement.classList.add('ghost-table');
             tableElement.setAttribute('data-ghost-table', 'true');
+            tableElement.setAttribute('data-target-domain', targetDomain);
             
-            // Extract target domain from the text
-            let targetDomain = null;
-            tableTexts.forEach(textEl => {
-              const text = textEl.textContent || '';
-              const domainMatch = text.match(/Click-to-navigate-to-(.+?)/);
-              if (domainMatch) {
-                targetDomain = domainMatch[1];
+            // Add HTML title attribute for native browser tooltip (GitHub issue verified approach)
+            const formattedDomain = targetDomain.replace(/domain_(\d+)/, 'Domain $1').replace(/[-_]/g, ' ');
+            tableElement.setAttribute('title', `External table from ${formattedDomain}. Click to navigate.`);
+            
+            // Add pointer cursor for better UX
+            tableElement.style.cursor = 'pointer';
+            
+            // Add specific click handler for ghost table navigation
+            tableElement.addEventListener('click', (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              console.log(`👻 Ghost table clicked: "${tableName}" -> ${targetDomain}`);
+              
+              // Trigger ghost table navigation
+              if (typeof handleExternalTableClick === 'function') {
+                handleExternalTableClick(tableName, event);
+              } else {
+                console.warn('handleExternalTableClick function not available');
               }
             });
-            
-            if (targetDomain) {
-              tableElement.setAttribute('data-target-domain', targetDomain);
-              
-              // Add HTML title attribute for native browser tooltip (GitHub issue verified approach)
-              const formattedDomain = targetDomain.replace(/[-_]/g, ' ');
-              tableElement.setAttribute('title', `External table from ${formattedDomain} Domain. Click to navigate.`);
-              
-              // Add pointer cursor for better UX
-              tableElement.style.cursor = 'pointer';
-            }
             
             ghostTablesFound++;
             console.log(`  👻 Styled ghost table: "${tableName}" -> ${targetDomain}`);
