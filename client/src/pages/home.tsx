@@ -249,10 +249,6 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
     }
   };
 
-  const handleTableSelectionComplete = () => {
-    // Clear pending selection after ERDRenderer processes it
-    setPendingTableSelection(null);
-  };
 
   const handleDomainSwitchForTable = (targetDomain: string, tableName: string) => {
     console.log(`🎯 Domain switch requested: ${targetDomain} for table: ${tableName}`);
@@ -262,6 +258,11 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
     
     // Set the table to be selected after domain switch completes
     setPendingTableSelection(tableName);
+  };
+
+  const handleTableSelectionComplete = (tableName: string) => {
+    console.log(`✅ Table selection completed for: ${tableName}, clearing pendingTableSelection`);
+    setPendingTableSelection(null);
   };
 
   const handlePreviewERD = () => {
@@ -523,8 +524,9 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
                       isLoading={isLoading}
                       domain={selectedDomain}
                       selectedTableFromSearch={pendingTableSelection}
+                      domainResults={domainResults}
+                      onExternalTableClick={handleDomainSwitchForTable}
                       onTableSelectionComplete={handleTableSelectionComplete}
-                      onDomainSwitch={handleDomainSwitchForTable}
                     />
                   </div>
                 </div>

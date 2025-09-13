@@ -331,7 +331,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
       if (targetDomain && targetDomain !== selectedDomain) {
         // Cross-domain navigation needed
         console.log(`🌐 Cross-domain search: switching to "${targetDomain}" for table "${item}"`);
-        handleDomainSwitchForTable(targetDomain, item);
+        handleDomainSwitchForTable(item, targetDomain);
       } else {
         // Same domain - just highlight the table
         console.log(`🎯 Same domain search: highlighting table "${item}"`);
@@ -355,7 +355,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
         if (targetDomain && targetDomain !== selectedDomain) {
           // Cross-domain navigation for column
           console.log(`🌐 Cross-domain column search: switching to "${targetDomain}" for table "${containingTable}"`);
-          handleDomainSwitchForTable(targetDomain, containingTable);
+          handleDomainSwitchForTable(containingTable, targetDomain);
         } else {
           // Same domain - highlight the containing table
           setPendingTableSelection(containingTable);
@@ -373,7 +373,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
         
         if (targetDomain && targetDomain !== selectedDomain) {
           console.log(`🌐 Cross-domain relationship search: switching to "${targetDomain}" for relationship "${item}"`);
-          handleDomainSwitchForTable(targetDomain, sourceTable);
+          handleDomainSwitchForTable(sourceTable, targetDomain);
         } else {
           // Same domain - highlight the source table
           setPendingTableSelection(sourceTable);
@@ -384,11 +384,6 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
     handleClearSearch();
   };
 
-  const handleTableSelectionComplete = () => {
-    console.log(`🧹 handleTableSelectionComplete called - clearing pendingTableSelection`);
-    setPendingTableSelection(null);
-    console.log(`🧹 Cleared pendingTableSelection`);
-  };
 
   const handleDomainChange = (domain: string) => {
     setSelectedDomain(domain);
@@ -435,7 +430,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
     return domains.length > 0 ? domains[0] : null;
   };
 
-  const handleDomainSwitchForTable = (targetDomain: string, tableName: string) => {
+  const handleDomainSwitchForTable = (tableName: string, targetDomain: string) => {
     console.log(`🔄 Switching domain from "${selectedDomain}" to "${targetDomain}" for table "${tableName}"`);
     
     // Switch to the target domain
@@ -443,6 +438,11 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
     
     // Queue the table selection for after domain switch completes
     setPendingTableSelection(tableName);
+  };
+
+  const handleTableSelectionComplete = (tableName: string) => {
+    console.log(`✅ Table selection completed for: ${tableName}, clearing pendingTableSelection`);
+    setPendingTableSelection(null);
   };
 
   const handleDownloadERD = () => {
@@ -482,7 +482,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
       const targetDomain = findDomainForTable(tableName);
       
       if (targetDomain && targetDomain !== selectedDomain) {
-        handleDomainSwitchForTable(targetDomain, tableName);
+        handleDomainSwitchForTable(tableName, targetDomain);
       } else {
         setPendingTableSelection(tableName);
       }
@@ -498,7 +498,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
     const finalDomain = sourceDomain === targetDomain ? sourceDomain : sourceDomain;
     
     if (finalDomain && finalDomain !== selectedDomain) {
-      handleDomainSwitchForTable(finalDomain, sourceTable);
+      handleDomainSwitchForTable(sourceTable, finalDomain);
     } else {
       setPendingTableSelection(sourceTable);
     }
@@ -770,9 +770,9 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
           isLoading={isLoading || isDomainLoading}
           domain={selectedDomain}
           selectedTableFromSearch={pendingTableSelection}
-          onTableSelectionComplete={handleTableSelectionComplete}
-          onDomainSwitch={handleDomainSwitchForTable}
           domainResults={domainResults}
+          onExternalTableClick={handleDomainSwitchForTable}
+          onTableSelectionComplete={handleTableSelectionComplete}
         />
       </div>
 

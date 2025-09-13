@@ -5,11 +5,55 @@
   opacity: 1 !important;
 }
 
+/* Legacy fallback styles (keeping for compatibility but should not interfere) */
+
+/* Enhanced table selection highlighting with maximum specificity for search results */
+.table-selected,
+g.table-selected,
+svg g.table-selected,
+svg #pan-zoom-group g.table-selected {
+  opacity: 1 !important;
+}
+
+/* Comprehensive highlighting for actual Mermaid ERD DOM structure */
+
+/* Fallback styles for basic table highlighting */
 .table-selected rect,
-.table-selected foreignObject {
-  stroke: rgba(59, 130, 246, 0.8) !important;
-  stroke-width: 3px !important;
+.table-selected foreignObject,
+g.table-selected rect,
+g.table-selected foreignObject,
+g.node.table-selected rect,
+g.node.table-selected foreignObject,
+.node.table-selected rect,
+.node.table-selected foreignObject {
+  stroke: #3b82f6 !important;
+  stroke-width: 4px !important;
   animation: table-pulse 2s ease-in-out infinite !important;
+}
+
+/* Enhanced table selection highlighting with maximum specificity for search results */
+.table-selected,
+g.table-selected,
+svg g.table-selected,
+svg #pan-zoom-group g.table-selected {
+  opacity: 1 !important;
+}
+
+/* Comprehensive blue border styling for all SVG child elements */
+.table-selected rect,
+.table-selected foreignObject,
+g.table-selected rect,
+g.table-selected foreignObject,
+svg g.table-selected rect,
+svg g.table-selected foreignObject,
+svg #pan-zoom-group g.table-selected rect,
+svg #pan-zoom-group g.table-selected foreignObject {
+  stroke: #3b82f6 !important;
+  stroke-width: 4px !important;
+  stroke-dasharray: none !important;
+  fill: rgba(59, 130, 246, 0.08) !important;
+  animation: table-pulse 2s ease-in-out infinite !important;
+  filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.4)) !important;
 }
 
 /* Ghost Table Styles (Cross-Domain References) */
@@ -55,6 +99,22 @@
   50% { 
     stroke-opacity: 1;
     filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.7));
+  }
+}
+
+/* Stronger pulse animation for better visibility */
+@keyframes table-pulse-strong {
+  0%, 100% { 
+    stroke-opacity: 0.9;
+    stroke-width: 4px;
+    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.6));
+    transform: scale(1);
+  }
+  50% { 
+    stroke-opacity: 1;
+    stroke-width: 6px;
+    filter: drop-shadow(0 0 16px rgba(59, 130, 246, 0.9));
+    transform: scale(1.02);
   }
 }
 

@@ -408,9 +408,14 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
       
       console.log(`🎯 Navigating to domain "${targetDomain}" for table "${item}"`);
       
-      // Update domain state and URL without full navigation
+      // Update domain state first, then table selection with enhanced delay to prevent race conditions
       setSelectedDomain(targetDomain);
-      setSelectedTable(item);
+      
+      // Set table selection after a longer delay to ensure domain change and SVG rendering completes
+      setTimeout(() => {
+        console.log(`🔄 Setting selectedTable to "${item}" after domain change`);
+        setSelectedTable(item);
+      }, 150); // Increased delay to allow SVG rendering to complete
       
       // Update URL to reflect the change
       const url = new URL(window.location.href);
@@ -434,9 +439,14 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         if (targetDomain) {
           console.log(`🎯 Navigating to domain "${targetDomain}" for column table "${containingTable}"`);
           
-          // Update domain state and URL without full navigation
+          // Update domain state first, then table selection with enhanced delay to prevent race conditions
           setSelectedDomain(targetDomain);
-          setSelectedTable(containingTable);
+          
+          // Set table selection after a longer delay to ensure domain change and SVG rendering completes
+          setTimeout(() => {
+            console.log(`🔄 Setting selectedTable to "${containingTable}" after domain change`);
+            setSelectedTable(containingTable);
+          }, 150); // Increased delay to allow SVG rendering to complete
           
           // Update URL to reflect the change
           const url = new URL(window.location.href);
@@ -466,9 +476,14 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         if (targetDomain) {
           console.log(`🎯 Navigating to domain "${targetDomain}" for relationship source table "${sourceTable}"`);
           
-          // Update domain state and URL without full navigation
+          // Update domain state first, then table selection with enhanced delay to prevent race conditions
           setSelectedDomain(targetDomain);
-          setSelectedTable(sourceTable);
+          
+          // Set table selection after a longer delay to ensure domain change and SVG rendering completes
+          setTimeout(() => {
+            console.log(`🔄 Setting selectedTable to "${sourceTable}" after domain change`);
+            setSelectedTable(sourceTable);
+          }, 150); // Increased delay to allow SVG rendering to complete
           
           // Update URL to reflect the change
           const url = new URL(window.location.href);
@@ -761,9 +776,14 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
                     onExternalTableClick={(tableName, targetDomain) => {
                       console.log(`🔗 External table navigation: "${tableName}" in domain "${targetDomain}"`);
                       
-                      // Update domain state and URL without full navigation
+                      // Update domain state first, then table selection with enhanced delay to prevent race conditions
                       setSelectedDomain(targetDomain);
-                      setSelectedTable(tableName);
+                      
+                      // Set table selection after a longer delay to ensure domain change and SVG rendering completes
+                      setTimeout(() => {
+                        console.log(`🔄 Setting selectedTable to "${tableName}" after domain change`);
+                        setSelectedTable(tableName);
+                      }, 150); // Increased delay to allow SVG rendering to complete
                       
                       // Update URL to reflect the change
                       const url = new URL(window.location.href);

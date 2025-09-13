@@ -10,9 +10,10 @@ interface ERDRendererProps {
   isDarkMode?: boolean;
   isLoading?: boolean;
   domain?: string;
-  selectedTableFromSearch?: string | null;
   domainResults?: Record<string, any>;
   onExternalTableClick?: (tableName: string, targetDomain: string) => void;
+  onTableSelectionComplete?: (tableName: string) => void;
+  selectedTableFromSearch?: string | null;
 }
 
 
@@ -21,10 +22,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   isDarkMode = false,
   isLoading = false,
   domain,
-  selectedTableFromSearch = null,
   domainResults = {},
-  onExternalTableClick
+  onExternalTableClick,
+  onTableSelectionComplete,
+  selectedTableFromSearch = null
 }) => {
+  
+  // Track last processed selectedTableFromSearch to prevent duplicate processing
+  const lastProcessedSearchTable = useRef<string | null>(null);
   
   // State for Direct SVG Rendering pattern
   const [svgContent, setSvgContent] = useState<string>('');
@@ -39,8 +44,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const [searchTargetTable, setSearchTargetTable] = useState<string | null>(null);
   const [isSearchTriggered, setIsSearchTriggered] = useState<boolean>(false);
   
-  // Track last processed selectedTableFromSearch to prevent duplicate processing
-  const lastProcessedSearchTable = useRef<string | null>(null);
   
   // Transform-based Pan-Zoom state and refs
   const svgContainerRef = useRef<HTMLDivElement>(null);
@@ -348,7 +351,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       return;
     }
     
-    console.log(`🔄 SVG-native pan: delta(${deltaX.toFixed(2)}, ${deltaY.toFixed(2)}) -> new pan(${newPanX.toFixed(2)}, ${newPanY.toFixed(2)})`);
     
     // Apply ONLY SVG transform (no CSS)
     const svgTransformString = `translate(${newPanX}, ${newPanY}) scale(${currentZoom})`;
@@ -682,46 +684,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const relationships = new Map<string, string[]>();
     const lines = diagramCode.split('\n');
     
-    console.log(`🔍 Parsing relationships from ${lines.length} lines of ERD code...`);
+    console.log(`🔍 Parsing relationships from ${lines.length} lines...`);
     
-    // Debug: Show first few lines that contain | or - characters
-    const potentialRelLines = lines.filter(line => 
-      line.includes('|') || line.includes('-')
-    ).slice(0, 10);
-    console.log(`🔍 Sample potential relationship lines:`, potentialRelLines);
-    
-    // Debug: Test the specific line we know should match
-    const testLine = '  BankStatementAllocation }o--|| PaymentTransaction : "FK PaymentTransactionId"';
-    const testPattern = /(\w+)\s*\}o--\|\|\s*(\w+)\s*:\s*"[^"]*"/;
-    const testMatch = testLine.match(testPattern);
-    console.log(`🧪 SPECIFIC TEST: "${testLine}"`);
-    console.log(`🧪 Pattern: ${testPattern.source}`);
-    console.log(`🧪 Result: ${testMatch ? `${testMatch[1]} <-> ${testMatch[2]}` : 'NO MATCH'}`);
-    
-    // Debug: Check if the expected relationship line exists in the mermaidCode
-    const expectedLine = 'BankStatementAllocation }o--|| PaymentTransaction';
-    const codeContainsExpected = diagramCode.includes(expectedLine);
-    console.log(`🧪 MERMAID CODE CONTAINS "${expectedLine}": ${codeContainsExpected}`);
-    
-    // Debug: Show lines around PaymentTransaction in the split result
-    const paymentLines = lines.filter((line, index) => {
-      const contains = line.includes('PaymentTransaction');
-      if (contains) {
-        console.log(`🧪 LINE ${index}: "${line}"`);
-      }
-      return contains;
-    });
-    console.log(`🧪 Found ${paymentLines.length} lines containing PaymentTransaction in split result`);
     
     for (const line of lines) {
       const trimmedLine = line.trim();
       
-      // Debug: Log ALL lines that contain PaymentTransaction to see what we're actually processing
-      if (trimmedLine.includes('PaymentTransaction')) {
-        console.log(`🔍 RAW LINE: "${line}"`);
-        console.log(`🔍 TRIMMED: "${trimmedLine}"`);
-        console.log(`🔍 LENGTH: ${trimmedLine.length}`);
-      }
       
       // Skip empty lines and table definitions (but NOT relationship lines)
       if (!trimmedLine || 
@@ -760,13 +728,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       for (const pattern of patterns) {
         const match = trimmedLine.match(pattern);
         
-        // Debug: Show which patterns are being tested against PaymentTransaction lines
-        if (trimmedLine.includes('PaymentTransaction') || trimmedLine.includes('BankStatementAllocation')) {
-          if (match) {
-            console.log(`✅ REGEX MATCH: "${trimmedLine}" -> ${match[1]} <-> ${match[2]} (pattern: ${pattern.source})`);
-          } else {
-            console.log(`❌ REGEX FAIL: "${trimmedLine}" vs pattern: ${pattern.source}`);
-          }
+        // Debug: Show successful matches only (suppress excessive REGEX FAIL logs)
+        if (match && (trimmedLine.includes('PaymentTransaction') || trimmedLine.includes('BankStatementAllocation'))) {
+          console.log(`✅ REGEX MATCH: "${trimmedLine}" -> ${match[1]} <-> ${match[2]}`);
         }
         
         if (match) {
@@ -784,7 +748,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             relationships.get(sourceTable)?.push(targetTable);
             relationships.get(targetTable)?.push(sourceTable);
             
-            console.log(`✅ Found relationship: ${sourceTable} <-> ${targetTable} (pattern: ${pattern.source})`);
+            // Found relationship: ${sourceTable} <-> ${targetTable}
             matched = true;
             break;
           }
@@ -796,105 +760,33 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       }
     }
     
-    console.log(`🔗 Total relationships parsed: ${relationships.size} entities with connections`);
-    
-    // Debug: Show parsed relationships
-    if (relationships.size > 0) {
-      for (const [table, connected] of relationships.entries()) {
-        console.log(`  🔗 ${table} connects to: [${connected.join(', ')}]`);
-      }
-    } else {
-      console.log(`⚠️ No relationships parsed - check regex patterns!`);
-    }
+    console.log(`🔗 Parsed ${relationships.size} entities with relationships`);
     
     return relationships;
   }, []);
 
   // Bind ERD-specific event handlers after SVG is rendered (Mermaid best practice)
   const bindERDEventHandlers = useCallback(() => {
-    console.log('🔗 bindERDEventHandlers called!');
-    
     const svgContainer = svgContainerRef.current;
-    if (!svgContainer) {
-      console.log('❌ svgContainer not found');
-      return;
-    }
+    if (!svgContainer) return;
 
     const svgRoot = svgContainer.querySelector('svg');
-    if (!svgRoot) {
-      console.log('❌ svgRoot not found');
-      return;
-    }
-
-    console.log('🔗 Binding ERD relationship highlighting event handlers...');
-    console.log('📊 SVG Root element found:', svgRoot.tagName);
-
-    // Debug: Inspect the actual SVG structure to understand what Mermaid generates
-    console.log('🔍 DEBUGGING SVG STRUCTURE:');
-    
-    // Check for various possible ERD-related selectors
-    const possibleSelectors = [
-      '.er.entityBox',
-      '.er-entityBox', 
-      '.entityBox',
-      '.entity-box',
-      '.entity',
-      'g[id*="entity"]',
-      'g[class*="entity"]',
-      'g[class*="er"]',
-      '.er',
-      'rect',
-      'g'
-    ];
-    
-    possibleSelectors.forEach(selector => {
-      const elements = svgRoot.querySelectorAll(selector);
-      console.log(`  - ${selector}: ${elements.length} elements`);
-      if (elements.length > 0 && elements.length < 10) {
-        elements.forEach((el, i) => {
-          console.log(`    [${i}] ${el.tagName} id="${el.getAttribute('id')}" class="${el.getAttribute('class')}"`);
-        });
-      }
-    });
-
-    // Check for relationship-related elements
-    console.log('🔍 CHECKING RELATIONSHIP ELEMENTS:');
-    const relationshipSelectors = [
-      '.er.relationshipLine',
-      '.relationshipLine',
-      '.relationship-line',
-      'path',
-      'line'
-    ];
-    
-    relationshipSelectors.forEach(selector => {
-      const elements = svgRoot.querySelectorAll(selector);
-      console.log(`  - ${selector}: ${elements.length} elements`);
-    });
+    if (!svgRoot) return;
 
     // Remove existing event listeners to prevent duplicates
     const existingHandlers = svgRoot.querySelectorAll('[data-erd-handler]');
-    console.log(`🧹 Removing ${existingHandlers.length} existing ERD handlers`);
     existingHandlers.forEach(box => {
       box.removeAttribute('data-erd-handler');
     });
 
-    // Try to find entity boxes using the expected selector first
+    // Find entity boxes - try .er.entityBox first, fallback to g[id*="entity"]
     let entityBoxes = svgRoot.querySelectorAll('.er.entityBox');
-    console.log(`🏢 Found ${entityBoxes.length} .er.entityBox elements`);
-    
-    // If no .er.entityBox found, try alternative selectors
     if (entityBoxes.length === 0) {
-      console.log('⚠️ No .er.entityBox found, trying alternative selectors...');
-      
-      // Try g elements with entity in ID
       entityBoxes = svgRoot.querySelectorAll('g[id*="entity"]');
-      console.log(`🏢 Found ${entityBoxes.length} g[id*="entity"] elements`);
       
       if (entityBoxes.length === 0) {
         // Try any g elements with classes
         entityBoxes = svgRoot.querySelectorAll('g[class]');
-        console.log(`🏢 Found ${entityBoxes.length} g[class] elements (fallback)`);
       }
     }
 
@@ -1421,12 +1313,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   }, [zoomToScale]);
 
   // Define handleTableClick before it's used in event delegation
-  const handleTableClick = useCallback((tableName: string, event?: MouseEvent, isFromSearch: boolean = false) => {
-    console.log(`🎯 Selected table: ${tableName} ${isFromSearch ? '(from search)' : '(direct click)'}`);
+  const handleTableClick = useCallback((tableName: string, event?: MouseEvent, isFromSearch: boolean = false, isAfterDomainSwitch: boolean = false) => {
+    console.log(`🎯 Selected table: ${tableName} ${isFromSearch ? '(from search)' : isAfterDomainSwitch ? '(after domain switch)' : '(direct click)'}`);
     
-    // Domain detection: Check if table exists in current domain (skip for search calls)
+    // Domain detection: Check if table exists in current domain (skip for search calls and after domain switches)
     const svgContainer = svgContainerRef.current;
-    if (svgContainer && !isFromSearch) {
+    if (svgContainer && !isFromSearch && !isAfterDomainSwitch) {
       const tableElement = svgContainer.querySelector(`g[data-table-name="${tableName}"]`);
       
       if (!tableElement) {
@@ -1763,22 +1655,15 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         
         // Starting Mermaid Direct SVG Rendering
         
-        // Debug Mermaid input before rendering
-        console.log('🐛 [DEBUG] Mermaid Input Analysis:');
-        console.log('  📝 Mermaid code length:', mermaidCode.length);
-        console.log('  👻 Looking for ghost table indicators...');
-        
         const hasGhostTables = mermaidCode.includes('GHOST-META:');
         const hasGhostClass = mermaidCode.includes('classDef ghostTable') || mermaidCode.includes('class ') && mermaidCode.includes('ghostTable');
         
-        console.log('  👻 Ghost table content found:', hasGhostTables);
         console.log('  🎨 Ghost class definition found:', hasGhostClass);
         
         if (hasGhostTables) {
           // Extract ghost table metadata for debugging (new format)
           const ghostMetaMatches = mermaidCode.match(/%% GHOST-META: (\w+) -> (domain_\d+)/g);
           if (ghostMetaMatches) {
-            console.log('  👻 Ghost table metadata found:', ghostMetaMatches);
           }
         }
 
@@ -1800,12 +1685,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           const svgElement = svgDoc.querySelector('svg');
           
           if (svgElement) {
-            // Debug Mermaid DOM structure after render
-            console.log('🐛 [DEBUG] Mermaid SVG Structure Analysis:');
-            
-            // Analyze all elements and their attributes
             const allElements = Array.from(svgElement.querySelectorAll('*'));
-            console.log('  📊 Total SVG elements:', allElements.length);
             
             // Look for entity-related elements specifically
             const entityElements = allElements.filter(el => {
@@ -1829,9 +1709,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               return content.includes('Ghost-Table') || content.includes('Click-to-navigate-to');
             });
             
-            console.log('  👻 Ghost table text elements found:', ghostTextElements.length);
             ghostTextElements.forEach((el, i) => {
-              console.log(`    👻 ${i + 1}. "${el.textContent}" (parent: ${el.parentElement?.tagName}#${el.parentElement?.getAttribute('id')})`);
             });
             
             // Analyze g elements (groups) which typically contain table structures
@@ -2498,7 +2376,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Clear selection only (used for background clicks)
   const handleClearSelectionOnly = useCallback(() => {
     const previousSelection = selectedTable;
-    console.log(`🔍 [DEBUG] handleClearSelectionOnly called for: "${previousSelection}"`);
     
     // Remove selection handles
     removeSelectionHandles();
@@ -2506,11 +2383,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     // Clear all visual selection states with comprehensive cleanup
     const svgContainer = svgContainerRef.current;
     if (svgContainer) {
-      console.log(`🔍 [DEBUG] SVG container found, proceeding with clearing`);
       
       // Remove any aria-pressed states from table elements
       const selectedElements = svgContainer.querySelectorAll('[aria-pressed="true"]');
-      console.log(`🔍 [DEBUG] Found ${selectedElements.length} elements with aria-pressed="true"`);
       
       selectedElements.forEach(element => {
         element.setAttribute('aria-pressed', 'false');
@@ -2604,7 +2479,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         console.log(`🔍 [DEBUG] Found ${childRects.length} child rect/foreignObject elements`);
         
         childRects.forEach((child, childIndex) => {
-          console.log(`🔍 [DEBUG] Clearing child ${childIndex + 1} styles:`, child.getAttribute('style'));
           
           // Clear all possible SVG styling properties
           const svgStylesToClear = [
@@ -2628,29 +2502,23 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             if (child.hasAttribute(attr)) {
               const oldValue = child.getAttribute(attr);
               child.removeAttribute(attr);
-              console.log(`🔍 [DEBUG] Removed child SVG attribute ${attr}: ${oldValue}`);
             }
           });
           
-          console.log(`🔍 [DEBUG] Child ${childIndex + 1} after clearing:`, child.getAttribute('style'));
         });
         
-        console.log(`🔍 [DEBUG] Applied forced style clearing with !important`);
       });
       
       // Final comprehensive style reset using cssText
-      console.log(`🔍 [DEBUG] Applying final comprehensive style reset...`);
       
       const allAffectedElements = svgContainer.querySelectorAll('.table-entity, g[data-table-name]');
       allAffectedElements.forEach((el, index) => {
         // Complete style reset
         const currentCssText = el.style.cssText;
-        console.log(`🔍 [DEBUG] Element ${index + 1} cssText before reset: ${currentCssText}`);
         
         // Keep only essential styles and reset everything else
         el.style.cssText = 'cursor: pointer; pointer-events: auto;';
         
-        console.log(`🔍 [DEBUG] Element ${index + 1} cssText after reset: ${el.style.cssText}`);
       });
       
       // Remove has-selection class from container
@@ -2964,15 +2832,11 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Direct SVG manipulation to apply domain styling - bypasses Mermaid CSS system
   // Clean table detection and click handling - NO styling applied
   const applySVGDomainStyling = useCallback((svgString: string): string => {
-    console.log(`🔍 [DEBUG] applySVGDomainStyling function called for domain: ${domain || 'undefined'}`);
-    console.log(`🔍 [DEBUG] SVG string length: ${svgString?.length || 0}`);
     
     if (!svgString) {
-      console.log(`🔍 [DEBUG] applySVGDomainStyling: svgString is empty, returning early`);
       return svgString;
     }
     
-    console.log(`🔍 [DEBUG] applySVGDomainStyling: proceeding with SVG processing for domain: ${domain || 'undefined'}...`);
     
     try {
       const parser = new DOMParser();
@@ -2985,10 +2849,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       // Debug: Count all potential entity containers first
       const allPotentialBoxes = Array.from(svgElement.querySelectorAll('g'));
-      console.log(`🐛 [DEBUG] Total g elements found: ${allPotentialBoxes.length}`);
-      
+        
       const nodeClassBoxes = Array.from(svgElement.querySelectorAll('g.node, g[class="node default"], g[class="node"]'));
-      console.log(`🐛 [DEBUG] G elements with 'node' class: ${nodeClassBoxes.length}`);
       
       // Find individual entity nodes for click handling only (exclude containers)
       // Target specific node classes but exclude plural "nodes" container
@@ -3000,11 +2862,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       console.log(`🔍 Found ${entityBoxes.length} individual table nodes for detection...`);
       
       // Debug: Show the first few boxes to understand structure
-      entityBoxes.slice(0, 3).forEach((box, i) => {
-        const id = box.getAttribute('id');
-        const className = (box as any).className?.baseVal || box.className || '';
-        console.log(`🐛 [DEBUG] Box ${i + 1}: id="${id}", class="${className}"`);
-      });
+      // Count entity boxes for detection
       
       let clickableCount = 0;
       let tablesFound: string[] = [];
@@ -3071,28 +2929,47 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       
       // Handle ghost tables (cross-domain references) before external table references
-      console.log(`👻 Starting ghost table detection for ${tablesFound.length} tables in ${domain || 'undefined'}`);
       let ghostTablesFound = 0;
       
       // Extract ghost table metadata from Mermaid source (new approach)
       const ghostTableMap = new Map<string, string>();
       
       if (mermaidCode.includes('GHOST-META:')) {
-        const ghostMetaMatches = mermaidCode.match(/%% GHOST-META: (\w+) -> (domain_\d+)/g);
-        if (ghostMetaMatches) {
-          ghostMetaMatches.forEach((match) => {
-            const [, tableName, targetDomain] = match.match(/%% GHOST-META: (\w+) -> (domain_\d+)/) || [];
-            if (tableName && targetDomain) {
-              ghostTableMap.set(tableName, targetDomain);
-            }
-          });
+        // Try multiple regex patterns to match different ghost metadata formats
+        const patterns = [
+          /%% GHOST-META: (\w+) -> (domain_\d+)/g,
+          /%% GHOST-META: (\w+) -> (\w+)/g,
+          /GHOST-META: (\w+) -> (domain_\d+)/g,
+          /GHOST-META: (\w+) -> (\w+)/g
+        ];
+        
+        let foundMatches = false;
+        
+        for (const pattern of patterns) {
+          // Use matchAll for proper capture group extraction with global patterns
+          const matches = Array.from(mermaidCode.matchAll(pattern));
+          if (matches.length > 0) {
+            foundMatches = true;
+            console.log(`👻 Found ghost metadata with pattern: ${pattern.source}`, matches.map(m => m[0]));
+            matches.forEach((matchResult) => {
+              const [, tableName, targetDomain] = matchResult;
+              if (tableName && targetDomain) {
+                ghostTableMap.set(tableName, targetDomain);
+                console.log(`👻 Mapped ghost table: ${tableName} -> ${targetDomain}`);
+              }
+            });
+            break; // Use first matching pattern
+          }
+        }
+        
+        if (!foundMatches) {
+          console.log(`👻 No ghost metadata matches found. Sample mermaidCode snippet:`, 
+            mermaidCode.substring(0, 500));
         }
       }
       
-      console.log(`👻 Found ${ghostTableMap.size} ghost table references`);
       
       if (ghostTableMap.size === 0) {
-        console.log(`👻 [DEBUG] No ghost tables found in metadata - this might be the issue!`);
       }
       
       tablesFound.forEach(tableName => {
@@ -3112,13 +2989,11 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           tableElement = svgElement.querySelector(selector);
           if (tableElement) {
             usedSelector = selector;
-            console.log(`🐛 [DEBUG] Found element for "${tableName}" using selector: ${selector}`);
             break;
           }
         }
         
         if (!tableElement) {
-          console.log(`🐛 [DEBUG] No element found for "${tableName}" - trying alternative approach...`);
           // Try to find by text content in the actual detected boxes
           const boxesWithThisTable = entityBoxes.filter(box => {
             const textElements = Array.from(box.querySelectorAll('text, tspan, span'));
@@ -3128,7 +3003,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           if (boxesWithThisTable.length > 0) {
             tableElement = boxesWithThisTable[0];
             usedSelector = 'text-content-match';
-            console.log(`🐛 [DEBUG] Found element for "${tableName}" via text content match`);
           }
         }
         
@@ -3170,13 +3044,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               console.error(`👻 [ERROR] Failed to set up ghost table "${tableName}":`, error);
             }
           } else {
-            // Log why this table wasn't processed as a ghost table
-            if (!isGhostTable) {
-              console.log(`🐛 [DEBUG] ❌ "${tableName}" not found in ghostTableMap`);
-            }
-            if (!targetDomain) {
-              console.log(`🐛 [DEBUG] ❌ "${tableName}" has no target domain`);
-            }
+            // Suppress excessive ghost table debug logs for regular tables
+            // Only log if this appears to be an unexpected issue
           }
         }
       });
@@ -3184,6 +3053,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       console.log(`🏁 [SUMMARY] Ghost table detection completed for domain: ${domain || 'undefined'}`);
       console.log(`🏁 [SUMMARY] Total tables checked: ${tablesFound.length}`);
       console.log(`🏁 [SUMMARY] Ghost tables found in metadata: ${ghostTableMap.size}`);
+      if (ghostTableMap.size > 0) {
+        console.log(`🏁 [SUMMARY] Ghost table mappings:`, Object.fromEntries(ghostTableMap));
+      }
       console.log(`🏁 [SUMMARY] Ghost tables successfully configured: ${ghostTablesFound}`);
       
       if (ghostTablesFound > 0) {
@@ -3274,30 +3146,19 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
 
   // Apply clean SVG content without styling - including domain change detection
   useEffect(() => {
-    console.log(`🔍 [DEBUG] SVG styling useEffect triggered:`);
-    console.log(`  - originalSvgContent exists: ${!!originalSvgContent}`);
-    console.log(`  - originalSvgContent length: ${originalSvgContent?.length || 0}`);
-    console.log(`  - current domain: ${domain || 'undefined'}`);
-    console.log(`  - isInitialStylingComplete: ${isInitialStylingComplete}`);
-    console.log(`  - Will call applySVGDomainStyling: ${!!(originalSvgContent && !isInitialStylingComplete)}`);
     
     if (originalSvgContent && !isInitialStylingComplete) {
-      console.log(`🔍 [DEBUG] Calling applySVGDomainStyling for domain: ${domain || 'undefined'}...`);
       const cleanSvg = applySVGDomainStyling(originalSvgContent);
       const wrappedSvg = wrapSVGWithTransformGroup(cleanSvg);
       setBaseSvgContent(wrappedSvg);
       setSvgContent(wrappedSvg);
       setIsInitialStylingComplete(true);
-      console.log(`🔍 [DEBUG] applySVGDomainStyling completed for domain: ${domain || 'undefined'}`);
     } else {
-      console.log(`🔍 [DEBUG] applySVGDomainStyling skipped - conditions not met`);
     }
   }, [originalSvgContent, applySVGDomainStyling, wrapSVGWithTransformGroup, isInitialStylingComplete, domain]);
   
   // Reset styling completion flag when domain changes to ensure ghost table detection runs
   useEffect(() => {
-    console.log(`🌐 [DEBUG] Domain change detected: ${domain || 'undefined'}`);
-    console.log(`🌐 [DEBUG] Resetting isInitialStylingComplete to force ghost table detection`);
     setIsInitialStylingComplete(false);
   }, [domain]);
   
@@ -3320,31 +3181,134 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Apply simple table selection highlighting (restored working system)
   useEffect(() => {
     const svgContainer = svgContainerRef.current;
-    if (!svgContainer) return;
+    if (!svgContainer || !selectedTable) return;
 
-    console.log(`🎯 Simple selection useEffect - selectedTable: "${selectedTable}"`);
+    console.log(`✨ Applying simple highlighting to selected table: ${selectedTable}`);
+    
+    // RACE CONDITION DEBUG: Track DOM element lifecycle
+    const trackElementLifecycle = (tableName: string) => {
+      const svg = svgContainer.querySelector('svg');
+      if (svg) {
+        const tableElement = svg.querySelector(`g[data-table-name="${tableName}"]`) || 
+                            svg.querySelector(`g[id*="entity-${tableName}"]`);
+        
+        if (tableElement) {
+          const elementId = tableElement.getAttribute('id');
+          const hasClass = tableElement.classList.contains('table-selected');
+          console.log(`🔍 LIFECYCLE: Found element ${elementId} for ${tableName}, hasClass: ${hasClass}`);
+          
+          // Monitor this element for changes
+          const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+              if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                const currentHasClass = (mutation.target as Element).classList.contains('table-selected');
+                console.log(`🚨 CLASS CHANGE: ${elementId} table-selected: ${currentHasClass}`);
+              }
+            });
+          });
+          
+          observer.observe(tableElement, { attributes: true, attributeFilter: ['class'] });
+          
+          // Clean up observer after 10 seconds
+          setTimeout(() => observer.disconnect(), 10000);
+          
+          return { elementId, hasClass };
+        } else {
+          console.log(`❌ LIFECYCLE: No element found for ${tableName}`);
+          return null;
+        }
+      }
+      return null;
+    };
+    
+    // Track element before clearing
+    const beforeClear = trackElementLifecycle(selectedTable);
     
     // Always clear old highlighting first
     const oldHighlighted = svgContainer.querySelectorAll('.table-selected, .relationship-highlighted');
+    console.log(`🧹 CLEARING: Found ${oldHighlighted.length} elements to clear`);
     oldHighlighted.forEach(el => {
+      const elementId = el.getAttribute('id');
+      console.log(`🧹 CLEARING: Removing classes from ${elementId}`);
       el.classList.remove('table-selected', 'relationship-highlighted');
     });
     svgContainer.classList.remove('has-selection');
 
-    // Apply simple selection highlighting if table is selected
-    if (selectedTable) {
-      console.log(`✨ Applying simple highlighting to selected table: ${selectedTable}`);
+    // Enhanced retry mechanism for robust highlighting during domain switches
+    const attemptHighlighting = (attempt: number = 1, maxAttempts: number = 5) => {
+      console.log(`🎨 Attempting highlighting for: ${selectedTable} (attempt ${attempt}/${maxAttempts})`);
       
       const svgRoot = svgContainer.querySelector('svg');
-      if (svgRoot) {
-        // Find and highlight the selected table
-        const selectedEntity = svgRoot.querySelector(`g[data-table-name="${selectedTable}"]`) ||
-                              svgRoot.querySelector(`g[id*="entity-${selectedTable}"]`);
-        
-        if (selectedEntity) {
-          selectedEntity.classList.add('table-selected');
-          console.log(`✅ Added .table-selected to ${selectedTable}`);
+      if (!svgRoot) {
+        console.log(`❌ No SVG root found (attempt ${attempt})`);
+        if (attempt < maxAttempts) {
+          setTimeout(() => attemptHighlighting(attempt + 1, maxAttempts), 200);
         }
+        return;
+      }
+      
+      // Check SVG dimensions to ensure it's fully rendered
+      const svgRect = svgRoot.getBoundingClientRect();
+      if (svgRect.width === 0 || svgRect.height === 0) {
+        console.log(`❌ SVG not fully rendered yet: ${svgRect.width}x${svgRect.height} (attempt ${attempt})`);
+        if (attempt < maxAttempts) {
+          setTimeout(() => attemptHighlighting(attempt + 1, maxAttempts), 250);
+        }
+        return;
+      }
+      
+      // Try multiple selector strategies to find the table element (same as recovery mechanism)
+      let selectedEntity = svgRoot.querySelector(`g[data-table-name="${selectedTable}"]`) ||
+                          svgRoot.querySelector(`g[id*="entity-${selectedTable}"]`) ||
+                          svgRoot.querySelector(`g[class*="node"][id*="${selectedTable}"]`);
+      
+      // Fallback: search by text content
+      if (!selectedEntity) {
+        const nodeElements = Array.from(svgRoot.querySelectorAll('g.node, g[class*="node"]'));
+        selectedEntity = nodeElements.find(node => {
+          const textElements = Array.from(node.querySelectorAll('text, tspan, span.nodeLabel'));
+          return textElements.some(text => (text.textContent || '').trim() === selectedTable);
+        });
+      }
+          
+      if (selectedEntity) {
+        console.log(`✅ Found table element: ${selectedTable} (attempt ${attempt})`);
+        
+        // Apply table highlighting
+        selectedEntity.classList.add('table-selected');
+        console.log(`✅ Added .table-selected to ${selectedTable}`);
+        
+        // RACE CONDITION DEBUG: Verify class was actually applied and monitor persistence
+        const elementId = selectedEntity.getAttribute('id');
+        const hasClassAfterAdd = selectedEntity.classList.contains('table-selected');
+        console.log(`🔍 VERIFY: Class applied to ${elementId}? ${hasClassAfterAdd}`);
+        
+        // Monitor if class persists for next 5 seconds
+        const monitorPersistence = () => {
+          let checkCount = 0;
+          const checkInterval = setInterval(() => {
+            checkCount++;
+            const stillHasClass = selectedEntity.classList.contains('table-selected');
+            const stillInDOM = document.contains(selectedEntity);
+            
+            console.log(`🕐 PERSISTENCE CHECK ${checkCount}: ${elementId} stillInDOM: ${stillInDOM}, hasClass: ${stillHasClass}`);
+            
+            if (!stillInDOM) {
+              console.log(`🚨 ELEMENT REMOVED: ${elementId} was removed from DOM`);
+              clearInterval(checkInterval);
+            } else if (!stillHasClass) {
+              console.log(`🚨 CLASS REMOVED: ${elementId} lost .table-selected class`);
+              clearInterval(checkInterval);
+            }
+            
+            if (checkCount >= 10) { // Check for 5 seconds (500ms * 10)
+              console.log(`✅ PERSISTENCE SUCCESS: ${elementId} maintained highlighting for 5 seconds`);
+              clearInterval(checkInterval);
+            }
+          }, 500);
+        };
+        
+        monitorPersistence();
         
         // Enable dimming by adding container class
         svgContainer.classList.add('has-selection');
@@ -3355,59 +3319,157 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         const connectedTables = relationships.get(selectedTable) || [];
         
         if (connectedTables.length > 0) {
-          console.log(`🔗 ${selectedTable} connects to: [${connectedTables.join(', ')}]`);
+          console.log(`🔗 Highlighting relationships for ${selectedTable}: ${connectedTables.join(', ')}`);
           
           // Smart approach: find paths that connect the selected table to its related tables
-          const relationshipPaths = svgRoot.querySelectorAll('path[id*="entity-"]');
+          const relationshipPaths = svgRoot.querySelectorAll('path[id*="entity-"], .edgePath path');
           let highlightedCount = 0;
-          
+              
           relationshipPaths.forEach(path => {
             const pathId = path.getAttribute('id') || '';
             
             // Check if this path connects the selected table to any of its connected tables
             const connectsSelectedTable = connectedTables.some(connectedTable => {
-              // Path IDs typically look like: "id_entity-TableA-X_entity-TableB-Y_Z"
-              const selectedPattern = `entity-${selectedTable}-`;
-              const connectedPattern = `entity-${connectedTable}-`;
+              // Try multiple path ID patterns to match different Mermaid versions
+              const patterns = [
+                // Standard pattern: "id_entity-TableA-X_entity-TableB-Y_Z"
+                () => pathId.includes(`entity-${selectedTable}-`) && pathId.includes(`entity-${connectedTable}-`),
+                // Alternative pattern: "entity-TableA_entity-TableB"
+                () => pathId.includes(`entity-${selectedTable}_entity-${connectedTable}`) || 
+                       pathId.includes(`entity-${connectedTable}_entity-${selectedTable}`),
+                // Underscore separated: "TableA_TableB"  
+                () => pathId.includes(`${selectedTable}_${connectedTable}`) || 
+                       pathId.includes(`${connectedTable}_${selectedTable}`),
+                // Dash separated: "TableA-TableB"
+                () => pathId.includes(`${selectedTable}-${connectedTable}`) || 
+                       pathId.includes(`${connectedTable}-${selectedTable}`)
+              ];
               
-              return pathId.includes(selectedPattern) && pathId.includes(connectedPattern);
+              return patterns.some(pattern => pattern());
             });
             
             if (connectsSelectedTable) {
               path.classList.add('relationship-highlighted');
               highlightedCount++;
-              console.log(`✅ Highlighted path: ${pathId}`);
             }
           });
           
-          console.log(`✅ Highlighted ${highlightedCount} specific relationship lines for ${selectedTable}`);
+          if (highlightedCount > 0) {
+            console.log(`✅ Highlighted ${highlightedCount} relationships for ${selectedTable}`);
+          }
         } else {
           console.log(`⚠️ No relationships found for ${selectedTable}`);
         }
+        
+      } else if (attempt < maxAttempts) {
+        // Retry if element not found yet (SVG might still be rendering)
+        console.log(`⚠️ Table element not found for ${selectedTable}, retrying (attempt ${attempt + 1}/${maxAttempts})`);
+        setTimeout(() => attemptHighlighting(attempt + 1, maxAttempts), 200 * attempt);
+      } else {
+        console.log(`❌ Failed to find table element for ${selectedTable} after ${maxAttempts} attempts`);
       }
+    };
+    
+    // Start highlighting attempts with improved delay for domain switches
+    const initialDelay = svgContainer.querySelector('svg') ? 100 : 300; // Less delay if SVG already exists
+    setTimeout(() => attemptHighlighting(), initialDelay);
+  }, [selectedTable, svgContent]); // Re-added svgContent to handle domain switches with unified system
+
+  // Re-apply highlighting when SVG content changes (for domain switches)
+  useEffect(() => {
+    // Use selectedTable if available, otherwise fall back to selectedTableFromSearch during ghost table navigation
+    const targetTable = selectedTable || selectedTableFromSearch;
+    
+    if (targetTable && svgContent) {
+      // Retry mechanism for robust highlighting during multiple SVG re-renders
+      const attemptHighlighting = (attempt: number = 1, maxAttempts: number = 3) => {
+        const svgContainer = svgContainerRef.current;
+        if (svgContainer) {
+          // Try multiple selector strategies to find the table element
+          const selectedEntity = svgContainer.querySelector(`g[data-table-name="${targetTable}"]`) ||
+                                svgContainer.querySelector(`g[id*="entity-${targetTable}"]`) ||
+                                svgContainer.querySelector(`g[class*="node"][id*="${targetTable}"]`) ||
+                                svgContainer.querySelector(`g.node:has(text[text-content="${targetTable}"])`) ||
+                                Array.from(svgContainer.querySelectorAll('g.node')).find(node => {
+                                  const textElements = Array.from(node.querySelectorAll('text, tspan'));
+                                  return textElements.some(text => (text.textContent || '').trim() === targetTable);
+                                });
+          
+          if (selectedEntity) {
+            if (!selectedEntity.classList.contains('table-selected')) {
+              console.log(`🔄 Re-applying highlighting after SVG change for: ${targetTable} (attempt ${attempt})`);
+              selectedEntity.classList.add('table-selected');
+              svgContainer.classList.add('has-selection');
+              
+              // Re-apply relationship highlighting
+              const relationships = parseRelationships(mermaidCode);
+              const connectedTables = relationships.get(targetTable) || [];
+              
+              if (connectedTables.length > 0) {
+                const svgRoot = svgContainer.querySelector('svg');
+                if (svgRoot) {
+                  const relationshipPaths = svgRoot.querySelectorAll('path[id*="entity-"]');
+                  relationshipPaths.forEach(path => {
+                    const pathId = path.getAttribute('id') || '';
+                    const connectsSelectedTable = connectedTables.some(connectedTable => {
+                      // Try multiple path ID patterns to match different Mermaid versions
+                      const patterns = [
+                        // Standard pattern: "id_entity-TableA-X_entity-TableB-Y_Z"
+                        () => pathId.includes(`entity-${targetTable}-`) && pathId.includes(`entity-${connectedTable}-`),
+                        // Alternative pattern: "entity-TableA_entity-TableB"
+                        () => pathId.includes(`entity-${targetTable}_entity-${connectedTable}`) || 
+                               pathId.includes(`entity-${connectedTable}_entity-${targetTable}`),
+                        // Underscore separated: "TableA_TableB"  
+                        () => pathId.includes(`${targetTable}_${connectedTable}`) || 
+                               pathId.includes(`${connectedTable}_${targetTable}`),
+                        // Dash separated: "TableA-TableB"
+                        () => pathId.includes(`${targetTable}-${connectedTable}`) || 
+                               pathId.includes(`${connectedTable}-${targetTable}`)
+                      ];
+                      
+                      return patterns.some(pattern => pattern());
+                    });
+                    
+                    if (connectsSelectedTable) {
+                      path.classList.add('relationship-highlighted');
+                    }
+                  });
+                }
+              }
+            }
+          } else if (attempt < maxAttempts) {
+            // Retry if element not found yet (SVG might still be rendering)
+            setTimeout(() => attemptHighlighting(attempt + 1, maxAttempts), 200 * attempt);
+          }
+        }
+      };
+      
+      // Initial delay for SVG rendering, then start highlighting attempts
+      const timeoutId = setTimeout(() => {
+        attemptHighlighting();
+      }, 300); // Further increased delay for domain switch SVG rendering and ghost table processing
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [selectedTable, svgContent]);
+  }, [svgContent, selectedTable, selectedTableFromSearch, mermaidCode, parseRelationships]);
+
 
   // Debug: Track selectedTableFromSearch prop changes
   useEffect(() => {
-    console.log(`📥 PROP CHANGE: selectedTableFromSearch changed to "${selectedTableFromSearch}"`);
-    
     // Clear the last processed ref when search selection is cleared
     if (!selectedTableFromSearch) {
       lastProcessedSearchTable.current = null;
-      console.log(`🧹 Cleared lastProcessedSearchTable ref`);
     }
   }, [selectedTableFromSearch]);
 
   // Handle external table selection from search
   useEffect(() => {
-    console.log(`🔍 ERDRenderer useEffect triggered: selectedTableFromSearch="${selectedTableFromSearch}", selectedTable="${selectedTable}", lastProcessed="${lastProcessedSearchTable.current}"`);
     
     // Only process if this is a new search selection (not a repeated one)
     if (selectedTableFromSearch && 
         selectedTableFromSearch !== lastProcessedSearchTable.current) {
       
-      console.log(`🔍 External table selection request: ${selectedTableFromSearch}`);
+      console.log(`🔍 Processing new search selection: ${selectedTableFromSearch}`);
       
       // Update the last processed ref
       lastProcessedSearchTable.current = selectedTableFromSearch;
@@ -3416,30 +3478,57 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       setSearchTargetTable(selectedTableFromSearch);
       setIsSearchTriggered(true);
       
-      // Clear any legacy centering requests since we're handling this via search centering
-      setNeedsCenteringAfterStyling(null);
+      // CRITICAL FIX: Wait for domain switch to complete before calling handleTableClick
+      // This ensures the SVG content is fully rendered before highlighting attempts
+      const waitForDomainSwitch = () => {
+        // Check if SVG content is available with the target table
+        const svgContainer = svgContainerRef.current;
+        if (svgContainer) {
+          const svg = svgContainer.querySelector('svg');
+          const tableElement = svg?.querySelector(`g[data-table-name="${selectedTableFromSearch}"]`) ||
+                               svg?.querySelector(`g[id*="entity-${selectedTableFromSearch}"]`);
+          
+          if (tableElement && svg) {
+            console.log(`✅ SVG content ready for search selection: ${selectedTableFromSearch}`);
+            
+            // Now trigger the table click with proper domain switch flag
+            handleTableClick(selectedTableFromSearch, undefined, false, true);
+            
+            // Notify parent that table selection is complete (delayed to allow highlighting to stabilize)
+            if (onTableSelectionComplete) {
+              setTimeout(() => {
+                onTableSelectionComplete(selectedTableFromSearch);
+              }, 200); // Increased delay to allow highlighting to fully complete
+            }
+            
+          } else {
+            console.log(`⏳ SVG not ready yet for ${selectedTableFromSearch}, retrying...`);
+            // Retry after a short delay if SVG isn't ready
+            setTimeout(waitForDomainSwitch, 100);
+          }
+        } else {
+          console.log(`⏳ SVG container not ready for ${selectedTableFromSearch}, retrying...`);
+          setTimeout(waitForDomainSwitch, 100);
+        }
+      };
       
-      handleTableClick(selectedTableFromSearch, undefined, true);
-      
-      // Centering will be handled by the effect that watches searchTargetTable
-      console.log(`⏳ Allowing centering to complete`);
-    } else if (selectedTableFromSearch === lastProcessedSearchTable.current) {
-      console.log(`⚠️ Skipping duplicate search selection: "${selectedTableFromSearch}" was already processed`);
-    } else {
-      console.log(`❌ Condition not met: selectedTableFromSearch="${selectedTableFromSearch}" (truthy: ${!!selectedTableFromSearch}), lastProcessed="${lastProcessedSearchTable.current}", same as last: ${selectedTableFromSearch === lastProcessedSearchTable.current}`);
+      // Start waiting for domain switch to complete
+      // Add a small initial delay to allow domain switching to begin
+      setTimeout(waitForDomainSwitch, 200);
     }
-  }, [selectedTableFromSearch, selectedTable, handleTableClick]);
+  }, [selectedTableFromSearch, selectedTable, handleTableClick, onTableSelectionComplete]);
+
+
+
+
 
   // Enhanced centering for search results with cross-domain support and retry mechanism
   useEffect(() => {
-    console.log(`🎯 Search centering useEffect: searchTargetTable="${searchTargetTable}", isSearchTriggered=${isSearchTriggered}, svgContent=${!!svgContent}, baseSvgContent=${!!baseSvgContent}`);
     
     if (searchTargetTable && isSearchTriggered && svgContent && baseSvgContent) {
-      console.log(`🎯 Search-triggered centering: targeting table "${searchTargetTable}"`);
       
       // Enhanced centering function with retry mechanism
       const attemptCentering = (attempt: number = 1, maxAttempts: number = 3) => {
-        console.log(`🔄 Centering attempt ${attempt}/${maxAttempts} for table "${searchTargetTable}"`);
         
         // Check if table element exists before attempting to center
         const svgContainer = svgContainerRef.current;
@@ -3450,7 +3539,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           centerOnTable(searchTargetTable);
           
           // Trigger table selection after successful centering
-          handleTableClick(searchTargetTable, undefined, true);
+          handleTableClick(searchTargetTable, undefined, false, true);
           
           // Clear search target after successful centering
           setSearchTargetTable(null);
@@ -3961,8 +4050,8 @@ const MemoizedERDRenderer = memo(ERDRenderer, (prevProps, nextProps) => {
     prevProps.mermaidCode === nextProps.mermaidCode &&
     prevProps.isDarkMode === nextProps.isDarkMode &&
     prevProps.isLoading === nextProps.isLoading &&
-    prevProps.selectedTableFromSearch === nextProps.selectedTableFromSearch &&
-    prevProps.domain === nextProps.domain
+    prevProps.domain === nextProps.domain &&
+    prevProps.selectedTableFromSearch === nextProps.selectedTableFromSearch
   );
 });
 
