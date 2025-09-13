@@ -57,6 +57,19 @@ export class DomainPersistenceService {
     const db = await getDb();
     if (!db) throw new Error('Database not available');
 
+    // Get organization ID from project for RLS compliance
+    const projectResult = await db
+      .select({ organizationId: projects.organizationId })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+    
+    if (projectResult.length === 0) {
+      throw new Error(`Project ${projectId} not found`);
+    }
+    
+    const organizationId = projectResult[0].organizationId;
+
     try {
       // Start transaction
       await db.transaction(async (tx) => {
@@ -68,6 +81,7 @@ export class DomainPersistenceService {
         for (const embedding of embeddings) {
           await tx.insert(tableEmbeddings).values({
             projectId,
+            organizationId,
             tableName: embedding.tableName,
             embedding: JSON.stringify(embedding.embedding),
             embeddingModel: clusteringResult.modelUsed,
@@ -82,6 +96,7 @@ export class DomainPersistenceService {
           // Insert domain
           const domainResult = await tx.insert(projectDomains).values({
             projectId,
+            organizationId,
             domainName: this.sanitizeDomainName(cluster.businessDomain || cluster.name || 'unnamed_domain'),
             displayName: cluster.businessDomain || cluster.name || 'Unnamed Domain',
             purpose: cluster.businessPurpose,
@@ -109,6 +124,7 @@ export class DomainPersistenceService {
             
             await tx.insert(projectDomainTables).values({
               domainId,
+              organizationId,
               tableName: tableName,
               relevanceScore: cluster.coherenceScore ?? 0,
               isJunctionTable: cluster.junctionTables?.includes(tableName) || false,

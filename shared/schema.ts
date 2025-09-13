@@ -240,6 +240,7 @@ export const projectSchema = z.object({
 export const projectDomains = pgTable("project_domains", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  organizationId: uuid("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
   domainName: varchar("domain_name").notNull(), // e.g., "payments_donations"
   displayName: varchar("display_name").notNull(), // e.g., "Donations & Payments"
   purpose: text("purpose"), // AI-generated business purpose description
@@ -252,6 +253,7 @@ export const projectDomains = pgTable("project_domains", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   projectIdx: index("project_domains_project_idx").on(table.projectId),
+  orgIdx: index("project_domains_org_idx").on(table.organizationId),
   projectDomainIdx: index("project_domains_project_domain_idx").on(table.projectId, table.domainName),
   methodIdx: index("project_domains_method_idx").on(table.clusteringMethod),
   createdAtIdx: index("project_domains_created_at_idx").on(table.createdAt),
@@ -260,6 +262,7 @@ export const projectDomains = pgTable("project_domains", {
 export const projectDomainTables = pgTable("project_domain_tables", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   domainId: uuid("domain_id").notNull().references(() => projectDomains.id, { onDelete: "cascade" }),
+  organizationId: uuid("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
   tableName: varchar("table_name").notNull(),
   relevanceScore: real("relevance_score").notNull().default(0.5), // 0.0-1.0 relevance to this domain
   isJunctionTable: boolean("is_junction_table").notNull().default(false),
@@ -267,6 +270,7 @@ export const projectDomainTables = pgTable("project_domain_tables", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   domainIdx: index("project_domain_tables_domain_idx").on(table.domainId),
+  orgIdx: index("project_domain_tables_org_idx").on(table.organizationId),
   domainTableIdx: index("project_domain_tables_domain_table_idx").on(table.domainId, table.tableName),
   tableIdx: index("project_domain_tables_table_idx").on(table.tableName),
 }));
@@ -274,6 +278,7 @@ export const projectDomainTables = pgTable("project_domain_tables", {
 export const tableEmbeddings = pgTable("table_embeddings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  organizationId: uuid("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
   tableName: varchar("table_name").notNull(),
   embedding: text("embedding").notNull(), // JSON array of embedding values
   embeddingModel: varchar("embedding_model").notNull().default("all-MiniLM-L6-v2"),
@@ -281,6 +286,7 @@ export const tableEmbeddings = pgTable("table_embeddings", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   projectIdx: index("table_embeddings_project_idx").on(table.projectId),
+  orgIdx: index("table_embeddings_org_idx").on(table.organizationId),
   tableIdx: index("table_embeddings_table_idx").on(table.tableName),
   modelIdx: index("table_embeddings_model_idx").on(table.embeddingModel),
   createdAtIdx: index("table_embeddings_created_at_idx").on(table.createdAt),
