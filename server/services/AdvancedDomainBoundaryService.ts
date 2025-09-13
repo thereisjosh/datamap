@@ -290,7 +290,7 @@ export class AdvancedDomainBoundaryService {
 
       // Stage 4: Intelligent Clustering Algorithm Selection
       const clusteringStart = performance.now();
-      const selectedAlgorithm = this.selectOptimalAlgorithm(tables, relationships, consolidatedHubList, config);
+      const selectedAlgorithm = this.selectOptimalAdvancedAlgorithm(tables, relationships, consolidatedHubList, config);
       logger.info(`Stage 4: ${selectedAlgorithm} clustering`);
       
       let louvainResult: LouvainClusteringResult | undefined;
@@ -1466,7 +1466,7 @@ export class AdvancedDomainBoundaryService {
   /**
    * Select optimal clustering algorithm based on data characteristics
    */
-  private selectOptimalAlgorithm(
+  private selectOptimalAdvancedAlgorithm(
     tables: TableInfo[], 
     relationships: Relationship[], 
     hubTables: string[], 

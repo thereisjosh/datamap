@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { getDb } from '../../lib/db';
+import { securityEvents, type InsertSecurityEvent } from '@shared/schema';
 import { SecurityEvent, securityEventSchema } from '@shared/validation-schemas';
+import { eq, gte, desc, sql } from 'drizzle-orm';
 
 interface SecurityLogEntry {
   eventType: string;
@@ -25,7 +27,7 @@ interface SecurityMetrics {
   recentEvents: SecurityLogEntry[];
 }
 
-class SecurityLogger {
+export class SecurityLogger {
   private events: SecurityLogEntry[] = [];
   private maxInMemoryEvents = 1000;
   private alertThresholds = {
@@ -188,8 +190,27 @@ class SecurityLogger {
         return;
       }
 
-      // TODO: Create security_events table in schema and implement persistence
-      // await db.insert(securityEvents).values(event);
+      // Convert SecurityLogEntry to InsertSecurityEvent format
+      const securityEventData: InsertSecurityEvent = {
+        eventType: event.eventType,
+        severity: event.severity,
+        userId: event.userId || null,
+        organizationId: event.organizationId || null,
+        projectId: null, // Extract from details if available
+        ipAddress: event.ipAddress || null,
+        userAgent: event.userAgent || null,
+        path: event.path,
+        method: event.method,
+        statusCode: event.statusCode || null,
+        details: event.details || {},
+      };
+
+      // Extract projectId from details if present
+      if (event.details?.projectId) {
+        securityEventData.projectId = event.details.projectId;
+      }
+
+      await db.insert(securityEvents).values(securityEventData);
       
     } catch (error) {
       console.error('❌ Database persistence error:', error);
@@ -237,6 +258,141 @@ class SecurityLogger {
     if (cleanedCount > 0) {
       console.log(`🧹 Security logger cleaned ${cleanedCount} old events`);
     }
+  }
+
+  // Get security metrics from database for longer-term analysis
+  public async getDatabaseMetrics(organizationId?: string): Promise<{
+    totalEvents: number;
+    criticalEvents: number;
+    highEvents: number;
+    topEventTypes: Array<{ type: string; count: number }>;
+    topIPs: Array<{ ip: string; count: number }>;
+    recentEvents: Array<{
+      eventType: string;
+      severity: string;
+      ipAddress: string | null;
+      timestamp: Date | null;
+      path: string;
+    }>;
+  }> {
+    try {
+      const db = await getDb();
+      if (!db) {
+        return {
+          totalEvents: 0,
+          criticalEvents: 0,
+          highEvents: 0,
+          topEventTypes: [],
+          topIPs: [],
+          recentEvents: []
+        };
+      }
+
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      
+      // Build base query with optional organization filter
+      let baseQuery = db.select().from(securityEvents)
+        .where(gte(securityEvents.timestamp, twentyFourHoursAgo));
+      
+      if (organizationId) {
+        baseQuery = baseQuery.where(eq(securityEvents.organizationId, organizationId));
+      }
+
+      const events = await baseQuery.orderBy(desc(securityEvents.timestamp)).limit(1000);
+
+      // Count events by severity
+      const criticalEvents = events.filter(e => e.severity === 'critical').length;
+      const highEvents = events.filter(e => e.severity === 'high').length;
+
+      // Count by event type
+      const eventTypeCounts = new Map<string, number>();
+      const ipCounts = new Map<string, number>();
+
+      events.forEach(event => {
+        eventTypeCounts.set(event.eventType, (eventTypeCounts.get(event.eventType) || 0) + 1);
+        if (event.ipAddress) {
+          ipCounts.set(event.ipAddress, (ipCounts.get(event.ipAddress) || 0) + 1);
+        }
+      });
+
+      return {
+        totalEvents: events.length,
+        criticalEvents,
+        highEvents,
+        topEventTypes: Array.from(eventTypeCounts.entries())
+          .map(([type, count]) => ({ type, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10),
+        topIPs: Array.from(ipCounts.entries())
+          .map(([ip, count]) => ({ ip, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10),
+        recentEvents: events.slice(0, 50).map(e => ({
+          eventType: e.eventType,
+          severity: e.severity,
+          ipAddress: e.ipAddress,
+          timestamp: e.timestamp,
+          path: e.path
+        }))
+      };
+    } catch (error) {
+      console.error('❌ Failed to get database security metrics:', error);
+      return {
+        totalEvents: 0,
+        criticalEvents: 0,
+        highEvents: 0,
+        topEventTypes: [],
+        topIPs: [],
+        recentEvents: []
+      };
+    }
+  }
+
+  // Enhanced error sanitization to prevent information disclosure
+  public static sanitizeError(error: any): string {
+    if (!error) return 'Unknown error';
+
+    // Never expose these sensitive patterns
+    const sensitivePatterns = [
+      /password/i,
+      /secret/i,
+      /token/i,
+      /key/i,
+      /auth/i,
+      /credential/i,
+      /connection string/i,
+      /database/i,
+      /sql/i
+    ];
+
+    let errorMessage = '';
+    
+    if (typeof error === 'string') {
+      errorMessage = error;
+    } else if (error.message) {
+      errorMessage = error.message;
+    } else if (error.toString) {
+      errorMessage = error.toString();
+    } else {
+      errorMessage = 'Unhandled error type';
+    }
+
+    // Check for sensitive information
+    const hasSensitiveInfo = sensitivePatterns.some(pattern => pattern.test(errorMessage));
+    
+    if (hasSensitiveInfo) {
+      return 'Internal system error - details withheld for security';
+    }
+
+    // Sanitize stack traces and file paths
+    errorMessage = errorMessage
+      .replace(/\/Users\/[^\/]+\/[^\s]+/g, '[REDACTED_PATH]')
+      .replace(/\/home\/[^\/]+\/[^\s]+/g, '[REDACTED_PATH]')  
+      .replace(/C:\\[^\s]+/g, '[REDACTED_PATH]')
+      .replace(/at [^\s]+ \([^)]+\)/g, 'at [REDACTED_FUNCTION]')
+      .substring(0, 200); // Limit length
+
+    return errorMessage || 'Unknown error occurred';
   }
 }
 

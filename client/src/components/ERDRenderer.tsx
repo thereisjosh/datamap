@@ -58,6 +58,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const [viewMode, setViewMode] = useState<'overview' | 'detail' | 'focus'>('overview');
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [highlightedTables, setHighlightedTables] = useState<Set<string>>(new Set());
+  const [highlightedRelationships, setHighlightedRelationships] = useState<Set<string>>(new Set());
   
   // Layout and display options
   const [isCompactView, setIsCompactView] = useState<boolean>(false);
@@ -112,6 +113,49 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             stroke: #3b82f6 !important;
             fill: #dbeafe !important;
             cursor: pointer !important;
+          }
+          
+          /* ERD Relationship Line Highlighting Styles - Updated for real Mermaid ERD structure */
+          g.is-highlighted rect, 
+          g.is-highlighted foreignObject { 
+            stroke: #22c55e !important; 
+            stroke-width: 3px !important; 
+            fill: #f0fdf4 !important; 
+            filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.4)) !important;
+          }
+          
+          path.is-highlighted { 
+            stroke: #22c55e !important; 
+            stroke-width: 3px !important; 
+            opacity: 1 !important;
+            filter: drop-shadow(0 0 4px rgba(34, 197, 94, 0.6)) !important;
+          }
+          
+          text.is-highlighted { 
+            fill: #22c55e !important; 
+            font-weight: 600 !important; 
+          }
+          
+          /* Dim non-highlighted elements when ERD selection is active */
+          .has-erd-selection g[id*="entity"]:not(.is-highlighted) { 
+            opacity: 0.4 !important; 
+            transition: opacity 0.3s ease !important;
+          }
+          .has-erd-selection g[data-table-name]:not(.is-highlighted) { 
+            opacity: 0.4 !important; 
+            transition: opacity 0.3s ease !important;
+          }
+          .has-erd-selection g.table-entity:not(.is-highlighted) { 
+            opacity: 0.4 !important; 
+            transition: opacity 0.3s ease !important;
+          }
+          .has-erd-selection path:not(.is-highlighted) { 
+            opacity: 0.2 !important; 
+            transition: opacity 0.3s ease !important;
+          }
+          .has-erd-selection text:not(.is-highlighted) { 
+            opacity: 0.3 !important; 
+            transition: opacity 0.3s ease !important;
           }
         `,
         // Industry standard responsive configuration
@@ -633,6 +677,459 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     return coordinatesFound ? { x: elementCenterX, y: elementCenterY } : null;
   }, []);
 
+  // Parse relationships from Mermaid diagram code with enhanced pattern matching
+  const parseRelationships = useCallback((diagramCode: string): Map<string, string[]> => {
+    const relationships = new Map<string, string[]>();
+    const lines = diagramCode.split('\n');
+    
+    console.log(`🔍 Parsing relationships from ${lines.length} lines of ERD code...`);
+    
+    // Debug: Show first few lines that contain | or - characters
+    const potentialRelLines = lines.filter(line => 
+      line.includes('|') || line.includes('-')
+    ).slice(0, 10);
+    console.log(`🔍 Sample potential relationship lines:`, potentialRelLines);
+    
+    // Debug: Test the specific line we know should match
+    const testLine = '  BankStatementAllocation }o--|| PaymentTransaction : "FK PaymentTransactionId"';
+    const testPattern = /(\w+)\s*\}o--\|\|\s*(\w+)\s*:\s*"[^"]*"/;
+    const testMatch = testLine.match(testPattern);
+    console.log(`🧪 SPECIFIC TEST: "${testLine}"`);
+    console.log(`🧪 Pattern: ${testPattern.source}`);
+    console.log(`🧪 Result: ${testMatch ? `${testMatch[1]} <-> ${testMatch[2]}` : 'NO MATCH'}`);
+    
+    // Debug: Check if the expected relationship line exists in the mermaidCode
+    const expectedLine = 'BankStatementAllocation }o--|| PaymentTransaction';
+    const codeContainsExpected = diagramCode.includes(expectedLine);
+    console.log(`🧪 MERMAID CODE CONTAINS "${expectedLine}": ${codeContainsExpected}`);
+    
+    // Debug: Show lines around PaymentTransaction in the split result
+    const paymentLines = lines.filter((line, index) => {
+      const contains = line.includes('PaymentTransaction');
+      if (contains) {
+        console.log(`🧪 LINE ${index}: "${line}"`);
+      }
+      return contains;
+    });
+    console.log(`🧪 Found ${paymentLines.length} lines containing PaymentTransaction in split result`);
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      
+      // Debug: Log ALL lines that contain PaymentTransaction to see what we're actually processing
+      if (trimmedLine.includes('PaymentTransaction')) {
+        console.log(`🔍 RAW LINE: "${line}"`);
+        console.log(`🔍 TRIMMED: "${trimmedLine}"`);
+        console.log(`🔍 LENGTH: ${trimmedLine.length}`);
+      }
+      
+      // Skip empty lines and table definitions (but NOT relationship lines)
+      if (!trimmedLine || 
+          trimmedLine.endsWith('{') || trimmedLine === '}' ||
+          trimmedLine.startsWith('erDiagram') || trimmedLine.startsWith('classDiagram') ||
+          trimmedLine.startsWith('%%') || trimmedLine.startsWith('classDef')) {
+        if (trimmedLine.includes('PaymentTransaction')) {
+          console.log(`🚫 SKIPPED PaymentTransaction line: "${trimmedLine}" (reason: empty/table definition/comment)`);
+        }
+        continue;
+      }
+      
+      let matched = false;
+      
+      // Enhanced ERD relationship patterns - covers all Mermaid ERD syntax
+      const patterns = [
+        // EXACT pattern from logs: BankStatementAllocation }o--|| PaymentTransaction : "FK PaymentTransactionId"
+        /(\w+)\s*\}o--\|\|\s*(\w+)\s*:\s*"[^"]*"/,
+        // Standard ERD patterns: TableA ||--o{ TableB : relationship
+        /(\w+)\s*\|\|--o\{\s*(\w+)\s*:\s*"[^"]*"/,
+        // Without quotes: TableA }o--|| TableB : relationship
+        /(\w+)\s*\}o--\|\|\s*(\w+)\s*:\s*[^\n]*/,
+        // One-to-one: TableA ||--|| TableB
+        /(\w+)\s*\|\|--\|\|\s*(\w+)/,
+        // Many-to-many: TableA }o--o{ TableB
+        /(\w+)\s*\}o--o\{\s*(\w+)/,
+        // Simple patterns without labels
+        /(\w+)\s*\}o--\|\|\s*(\w+)/,
+        /(\w+)\s*\|\|--o\{\s*(\w+)/,
+        // Flowchart style: TableA --> TableB
+        /(\w+)\s*-->\s*(\w+)/,
+        // Simple connection: TableA -- TableB
+        /(\w+)\s*--\s*(\w+)/,
+      ];
+      
+      for (const pattern of patterns) {
+        const match = trimmedLine.match(pattern);
+        
+        // Debug: Show which patterns are being tested against PaymentTransaction lines
+        if (trimmedLine.includes('PaymentTransaction') || trimmedLine.includes('BankStatementAllocation')) {
+          if (match) {
+            console.log(`✅ REGEX MATCH: "${trimmedLine}" -> ${match[1]} <-> ${match[2]} (pattern: ${pattern.source})`);
+          } else {
+            console.log(`❌ REGEX FAIL: "${trimmedLine}" vs pattern: ${pattern.source}`);
+          }
+        }
+        
+        if (match) {
+          const [, sourceTable, targetTable] = match;
+          
+          if (sourceTable && targetTable && sourceTable !== targetTable) {
+            // Add bidirectional relationships
+            if (!relationships.has(sourceTable)) {
+              relationships.set(sourceTable, []);
+            }
+            if (!relationships.has(targetTable)) {
+              relationships.set(targetTable, []);
+            }
+            
+            relationships.get(sourceTable)?.push(targetTable);
+            relationships.get(targetTable)?.push(sourceTable);
+            
+            console.log(`✅ Found relationship: ${sourceTable} <-> ${targetTable} (pattern: ${pattern.source})`);
+            matched = true;
+            break;
+          }
+        }
+      }
+      
+      if (!matched && (trimmedLine.includes('|') || trimmedLine.includes('-'))) {
+        console.log(`⚠️ Unmatched potential relationship line: "${trimmedLine}"`);
+      }
+    }
+    
+    console.log(`🔗 Total relationships parsed: ${relationships.size} entities with connections`);
+    
+    // Debug: Show parsed relationships
+    if (relationships.size > 0) {
+      for (const [table, connected] of relationships.entries()) {
+        console.log(`  🔗 ${table} connects to: [${connected.join(', ')}]`);
+      }
+    } else {
+      console.log(`⚠️ No relationships parsed - check regex patterns!`);
+    }
+    
+    return relationships;
+  }, []);
+
+  // Bind ERD-specific event handlers after SVG is rendered (Mermaid best practice)
+  const bindERDEventHandlers = useCallback(() => {
+    console.log('🔗 bindERDEventHandlers called!');
+    
+    const svgContainer = svgContainerRef.current;
+    if (!svgContainer) {
+      console.log('❌ svgContainer not found');
+      return;
+    }
+
+    const svgRoot = svgContainer.querySelector('svg');
+    if (!svgRoot) {
+      console.log('❌ svgRoot not found');
+      return;
+    }
+
+    console.log('🔗 Binding ERD relationship highlighting event handlers...');
+    console.log('📊 SVG Root element found:', svgRoot.tagName);
+
+    // Debug: Inspect the actual SVG structure to understand what Mermaid generates
+    console.log('🔍 DEBUGGING SVG STRUCTURE:');
+    
+    // Check for various possible ERD-related selectors
+    const possibleSelectors = [
+      '.er.entityBox',
+      '.er-entityBox', 
+      '.entityBox',
+      '.entity-box',
+      '.entity',
+      'g[id*="entity"]',
+      'g[class*="entity"]',
+      'g[class*="er"]',
+      '.er',
+      'rect',
+      'g'
+    ];
+    
+    possibleSelectors.forEach(selector => {
+      const elements = svgRoot.querySelectorAll(selector);
+      console.log(`  - ${selector}: ${elements.length} elements`);
+      if (elements.length > 0 && elements.length < 10) {
+        elements.forEach((el, i) => {
+          console.log(`    [${i}] ${el.tagName} id="${el.getAttribute('id')}" class="${el.getAttribute('class')}"`);
+        });
+      }
+    });
+
+    // Check for relationship-related elements
+    console.log('🔍 CHECKING RELATIONSHIP ELEMENTS:');
+    const relationshipSelectors = [
+      '.er.relationshipLine',
+      '.relationshipLine',
+      '.relationship-line',
+      'path',
+      'line'
+    ];
+    
+    relationshipSelectors.forEach(selector => {
+      const elements = svgRoot.querySelectorAll(selector);
+      console.log(`  - ${selector}: ${elements.length} elements`);
+    });
+
+    // Remove existing event listeners to prevent duplicates
+    const existingHandlers = svgRoot.querySelectorAll('[data-erd-handler]');
+    console.log(`🧹 Removing ${existingHandlers.length} existing ERD handlers`);
+    existingHandlers.forEach(box => {
+      box.removeAttribute('data-erd-handler');
+    });
+
+    // Try to find entity boxes using the expected selector first
+    let entityBoxes = svgRoot.querySelectorAll('.er.entityBox');
+    console.log(`🏢 Found ${entityBoxes.length} .er.entityBox elements`);
+    
+    // If no .er.entityBox found, try alternative selectors
+    if (entityBoxes.length === 0) {
+      console.log('⚠️ No .er.entityBox found, trying alternative selectors...');
+      
+      // Try g elements with entity in ID
+      entityBoxes = svgRoot.querySelectorAll('g[id*="entity"]');
+      console.log(`🏢 Found ${entityBoxes.length} g[id*="entity"] elements`);
+      
+      if (entityBoxes.length === 0) {
+        // Try any g elements with classes
+        entityBoxes = svgRoot.querySelectorAll('g[class]');
+        console.log(`🏢 Found ${entityBoxes.length} g[class] elements (fallback)`);
+      }
+    }
+
+    entityBoxes.forEach(box => {
+      // Mark this box as having a handler to prevent duplicates
+      box.setAttribute('data-erd-handler', 'true');
+      
+      box.addEventListener('click', (event) => {
+        event.stopPropagation();
+        
+        // Try to determine entity ID from the box element
+        const entityId = getEntityIdFromBox(box as Element);
+        if (entityId) {
+          console.log(`🎯 ERD entity clicked: ${entityId}`);
+          highlightERDRelationships(entityId, svgRoot);
+        }
+      });
+    });
+  }, []);
+
+  // Get entity ID from an entity box element
+  const getEntityIdFromBox = useCallback((box: Element): string | null => {
+    // Try various methods to get the entity ID
+    
+    // Method 1: Check data attributes
+    const dataId = box.getAttribute('data-id') || box.getAttribute('data-entity-id');
+    if (dataId) return dataId;
+    
+    // Method 2: Check parent group ID
+    const parent = box.closest('g[id]');
+    if (parent) {
+      const id = parent.getAttribute('id') || '';
+      // Extract entity name from Mermaid's ID format (e.g., "entity-CUSTOMER-123")
+      const match = id.match(/entity-([^-]+)/);
+      if (match) return match[1];
+    }
+    
+    // Method 3: Look for text content within the box
+    const textElement = box.querySelector('text');
+    if (textElement) {
+      const text = textElement.textContent?.trim();
+      if (text) return text;
+    }
+    
+    console.warn('⚠️ Could not determine entity ID from box:', box);
+    return null;
+  }, []);
+
+  // Simple relationship line highlighting using CSS classes
+  const highlightRelationshipLines = useCallback((tableName: string, svgRoot: Element) => {
+    console.log(`🔗 Highlighting relationship lines for table: ${tableName}`);
+    
+    // Parse relationships to find connected tables
+    const relationships = parseRelationships(mermaidCode);
+    const connectedTables = relationships.get(tableName) || [];
+    
+    console.log(`🔗 Found ${connectedTables.length} connected tables: [${connectedTables.join(', ')}]`);
+    
+    if (connectedTables.length === 0) {
+      console.log(`⚠️ No relationships found for ${tableName}`);
+      return;
+    }
+    
+    // Find the entity using real Mermaid selectors - entities have IDs like "entity-PaymentStatus-7"
+    let clickedEntityBox: Element | null = null;
+    
+    // Try to find by entity ID pattern
+    const entityById = svgRoot.querySelector(`g[id*="entity-${entityId}"]`);
+    if (entityById) {
+      entityById.classList.add('is-highlighted');
+      clickedEntityBox = entityById;
+      console.log(`✅ Found entity by ID pattern: ${entityById.getAttribute('id')}`);
+    } else {
+      // Fallback: try data-table-name attribute
+      const entityByDataAttr = svgRoot.querySelector(`g[data-table-name="${entityId}"]`);
+      if (entityByDataAttr) {
+        entityByDataAttr.classList.add('is-highlighted');
+        clickedEntityBox = entityByDataAttr;
+        console.log(`✅ Found entity by data-table-name: ${entityId}`);
+      }
+    }
+    
+    if (!clickedEntityBox) {
+      console.warn(`⚠️ Could not find entity box for: ${entityId}`);
+      console.log(`🔍 Available entities:`, Array.from(svgRoot.querySelectorAll('g[id*="entity"]')).map(g => g.getAttribute('id')));
+      return;
+    }
+    
+    // Parse relationships from the original Mermaid ERD code (not rendered SVG)
+    if (mermaidCode) {
+      const relationshipMap = parseRelationships(mermaidCode);
+      const connectedTables = relationshipMap.get(entityId) || [];
+      
+      console.log(`🔗 Found ${connectedTables.length} connected tables:`, connectedTables);
+      
+      // Debug: Show all relationships found in the diagram
+      console.log(`🔍 DEBUG: All relationships in diagram:`, Array.from(relationshipMap.entries()));
+      
+      // Debug: Check if entity appears in any relationships with different case/format
+      const entityVariations = [entityId, entityId.toLowerCase(), entityId.toUpperCase()];
+      entityVariations.forEach(variation => {
+        const found = relationshipMap.get(variation);
+        if (found && found.length > 0) {
+          console.log(`🔍 Found relationships for variation "${variation}":`, found);
+        }
+      });
+      
+      // Debug: Show a sample of the ERD code to understand the format
+      const erdLines = mermaidCode.split('\n').filter(line => 
+        line.includes('||') || line.includes('}|') || line.includes('--')
+      ).slice(0, 5);
+      console.log(`🔍 Sample ERD relationship lines:`, erdLines);
+      
+      // Highlight connected entities
+      connectedTables.forEach(connectedEntity => {
+        const connectedElement = svgRoot.querySelector(`g[id*="entity-${connectedEntity}"]`) || 
+                                svgRoot.querySelector(`g[data-table-name="${connectedEntity}"]`);
+        if (connectedElement) {
+          connectedElement.classList.add('is-highlighted');
+          console.log(`✅ Highlighted connected entity: ${connectedEntity}`);
+        }
+      });
+      
+      // Only highlight relationship paths if we actually found connected tables
+      let highlightedCount = 0;
+      
+      if (connectedTables.length > 0) {
+        console.log(`🔍 Looking for relationship paths between ${entityId} and connected entities...`);
+        
+        // Find and highlight relationship paths
+        const allPaths = svgRoot.querySelectorAll('path');
+        const entityCenter = getTableCenterCoordinates(entityId);
+        
+        if (entityCenter) {
+          // Get centers of all connected entities
+          const connectedCenters = connectedTables.map(connectedEntity => {
+            const center = getTableCenterCoordinates(connectedEntity);
+            return { entity: connectedEntity, center };
+          }).filter(item => item.center !== null);
+          
+          console.log(`🔍 Checking ${allPaths.length} paths for connections between entities...`);
+          
+          allPaths.forEach((path, index) => {
+            try {
+              const pathBBox = (path as SVGGraphicsElement).getBBox();
+              const pathCenterX = pathBBox.x + pathBBox.width / 2;
+              const pathCenterY = pathBBox.y + pathBBox.height / 2;
+              
+              // Check if this path connects the selected entity to any connected entity
+              let connectsEntities = false;
+              
+              for (const { entity: connectedEntity, center: connectedCenter } of connectedCenters) {
+                if (!connectedCenter) continue;
+                
+                // Calculate distance from path to both entities
+                const distanceToSelected = Math.sqrt(
+                  Math.pow(pathCenterX - entityCenter.x, 2) + 
+                  Math.pow(pathCenterY - entityCenter.y, 2)
+                );
+                
+                const distanceToConnected = Math.sqrt(
+                  Math.pow(pathCenterX - connectedCenter.x, 2) + 
+                  Math.pow(pathCenterY - connectedCenter.y, 2)
+                );
+                
+                // If path is close to both entities, it's likely the connecting path
+                if (distanceToSelected < 200 && distanceToConnected < 200) {
+                  connectsEntities = true;
+                  console.log(`✅ Path ${index + 1} connects ${entityId} to ${connectedEntity}`);
+                  break;
+                }
+              }
+              
+              if (connectsEntities) {
+                path.classList.add('is-highlighted');
+                highlightedCount++;
+              }
+            } catch (error) {
+              // Skip paths that can't be measured
+            }
+          });
+        }
+      } else {
+        console.log(`⚠️ No connected tables found for ${entityId}, skipping path highlighting`);
+      }
+      
+      // Always add container class to enable dimming when any table is selected
+      svgRoot.classList.add('has-erd-selection');
+      console.log(`✅ Applied .has-erd-selection class to SVG root for dimming effect`);
+      
+      // Debug: Check what elements should be dimmed
+      const allEntities = svgRoot.querySelectorAll('g[id*="entity"], g[data-table-name], g.table-entity');
+      const highlightedEntities = svgRoot.querySelectorAll('g.is-highlighted');
+      console.log(`🔍 Dimming Debug: ${allEntities.length} total entities, ${highlightedEntities.length} highlighted, ${allEntities.length - highlightedEntities.length} should be dimmed`);
+      
+      // Debug: Check CSS classes and selectors
+      console.log(`🔍 CSS Debug:`);
+      console.log(`  - SVG root has .has-erd-selection: ${svgRoot.classList.contains('has-erd-selection')}`);
+      console.log(`  - Sample entity classes: ${allEntities[0]?.className}`);
+      console.log(`  - Sample highlighted entity classes: ${highlightedEntities[0]?.className}`);
+      
+      // Test CSS selector matching
+      const shouldBeDimmed = svgRoot.querySelectorAll('.has-erd-selection g[id*="entity"]:not(.is-highlighted)');
+      const shouldBeDimmed2 = svgRoot.querySelectorAll('.has-erd-selection g[data-table-name]:not(.is-highlighted)');
+      const shouldBeDimmed3 = svgRoot.querySelectorAll('.has-erd-selection g.table-entity:not(.is-highlighted)');
+      console.log(`  - Entities matching dimming selectors: ${shouldBeDimmed.length}, ${shouldBeDimmed2.length}, ${shouldBeDimmed3.length}`);
+      
+      console.log(`✨ Highlighted ${highlightedCount} relationship paths and ${connectedTables.length} connected entities for "${entityId}"`);
+    }
+    
+    // Update React state for compatibility with existing system
+    setHighlightedRelationships(new Set([entityId]));
+  }, [getEntityIdFromBox, mermaidCode, parseRelationships, getTableCenterCoordinates]);
+
+  // Clear ERD relationship highlighting
+  const clearERDRelationshipHighlighting = useCallback(() => {
+    const svgContainer = svgContainerRef.current;
+    if (!svgContainer) return;
+
+    const svgRoot = svgContainer.querySelector('svg');
+    if (!svgRoot) return;
+
+    // Remove ERD-specific highlighting classes
+    const highlighted = svgRoot.querySelectorAll('.is-highlighted');
+    highlighted.forEach(element => {
+      element.classList.remove('is-highlighted');
+    });
+    
+    // Remove container selection class
+    svgRoot.classList.remove('has-erd-selection');
+    
+    setHighlightedRelationships(new Set());
+    console.log(`🧹 Cleared ERD relationship highlighting`);
+  }, []);
+
   // Enhanced table centering function with improved handling for complex tables
   const centerOnTable = useCallback((tableName: string, retryCount: number = 0) => {
     console.log(`🎯 centerOnTable called for: ${tableName} (attempt ${retryCount + 1})`);
@@ -1013,12 +1510,18 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     // Update selection state
     setSelectedTable(tableName);
     
-    // Find related tables (this is a simplified version - can be enhanced)
+    // Find related tables using the relationship parser on original Mermaid code
     const relatedTables = new Set<string>();
     relatedTables.add(tableName);
     
-    // TODO: Parse mermaid code to find actual relationships
-    // For now, just highlight the clicked table
+    if (mermaidCode) {
+      const relationshipMap = parseRelationships(mermaidCode);
+      const connectedTables = relationshipMap.get(tableName) || [];
+      connectedTables.forEach(table => relatedTables.add(table));
+      
+      // Note: ERD relationship highlighting is now handled by ERD-specific event handlers
+    }
+    
     setHighlightedTables(relatedTables);
     
     // Switch to focus mode
@@ -1073,7 +1576,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     
     // Schedule centering to happen after styling completes
     setNeedsCenteringAfterStyling({ tableName });
-  }, [selectedTable, domain, getTableCenterCoordinates]);
+  }, [selectedTable, domain, getTableCenterCoordinates, parseRelationships, mermaidCode]);
 
   // Add event delegation for table clicks - handles clicks on any child element
   useEffect(() => {
@@ -2234,6 +2737,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     setHighlightedTables(new Set());
     setViewMode('overview');
     
+    // Clear ERD relationship highlighting
+    clearERDRelationshipHighlighting();
+    
     // Clear any pending search/centering operations
     setSearchTargetTable(null);
     setIsSearchTriggered(false);
@@ -2242,7 +2748,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     handleFit();
     
     console.log(`🧹 Cleared table selection "${previousSelection || 'none'}" and reset to overview with proper fit`);
-  }, [selectedTable, handleFit, removeSelectionHandles]);
+  }, [selectedTable, handleFit, removeSelectionHandles, clearERDRelationshipHighlighting]);
 
   const handleDomainFocus = useCallback(() => {
     // Focus on the current domain by fitting and centering
@@ -2811,33 +3317,76 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     }
   }, [selectedTable, highlightedTables, baseSvgContent, isInitialStylingComplete, needsCenteringAfterStyling, centerOnTable, isSearchTriggered]);
 
-  // Apply visual highlighting to selected table
+  // Apply simple table selection highlighting (restored working system)
   useEffect(() => {
-    if (!svgContainerRef.current) return;
-
     const svgContainer = svgContainerRef.current;
+    if (!svgContainer) return;
+
+    console.log(`🎯 Simple selection useEffect - selectedTable: "${selectedTable}"`);
     
-    // Remove previous selections
-    const previouslySelected = svgContainer.querySelectorAll('.table-selected');
-    previouslySelected.forEach(element => {
-      element.classList.remove('table-selected');
+    // Always clear old highlighting first
+    const oldHighlighted = svgContainer.querySelectorAll('.table-selected, .relationship-highlighted');
+    oldHighlighted.forEach(el => {
+      el.classList.remove('table-selected', 'relationship-highlighted');
     });
-    
-    // Remove has-selection class
     svgContainer.classList.remove('has-selection');
-    
-    // Apply new selection if any
+
+    // Apply simple selection highlighting if table is selected
     if (selectedTable) {
-      const selectedElement = svgContainer.querySelector(`g[data-table-name="${selectedTable}"]`);
-      if (selectedElement) {
-        selectedElement.classList.add('table-selected');
+      console.log(`✨ Applying simple highlighting to selected table: ${selectedTable}`);
+      
+      const svgRoot = svgContainer.querySelector('svg');
+      if (svgRoot) {
+        // Find and highlight the selected table
+        const selectedEntity = svgRoot.querySelector(`g[data-table-name="${selectedTable}"]`) ||
+                              svgRoot.querySelector(`g[id*="entity-${selectedTable}"]`);
+        
+        if (selectedEntity) {
+          selectedEntity.classList.add('table-selected');
+          console.log(`✅ Added .table-selected to ${selectedTable}`);
+        }
+        
+        // Enable dimming by adding container class
         svgContainer.classList.add('has-selection');
-        console.log(`✨ Applied visual highlighting to table: ${selectedTable}`);
-      } else {
-        console.warn(`⚠️ Could not find table element to highlight: ${selectedTable}`);
+        console.log(`✅ Added .has-selection for dimming effect`);
+        
+        // Highlight relationship lines (smart path detection)
+        const relationships = parseRelationships(mermaidCode);
+        const connectedTables = relationships.get(selectedTable) || [];
+        
+        if (connectedTables.length > 0) {
+          console.log(`🔗 ${selectedTable} connects to: [${connectedTables.join(', ')}]`);
+          
+          // Smart approach: find paths that connect the selected table to its related tables
+          const relationshipPaths = svgRoot.querySelectorAll('path[id*="entity-"]');
+          let highlightedCount = 0;
+          
+          relationshipPaths.forEach(path => {
+            const pathId = path.getAttribute('id') || '';
+            
+            // Check if this path connects the selected table to any of its connected tables
+            const connectsSelectedTable = connectedTables.some(connectedTable => {
+              // Path IDs typically look like: "id_entity-TableA-X_entity-TableB-Y_Z"
+              const selectedPattern = `entity-${selectedTable}-`;
+              const connectedPattern = `entity-${connectedTable}-`;
+              
+              return pathId.includes(selectedPattern) && pathId.includes(connectedPattern);
+            });
+            
+            if (connectsSelectedTable) {
+              path.classList.add('relationship-highlighted');
+              highlightedCount++;
+              console.log(`✅ Highlighted path: ${pathId}`);
+            }
+          });
+          
+          console.log(`✅ Highlighted ${highlightedCount} specific relationship lines for ${selectedTable}`);
+        } else {
+          console.log(`⚠️ No relationships found for ${selectedTable}`);
+        }
       }
     }
-  }, [selectedTable, svgContent]); // Re-run when svgContent changes (domain switch)
+  }, [selectedTable, svgContent]);
 
   // Debug: Track selectedTableFromSearch prop changes
   useEffect(() => {
@@ -2965,6 +3514,28 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       document.removeEventListener('click', handleBackgroundClick, true);
     };
   }, [selectedTable, handleClearSelection]);
+
+  // Bind ERD event handlers after SVG content is rendered
+  useEffect(() => {
+    if (svgContent && svgContainerRef.current) {
+      console.log('🔍 ERD Event Handler Binding - useEffect triggered');
+      console.log('  - svgContent length:', svgContent.length);
+      console.log('  - svgContainerRef exists:', !!svgContainerRef.current);
+      
+      // Small delay to ensure SVG is fully rendered in the DOM
+      const timeoutId = setTimeout(() => {
+        console.log('🔍 ERD Event Handler Binding - timeout executing, calling bindERDEventHandlers...');
+        bindERDEventHandlers();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
+    } else {
+      console.log('🔍 ERD Event Handler Binding - useEffect skipped:', {
+        svgContent: !!svgContent,
+        svgContainerRef: !!svgContainerRef.current
+      });
+    }
+  }, [svgContent, bindERDEventHandlers]);
 
   const createSimplifiedERD = (fullCode: string): string => {
     // Analyze relationships to find key tables by domain

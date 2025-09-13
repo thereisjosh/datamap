@@ -292,6 +292,31 @@ export const tableEmbeddings = pgTable("table_embeddings", {
   createdAtIdx: index("table_embeddings_created_at_idx").on(table.createdAt),
 }));
 
+// Security events table for audit logging
+export const securityEvents = pgTable("security_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventType: varchar("event_type").notNull(), // auth_failure, rate_limit_exceeded, etc.
+  severity: varchar("severity").notNull(), // low, medium, high, critical
+  userId: uuid("user_id").references(() => user.id, { onDelete: "set null" }),
+  organizationId: uuid("organization_id").references(() => organization.id, { onDelete: "set null" }),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  path: text("path").notNull(),
+  method: varchar("method").notNull(),
+  statusCode: real("status_code"),
+  details: jsonb("details"), // Additional event details
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  eventTypeIdx: index("security_events_event_type_idx").on(table.eventType),
+  severityIdx: index("security_events_severity_idx").on(table.severity),
+  userIdx: index("security_events_user_idx").on(table.userId),
+  orgIdx: index("security_events_org_idx").on(table.organizationId),
+  timestampIdx: index("security_events_timestamp_idx").on(table.timestamp),
+  ipIdx: index("security_events_ip_idx").on(table.ipAddress),
+}));
+
 // Insert schemas
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
@@ -336,6 +361,12 @@ export const insertUploadSessionSchema = createInsertSchema(uploadSessions).omit
   createdAt: true,
 });
 
+export const insertSecurityEventSchema = createInsertSchema(securityEvents).omit({
+  id: true,
+  createdAt: true,
+  timestamp: true,
+});
+
 // Types
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
@@ -351,6 +382,8 @@ export type Relationship = typeof relationships.$inferSelect;
 export type InsertRelationship = z.infer<typeof insertRelationshipSchema>;
 export type UploadSession = typeof uploadSessions.$inferSelect;
 export type InsertUploadSession = z.infer<typeof insertUploadSessionSchema>;
+export type SecurityEvent = typeof securityEvents.$inferSelect;
+export type InsertSecurityEvent = z.infer<typeof insertSecurityEventSchema>;
 export type ParseExcelRequest = z.infer<typeof parseExcelRequestSchema>;
 export type GenerateMermaidRequest = z.infer<typeof generateMermaidRequestSchema>;
 

@@ -37,7 +37,18 @@ import {
   logFileUploadSecurity,
   securityLogger 
 } from "./middleware/securityLogger";
-import { parseExcelRequestSchema } from "@shared/validation-schemas";
+import { 
+  parseExcelRequestSchema,
+  projectCreateSchema,
+  projectUpdateSchema,
+  projectDataSaveSchema,
+  organizationCreateSchema,
+  invitationCreateSchema,
+  profileUpdateSchema,
+  projectIdParamSchema,
+  organizationIdParamSchema,
+  tokenParamSchema
+} from "@shared/validation-schemas";
 
 /**
  * Select the dominant hub from merged domains based on original community size
@@ -820,7 +831,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new project
   app.post("/api/projects", [
     projectRateLimit,
-    logSecurityEvent('project_create', 'low')
+    logSecurityEvent('project_create', 'low'),
+    validateSchema(projectCreateSchema, 'body')
   ], async (req, res) => {
     console.log('📍 POST /api/projects called');
     try {
@@ -891,7 +903,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get a specific project
-  app.get("/api/projects/:projectId", async (req, res) => {
+  app.get("/api/projects/:projectId", [
+    validateSchema(projectIdParamSchema, 'params')
+  ], async (req, res) => {
     try {
       const auth = await getAuth();
       let userId = 'default-user';
@@ -920,7 +934,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get project data (tables, relationships, ERD)
-  app.get("/api/projects/:projectId/data", async (req, res) => {
+  app.get("/api/projects/:projectId/data", [
+    validateSchema(projectIdParamSchema, 'params')
+  ], async (req, res) => {
     console.log('📍 GET /api/projects/:projectId/data called for project:', req.params.projectId);
     try {
       // Extract user ID from BetterAuth session
@@ -1006,7 +1022,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Save project data (tables, relationships, ERD)
-  app.post("/api/projects/:projectId/save", async (req, res) => {
+  app.post("/api/projects/:projectId/save", [
+    validateSchema(projectIdParamSchema, 'params'),
+    validateSchema(projectDataSaveSchema, 'body'),
+    logSecurityEvent('project_data_save', 'medium')
+  ], async (req, res) => {
     try {
       const auth = await getAuth();
       let userId = 'default-user';
@@ -1164,7 +1184,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update project metadata
   app.put("/api/projects/:projectId", [
     projectRateLimit,
-    logSecurityEvent('project_update', 'low')
+    logSecurityEvent('project_update', 'low'),
+    validateSchema(projectIdParamSchema, 'params'),
+    validateSchema(projectUpdateSchema, 'body')
   ], async (req, res) => {
     try {
       const auth = await getAuth();
@@ -1203,7 +1225,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete a project
   app.delete("/api/projects/:projectId", [
     projectRateLimit,
-    logSecurityEvent('project_delete', 'medium')
+    logSecurityEvent('project_delete', 'medium'),
+    validateSchema(projectIdParamSchema, 'params')
   ], async (req, res) => {
     try {
       const auth = await getAuth();
@@ -1324,7 +1347,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ====== INVITATION API ENDPOINTS ======
 
   // Send invitation to join organization (custom implementation)
-  app.post("/api/organizations/:organizationId/invitations", async (req, res) => {
+  app.post("/api/organizations/:organizationId/invitations", [
+    validateSchema(organizationIdParamSchema, 'params'),
+    validateSchema(invitationCreateSchema, 'body'),
+    logSecurityEvent('organization_invite', 'medium')
+  ], async (req, res) => {
     console.log('📍 POST /api/organizations/:organizationId/invitations called (Custom)');
     try {
       const auth = await getAuth();
@@ -1644,7 +1671,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ====== PUBLIC INVITATION ENDPOINTS ======
   
   // Get invitation by token (public endpoint for invitation acceptance)
-  app.get("/api/invitations/:token", async (req, res) => {
+  app.get("/api/invitations/:token", [
+    validateSchema(tokenParamSchema, 'params')
+  ], async (req, res) => {
     console.log('📍 GET /api/invitations/:token called');
     try {
       const { token } = req.params;
@@ -1704,7 +1733,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Handles invitation flows for multi-tenant organizations
   
   // Complete invitation acceptance (after user authentication)
-  app.post("/api/invitations/:token/accept", async (req, res) => {
+  app.post("/api/invitations/:token/accept", [
+    validateSchema(tokenParamSchema, 'params'),
+    logSecurityEvent('invitation_accept', 'medium')
+  ], async (req, res) => {
     console.log('📍 POST /api/invitations/:token/accept called');
     try {
       const { token } = req.params;
@@ -1864,7 +1896,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Profile update endpoint
-  app.put("/api/profile", async (req, res) => {
+  app.put("/api/profile", [
+    validateSchema(profileUpdateSchema, 'body'),
+    logSecurityEvent('profile_update', 'low')
+  ], async (req, res) => {
     try {
       const auth = await getAuth();
       

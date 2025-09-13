@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { z, ZodError, ZodSchema } from 'zod';
 import { fileUploadSchema, sanitizeString, sanitizeFilename } from '@shared/validation-schemas';
+import { securityLogger } from './securityLogger';
+import { SecurityLogger } from './securityLogger';
 
 // Enhanced error formatting for better security
 interface ValidationErrorResponse {
@@ -30,7 +32,7 @@ const formatValidationError = (error: ZodError): ValidationErrorResponse => {
 
 // Generic validation middleware factory
 export function validateSchema<T>(schema: ZodSchema<T>, target: 'body' | 'query' | 'params' = 'body') {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
       let dataToValidate: any;
       
@@ -74,9 +76,26 @@ export function validateSchema<T>(schema: ZodSchema<T>, target: 'body' | 'query'
       }
       
       console.error('❌ Validation middleware error:', error);
+      
+      // Log security event for unexpected validation errors
+      await securityLogger.logEvent({
+        eventType: 'validation_system_error',
+        severity: 'medium',
+        userId: (req as any).user?.id,
+        organizationId: (req as any).user?.activeOrganizationId,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        path: req.path,
+        method: req.method,
+        details: {
+          error: SecurityLogger.sanitizeError(error),
+          validationTarget: target
+        }
+      });
+
       return res.status(500).json({
         success: false,
-        error: 'Internal validation error',
+        error: SecurityLogger.sanitizeError(error),
         timestamp: new Date().toISOString()
       });
     }
