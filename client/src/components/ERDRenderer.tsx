@@ -324,6 +324,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       }
     }, 10);
   }, [currentZoom, currentPan]);
+
   
   const panToPosition = useCallback((deltaX: number, deltaY: number) => {
     if (!svgContainerRef.current) return;
@@ -3466,8 +3467,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   useEffect(() => {
     
     // Only process if this is a new search selection (not a repeated one)
+    // AND if SVG content is actually loaded (prevents initial focus on page load)
     if (selectedTableFromSearch && 
-        selectedTableFromSearch !== lastProcessedSearchTable.current) {
+        selectedTableFromSearch !== lastProcessedSearchTable.current &&
+        svgContent.length > 0) {
       
       console.log(`🔍 Processing new search selection: ${selectedTableFromSearch}`);
       
@@ -3849,13 +3852,13 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               className={`erd-svg-container ${domain ? `domain-${domain}` : ''}`}
             />
             
-            {/* Enhanced Phase 3 Interactive Controls */}
+            {/* Compact Interactive Controls */}
             <div 
-              className="erd-controls absolute bottom-4 right-4 flex flex-col gap-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border p-2"
+              className="erd-controls absolute top-4 left-4 flex flex-col gap-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border p-2"
               style={{ 
                 zIndex: 100, 
-                maxHeight: '300px', 
-                maxWidth: '200px',
+                maxHeight: '200px', 
+                maxWidth: '180px',
                 width: 'auto',
                 height: 'auto',
                 overflow: 'auto',
@@ -3955,75 +3958,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 </div>
               )}
 
-              {/* Layout Options */}
-              <div className="border-t pt-2 mt-2">
-                <div className="text-xs text-muted-foreground px-1 mb-1">Display</div>
-                <div className="flex flex-col gap-1">
-                  <Button
-                    variant={isCompactView ? "default" : "ghost"}
-                    size="sm"
-                    onClick={handleToggleCompactView}
-                    title="Compact View (Alt+C)"
-                    className="h-6 w-full text-xs justify-start"
-                  >
-                    {isCompactView ? '📦' : '📋'} {isCompactView ? 'Compact' : 'Normal'}
-                  </Button>
-                  <Button
-                    variant={showRelationshipLabels ? "default" : "ghost"}
-                    size="sm"
-                    onClick={handleToggleRelationshipLabels}
-                    title="Show Relationship Labels (Alt+L)"
-                    className="h-6 w-full text-xs justify-start"
-                  >
-                    {showRelationshipLabels ? '🏷️' : '🔗'} Labels
-                  </Button>
-                  <Button
-                    variant={showAttributeDetails ? "default" : "ghost"}
-                    size="sm"
-                    onClick={handleToggleAttributeDetails}
-                    title="Show Attribute Details (Alt+A)"
-                    className="h-6 w-full text-xs justify-start"
-                  >
-                    {showAttributeDetails ? '📝' : '📄'} Attributes
-                  </Button>
-                </div>
-              </div>
 
-              {/* Debug Info */}
-              {clickableTablesCount > 0 && (
-                <div className="border-t pt-2 mt-2">
-                  <div className="text-xs text-muted-foreground px-1 mb-1">Interactive</div>
-                  <div className="text-xs font-medium px-1">
-                    {clickableTablesCount} clickable tables
-                  </div>
-                  {detectedTables.length > 0 && detectedTables.length <= 3 && (
-                    <div className="text-xs text-muted-foreground px-1 mt-1">
-                      {detectedTables.join(', ')}
-                    </div>
-                  )}
-                  {detectedTables.length > 3 && (
-                    <div className="text-xs text-muted-foreground px-1 mt-1">
-                      {detectedTables.slice(0, 3).join(', ')}...
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Domain Info */}
-              {domain && domain !== 'overview' && (
-                <div className="border-t pt-2 mt-2">
-                  <div className="text-xs text-muted-foreground px-1">Domain</div>
-                  <div className="text-xs font-medium px-1 capitalize">
-                    {domainResults[domain]?.displayName || domain.replace(/[-_]/g, ' ')}
-                  </div>
-                </div>
-              )}
               
               {/* Zoom indicator */}
               <div className="text-xs text-center text-muted-foreground mt-1">
                 {Math.round(currentZoom * 100)}%
               </div>
             </div>
+
           </>
         ) : mermaidCode ? (
           <div className="flex items-center justify-center h-full text-center text-muted-foreground">
