@@ -16,6 +16,9 @@ import ProjectUpload from "@/pages/project-upload";
 import ProjectERD from "@/pages/project-erd";
 import ProjectPreview from "@/pages/project-preview";
 import AcceptInvitation from "@/pages/accept-invitation";
+import JoinPage from "@/pages/join";
+import SignupPage from "@/pages/auth/signup";
+import SigninPage from "@/pages/auth/signin";
 import Onboarding from "@/pages/onboarding";
 import FlexibleParser from "@/pages/flexible-parser";
 import { useState } from "react";
@@ -30,6 +33,15 @@ function Router() {
       <Route path="/welcome" component={Welcome} />
       <Route path="/accept-invitation/:token">
         <AcceptInvitation isDarkMode={isDarkMode} />
+      </Route>
+      <Route path="/join/:token">
+        <JoinPage isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      </Route>
+      <Route path="/auth/signup">
+        <SignupPage isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      </Route>
+      <Route path="/auth/signin">
+        <SigninPage isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
       </Route>
       <Route path="/onboarding" component={Onboarding} />
       

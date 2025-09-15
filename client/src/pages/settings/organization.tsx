@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { Building2, Users, Mail, Crown, Shield, Trash2, UserPlus, ArrowLeft, CreditCard, Clock, RefreshCw, X, UserCog } from 'lucide-react';
 import { useLocation } from 'wouter';
+import InviteLinkGenerator from '@/components/InviteLinkGenerator';
 
 interface OrganizationSettingsProps {
   isDarkMode?: boolean;
@@ -295,7 +296,7 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
         credentials: 'include',
         body: JSON.stringify({
           email: inviteEmail.trim(),
-          role: 'member'
+          role: 'editor'
         }),
       });
       
@@ -549,7 +550,6 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
       case 'owner': return <Crown className="h-3 w-3" />;
       case 'admin': return <Shield className="h-3 w-3" />;
       case 'editor': return <UserCog className="h-3 w-3" />;
-      case 'member': return <Users className="h-3 w-3" />;
       case 'viewer': return <Users className="h-3 w-3" />;
       default: return <Users className="h-3 w-3" />;
     }
@@ -560,7 +560,6 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
       case 'owner': return 'default';
       case 'admin': return 'secondary';
       case 'editor': return 'secondary';
-      case 'member': return 'outline';
       case 'viewer': return 'outline';
       default: return 'outline';
     }
@@ -890,12 +889,6 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
                                   <span>Viewer</span>
                                 </div>
                               </SelectItem>
-                              <SelectItem value="member">
-                                <div className="flex items-center gap-2">
-                                  {getRoleIcon('member')}
-                                  <span>Member</span>
-                                </div>
-                              </SelectItem>
                               <SelectItem value="editor">
                                 <div className="flex items-center gap-2">
                                   {getRoleIcon('editor')}
@@ -1012,6 +1005,13 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
               </CardContent>
             </Card>
           )}
+
+          {/* Invitation Links Management */}
+          <InviteLinkGenerator
+            organizationId={activeOrganization.id}
+            organizationName={activeOrganization.name}
+            isAdmin={isAdmin}
+          />
         </div>
       </main>
     </div>

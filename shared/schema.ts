@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, jsonb, boolean, timestamp, uuid, index, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, jsonb, boolean, timestamp, uuid, index, real, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -72,7 +72,7 @@ export const member = pgTable("member", {
   id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: uuid("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  role: text("role").notNull().default("member"), // Standard organization roles: 'owner', 'admin', 'member'
+  role: text("role").notNull().default("viewer"), // Standard organization roles: 'owner', 'admin', 'editor', 'viewer'
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   // Multi-tenant membership optimization indexes
@@ -103,6 +103,29 @@ export const invitation = pgTable("invitation", {
   expiresAtIdx: index("invitation_expires_at_idx").on(table.expiresAt),
   orgIdx: index("invitation_org_idx").on(table.organizationId),
   inviterIdx: index("invitation_inviter_idx").on(table.inviterId),
+}));
+
+// Reusable Invitation Links (Alternative to email invitations)
+export const invitationLink = pgTable("invitation_link", {
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: uuid("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // 'member', 'admin'
+  token: text("token").notNull().unique(), // URL token for the invitation link
+  description: text("description"), // Optional description for the link
+  maxUses: integer("max_uses"), // Max number of times this link can be used (null = unlimited)
+  currentUses: integer("current_uses").notNull().default(0), // Current number of uses
+  isActive: boolean("is_active").notNull().default(true), // Whether the link is currently active
+  expiresAt: timestamp("expires_at", { withTimezone: true }), // Expiration date (null = never expires)
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  createdById: text("created_by_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+}, (table) => ({
+  // Invitation link management optimization indexes
+  orgActiveIdx: index("invitation_link_org_active_idx").on(table.organizationId, table.isActive),
+  tokenIdx: index("invitation_link_token_idx").on(table.token),
+  expiresAtIdx: index("invitation_link_expires_at_idx").on(table.expiresAt),
+  orgIdx: index("invitation_link_org_idx").on(table.organizationId),
+  createdByIdx: index("invitation_link_created_by_idx").on(table.createdById),
 }));
 
 // Project Management Tables
@@ -396,3 +419,5 @@ export type Organization = typeof organization.$inferSelect & {
 export type OrganizationMember = typeof member.$inferSelect;
 export type Invitation = typeof invitation.$inferSelect;
 export type InsertInvitation = typeof invitation.$inferInsert;
+export type InvitationLink = typeof invitationLink.$inferSelect;
+export type InsertInvitationLink = typeof invitationLink.$inferInsert;

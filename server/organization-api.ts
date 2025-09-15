@@ -6,11 +6,13 @@ import {
   organization, 
   member, 
   invitation, 
+  invitationLink,
   user,
   projects,
   type Organization,
   type OrganizationMember,
-  type Invitation 
+  type Invitation,
+  type InvitationLink
 } from "../shared/schema";
 import { 
   createTenantContextManager, 
@@ -546,7 +548,7 @@ export function registerOrganizationAPI(app: Express) {
             inviterEmail: user.email,
             role,
             invitationId,
-            invitationUrl: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/accept-invitation/${invitationId}`
+            invitationUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/accept-invitation/${invitationId}`
           });
         } catch (emailError) {
           console.error('Failed to send invitation email:', emailError);
@@ -1040,6 +1042,323 @@ export function registerOrganizationAPI(app: Express) {
       } catch (error) {
         console.error('❌ Failed to list user organizations:', error);
         res.status(500).json({ error: 'Failed to list organizations' });
+      }
+    }
+  );
+
+  // =====================================
+  // INVITATION LINK MANAGEMENT ENDPOINTS
+  // =====================================
+
+  // Generate a new invitation link
+  app.post('/api/organizations/:organizationId/invitation-links',
+    requireAuth,
+    requireOrganizationAccess(PERMISSIONS.INVITE_MEMBERS),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+        const { role, maxUses, expiryDays, description } = req.body;
+        const user = req.user!;
+
+        // Validate input
+        if (!role || !['viewer', 'editor', 'admin'].includes(role)) {
+          return res.status(400).json({ error: 'Invalid role. Must be "viewer", "editor", or "admin".' });
+        }
+
+        // Generate unique token
+        const token = randomUUID();
+        
+        // Calculate expiry date if provided
+        let expiresAt: Date | null = null;
+        if (expiryDays && expiryDays > 0) {
+          expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + expiryDays);
+        }
+
+        const tenantManager = await createTenantContextManager();
+
+        const newLink = await tenantManager.withTenantContext(
+          req.tenantContext!,
+          async () => {
+            const db = await getDb();
+            return await db
+              .insert(invitationLink)
+              .values({
+                organizationId,
+                role,
+                token,
+                description: description || `${role} invitation`,
+                maxUses: maxUses && maxUses > 0 ? maxUses : null,
+                currentUses: 0,
+                isActive: true,
+                expiresAt,
+                createdById: user.id,
+              })
+              .returning();
+          }
+        );
+
+        res.json(newLink[0]);
+      } catch (error) {
+        console.error('Failed to generate invitation link:', error);
+        res.status(500).json({ error: 'Failed to generate invitation link' });
+      }
+    }
+  );
+
+  // List invitation links for an organization
+  app.get('/api/organizations/:organizationId/invitation-links',
+    requireAuth,
+    requireOrganizationAccess(PERMISSIONS.VIEW_MEMBERS),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+
+        const tenantManager = await createTenantContextManager();
+
+        const links = await tenantManager.withTenantContext(
+          req.tenantContext!,
+          async () => {
+            const db = await getDb();
+            return await db
+              .select()
+              .from(invitationLink)
+              .where(eq(invitationLink.organizationId, organizationId))
+              .orderBy(desc(invitationLink.createdAt));
+          }
+        );
+
+        res.json(links);
+      } catch (error) {
+        console.error('Failed to list invitation links:', error);
+        res.status(500).json({ error: 'Failed to list invitation links' });
+      }
+    }
+  );
+
+  // Update invitation link (activate/deactivate)
+  app.patch('/api/organizations/:organizationId/invitation-links/:linkId',
+    requireAuth,
+    requireOrganizationAccess(PERMISSIONS.INVITE_MEMBERS),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId, linkId } = req.params;
+        const { isActive } = req.body;
+
+        if (typeof isActive !== 'boolean') {
+          return res.status(400).json({ error: 'isActive must be a boolean value' });
+        }
+
+        const tenantManager = await createTenantContextManager();
+
+        const updatedLink = await tenantManager.withTenantContext(
+          req.tenantContext!,
+          async () => {
+            const db = await getDb();
+            return await db
+              .update(invitationLink)
+              .set({
+                isActive,
+                updatedAt: new Date(),
+              })
+              .where(and(
+                eq(invitationLink.id, linkId),
+                eq(invitationLink.organizationId, organizationId)
+              ))
+              .returning();
+          }
+        );
+
+        if (updatedLink.length === 0) {
+          return res.status(404).json({ error: 'Invitation link not found' });
+        }
+
+        res.json(updatedLink[0]);
+      } catch (error) {
+        console.error('Failed to update invitation link:', error);
+        res.status(500).json({ error: 'Failed to update invitation link' });
+      }
+    }
+  );
+
+  // Delete invitation link permanently
+  app.delete('/api/organizations/:organizationId/invitation-links/:linkId',
+    requireAuth,
+    requireOrganizationAccess(PERMISSIONS.INVITE_MEMBERS),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId, linkId } = req.params;
+
+        const tenantManager = await createTenantContextManager();
+
+        const deletedLink = await tenantManager.withTenantContext(
+          req.tenantContext!,
+          async () => {
+            const db = await getDb();
+            return await db
+              .delete(invitationLink)
+              .where(and(
+                eq(invitationLink.id, linkId),
+                eq(invitationLink.organizationId, organizationId)
+              ))
+              .returning();
+          }
+        );
+
+        if (deletedLink.length === 0) {
+          return res.status(404).json({ error: 'Invitation link not found' });
+        }
+
+        res.json({ message: 'Invitation link deleted successfully' });
+      } catch (error) {
+        console.error('Failed to delete invitation link:', error);
+        res.status(500).json({ error: 'Failed to delete invitation link' });
+      }
+    }
+  );
+
+  // Get invitation link details by token (public endpoint)
+  app.get('/api/invitation-links/:token',
+    async (req: Request, res: Response) => {
+      try {
+        const { token } = req.params;
+
+        const db = await getDb();
+        const link = await db
+          .select({
+            id: invitationLink.id,
+            organizationId: invitationLink.organizationId,
+            role: invitationLink.role,
+            description: invitationLink.description,
+            maxUses: invitationLink.maxUses,
+            currentUses: invitationLink.currentUses,
+            isActive: invitationLink.isActive,
+            expiresAt: invitationLink.expiresAt,
+            organizationName: organization.name,
+          })
+          .from(invitationLink)
+          .innerJoin(organization, eq(invitationLink.organizationId, organization.id))
+          .where(eq(invitationLink.token, token))
+          .limit(1);
+
+        if (link.length === 0) {
+          return res.status(404).json({ error: 'Invitation link not found' });
+        }
+
+        const inviteLink = link[0];
+
+        // Check if link is valid
+        if (!inviteLink.isActive) {
+          return res.status(400).json({ error: 'This invitation link has been deactivated' });
+        }
+
+        if (inviteLink.expiresAt && new Date(inviteLink.expiresAt) < new Date()) {
+          return res.status(400).json({ error: 'This invitation link has expired' });
+        }
+
+        if (inviteLink.maxUses && inviteLink.currentUses >= inviteLink.maxUses) {
+          return res.status(400).json({ error: 'This invitation link has reached its usage limit' });
+        }
+
+        res.json({
+          organizationId: inviteLink.organizationId,
+          organizationName: inviteLink.organizationName,
+          role: inviteLink.role,
+          description: inviteLink.description,
+        });
+      } catch (error) {
+        console.error('Failed to get invitation link:', error);
+        res.status(500).json({ error: 'Failed to get invitation link' });
+      }
+    }
+  );
+
+  // Accept invitation via link (requires authentication)
+  app.post('/api/invitation-links/:token/accept',
+    requireAuth,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { token } = req.params;
+        const user = req.user!;
+
+        const db = await getDb();
+        
+        // Get invitation link with organization details
+        const linkResult = await db
+          .select()
+          .from(invitationLink)
+          .innerJoin(organization, eq(invitationLink.organizationId, organization.id))
+          .where(eq(invitationLink.token, token))
+          .limit(1);
+
+        if (linkResult.length === 0) {
+          return res.status(404).json({ error: 'Invitation link not found' });
+        }
+
+        const link = linkResult[0].invitation_link;
+        const org = linkResult[0].organization;
+
+        // Validate link
+        if (!link.isActive) {
+          return res.status(400).json({ error: 'This invitation link has been deactivated' });
+        }
+
+        if (link.expiresAt && new Date(link.expiresAt) < new Date()) {
+          return res.status(400).json({ error: 'This invitation link has expired' });
+        }
+
+        if (link.maxUses && link.currentUses >= link.maxUses) {
+          return res.status(400).json({ error: 'This invitation link has reached its usage limit' });
+        }
+
+        // Check if user is already a member
+        const existingMember = await db
+          .select()
+          .from(member)
+          .where(and(
+            eq(member.organizationId, link.organizationId),
+            eq(member.userId, user.id)
+          ))
+          .limit(1);
+
+        if (existingMember.length > 0) {
+          return res.status(400).json({ error: 'You are already a member of this organization' });
+        }
+
+        // Create membership and increment usage count in a transaction
+        await db.transaction(async (tx) => {
+          // Use the role directly - all roles are now aligned with database constraint
+          const dbRole = link.role;
+          
+          // Add user to organization
+          await tx.insert(member).values({
+            organizationId: link.organizationId,
+            userId: user.id,
+            role: dbRole,
+          });
+
+          // Increment usage count
+          await tx
+            .update(invitationLink)
+            .set({
+              currentUses: sql`${invitationLink.currentUses} + 1`,
+              updatedAt: new Date(),
+            })
+            .where(eq(invitationLink.id, link.id));
+        });
+
+        res.json({
+          message: 'Successfully joined organization',
+          organization: {
+            id: org.id,
+            name: org.name,
+            description: org.description,
+          },
+          role: link.role,
+        });
+      } catch (error) {
+        console.error('Failed to accept invitation link:', error);
+        res.status(500).json({ error: 'Failed to accept invitation' });
       }
     }
   );
