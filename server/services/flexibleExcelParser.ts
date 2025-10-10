@@ -41,7 +41,6 @@ export interface ExcelAnalysis {
   analysis: {
     suggestedTableSheet?: string;
     suggestedColumnSheet?: string;
-    suggestedCodemasterSheets?: string[];
     confidence: number;
   };
 }

@@ -401,17 +401,19 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                   <input
                     type="checkbox"
                     id={`codemaster-${sheet.name}`}
-                    checked={mappings.codemasterSheets.includes(sheet.name)}
+                    checked={mappings.codemasterSheets?.includes(sheet.name) ?? false}
                     onChange={(e) => {
+                      const currentSheets = mappings.codemasterSheets ?? [];
                       const newSheets = e.target.checked
-                        ? [...mappings.codemasterSheets, sheet.name]
-                        : mappings.codemasterSheets.filter(s => s !== sheet.name);
+                        ? [...currentSheets, sheet.name]
+                        : currentSheets.filter(s => s !== sheet.name);
                       
                       handleMappingChange('codemasterSheets', newSheets);
                       
                       // Remove mapping if sheet is unchecked
                       if (!e.target.checked) {
-                        const newMappings = mappings.codemasterMappings.filter(
+                        const currentMappings = mappings.codemasterMappings ?? [];
+                        const newMappings = currentMappings.filter(
                           m => m.sheetName !== sheet.name
                         );
                         handleMappingChange('codemasterMappings', newMappings);
@@ -434,11 +436,11 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
           </div>
 
           {/* Individual Codemaster Sheet Configurations */}
-          {mappings.codemasterSheets.map((sheetName) => {
+          {(mappings.codemasterSheets ?? []).map((sheetName) => {
             const sheet = sheets.find(s => s.name === sheetName);
             if (!sheet) return null;
             
-            const mapping = mappings.codemasterMappings.find(m => m.sheetName === sheetName) || {
+            const mapping = (mappings.codemasterMappings ?? []).find(m => m.sheetName === sheetName) || {
               sheetName,
               codeColumn: '',
               descriptionColumn: '',
@@ -461,7 +463,8 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                       mapping.codeColumn,
                       (value) => {
                         const updatedMapping = { ...mapping, codeColumn: value };
-                        const newMappings = mappings.codemasterMappings.filter(m => m.sheetName !== sheetName);
+                        const currentMappings = mappings.codemasterMappings ?? [];
+                        const newMappings = currentMappings.filter(m => m.sheetName !== sheetName);
                         newMappings.push(updatedMapping);
                         handleMappingChange('codemasterMappings', newMappings);
                       },
@@ -475,7 +478,8 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                       mapping.descriptionColumn,
                       (value) => {
                         const updatedMapping = { ...mapping, descriptionColumn: value };
-                        const newMappings = mappings.codemasterMappings.filter(m => m.sheetName !== sheetName);
+                        const currentMappings = mappings.codemasterMappings ?? [];
+                        const newMappings = currentMappings.filter(m => m.sheetName !== sheetName);
                         newMappings.push(updatedMapping);
                         handleMappingChange('codemasterMappings', newMappings);
                       },
@@ -489,7 +493,8 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                       mapping.statusColumn || '',
                       (value) => {
                         const updatedMapping = { ...mapping, statusColumn: value };
-                        const newMappings = mappings.codemasterMappings.filter(m => m.sheetName !== sheetName);
+                        const currentMappings = mappings.codemasterMappings ?? [];
+                        const newMappings = currentMappings.filter(m => m.sheetName !== sheetName);
                         newMappings.push(updatedMapping);
                         handleMappingChange('codemasterMappings', newMappings);
                       },
@@ -512,7 +517,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
             );
           })}
 
-          {mappings.codemasterSheets.length === 0 && (
+          {(mappings.codemasterSheets ?? []).length === 0 && (
             <div className="text-center py-6 text-muted-foreground">
               <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No codemaster sheets selected</p>

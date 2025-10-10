@@ -78,7 +78,9 @@ const ProjectUpload = ({ isDarkMode = false, setIsDarkMode }: ProjectUploadProps
     columnTypeColumn: '',
     primaryKeyColumn: '',
     foreignKeyTableColumn: '',
-    foreignKeyColumnColumn: ''
+    foreignKeyColumnColumn: '',
+    codemasterSheets: [],
+    codemasterMappings: []
   });
 
   // Validation state
