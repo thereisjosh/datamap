@@ -9,9 +9,11 @@ export interface ExcelSheet {
 
 export interface ExcelAnalysis {
   sheets: ExcelSheet[];
+  codemasterSheets: CodemasterSheet[];
   analysis: {
     suggestedTableSheet?: string;
     suggestedColumnSheet?: string;
+    suggestedCodemasterSheets?: string[];
     confidence: number;
   };
 }
@@ -50,14 +52,45 @@ export interface ParsedRelationship {
   targetColumn: string;
 }
 
+// Codemaster/lookup value interfaces
+export interface CodeValue {
+  code: string | number;
+  description: string;
+  isActive?: boolean;
+  notes?: string;
+}
+
+export interface CodemasterMapping {
+  fieldName: string;
+  tableName: string;
+  sheetName: string;
+  codeColumn: string;
+  descriptionColumn: string;
+  codeValues: CodeValue[];
+  totalRecords: number;
+}
+
+export interface CodemasterSheet {
+  name: string;
+  type: 'lookup' | 'enum' | 'reference' | 'code';
+  detectedMappings: CodemasterMapping[];
+  columns: string[];
+  rowCount: number;
+  preview: string[][];
+}
+
 export interface ParseResult {
   tables: ParsedTable[];
   relationships: ParsedRelationship[];
+  codemasterMappings: CodemasterMapping[];
+  codemasterSheets: CodemasterSheet[];
   errors: string[];
   summary: {
     tablesFound: number;
     columnsFound: number;
     relationshipsFound: number;
+    codemasterSheetsFound: number;
+    codeMappingsFound: number;
   };
 }
 

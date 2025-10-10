@@ -771,6 +771,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
           domain={selectedDomain}
           selectedTableFromSearch={pendingTableSelection}
           domainResults={domainResults}
+          codemasterMappings={[]} // TODO: Load from project data
           onExternalTableClick={handleDomainSwitchForTable}
           onTableSelectionComplete={handleTableSelectionComplete}
         />

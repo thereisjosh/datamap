@@ -361,6 +361,7 @@ const ERDPreview = () => {
             domain={selectedDomain}
             selectedTableFromSearch={pendingTableSelection}
             domainResults={domainResults}
+            codemasterMappings={[]} // TODO: Load from parse results
             onExternalTableClick={handleDomainSwitchForTable}
           />
         </div>

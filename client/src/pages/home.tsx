@@ -524,6 +524,7 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
                       isLoading={isLoading}
                       domain={selectedDomain}
                       selectedTableFromSearch={pendingTableSelection}
+                      codemasterMappings={[]} // Not available in legacy parser
                       domainResults={domainResults}
                       onExternalTableClick={handleDomainSwitchForTable}
                       onTableSelectionComplete={handleTableSelectionComplete}

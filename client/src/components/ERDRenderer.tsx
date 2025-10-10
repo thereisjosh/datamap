@@ -2,7 +2,9 @@ import React, { useEffect, useState, memo, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Download, Copy, AlertCircle, ZoomIn, ZoomOut, RotateCcw, Move } from 'lucide-react';
+import { Download, Copy, AlertCircle, ZoomIn, ZoomOut, RotateCcw, Move, Database } from 'lucide-react';
+import CodemasterPanel from './erd/CodemasterPanel';
+import type { CodemasterMapping } from '@/components/excel/types';
 import './ERDRenderer.css';
 
 interface ERDRendererProps {
@@ -14,6 +16,8 @@ interface ERDRendererProps {
   onExternalTableClick?: (tableName: string, targetDomain: string) => void;
   onTableSelectionComplete?: (tableName: string) => void;
   selectedTableFromSearch?: string | null;
+  codemasterMappings?: CodemasterMapping[];
+  onFieldClick?: (tableName: string, fieldName: string) => void;
 }
 
 
@@ -25,7 +29,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   domainResults = {},
   onExternalTableClick,
   onTableSelectionComplete,
-  selectedTableFromSearch = null
+  selectedTableFromSearch = null,
+  codemasterMappings = [],
+  onFieldClick
 }) => {
   
   // Track last processed selectedTableFromSearch to prevent duplicate processing
@@ -67,6 +73,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const [isCompactView, setIsCompactView] = useState<boolean>(false);
   const [showRelationshipLabels, setShowRelationshipLabels] = useState<boolean>(true);
   const [showAttributeDetails, setShowAttributeDetails] = useState<boolean>(true);
+  
+  // Codemaster panel state
+  const [isCodemasterPanelVisible, setIsCodemasterPanelVisible] = useState<boolean>(false);
+  const [selectedField, setSelectedField] = useState<string | null>(null);
   
   // Debugging state
   const [clickableTablesCount, setClickableTablesCount] = useState<number>(0);
@@ -3803,6 +3813,36 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     );
   }
 
+  // Codemaster panel helper functions
+  const hasCodemasterMappings = (tableName: string): boolean => {
+    return codemasterMappings.some(mapping => mapping.tableName === tableName);
+  };
+
+  const getTableCodemasterMappings = (tableName: string): CodemasterMapping[] => {
+    return codemasterMappings.filter(mapping => mapping.tableName === tableName);
+  };
+
+  const handleCodemasterToggle = () => {
+    if (selectedTable && hasCodemasterMappings(selectedTable)) {
+      setIsCodemasterPanelVisible(!isCodemasterPanelVisible);
+      setSelectedField(null); // Reset field selection when toggling
+    }
+  };
+
+  const handleCodemasterFieldClick = (tableName: string, fieldName: string) => {
+    setSelectedTable(tableName);
+    setSelectedField(fieldName);
+    setIsCodemasterPanelVisible(true);
+    if (onFieldClick) {
+      onFieldClick(tableName, fieldName);
+    }
+  };
+
+  const handleCodemasterPanelClose = () => {
+    setIsCodemasterPanelVisible(false);
+    setSelectedField(null);
+  };
+
   return (
     <div className="flex flex-col h-full space-y-4">
       {/* Action buttons */}
@@ -3826,6 +3866,17 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           <Download className="h-4 w-4" />
           Download SVG
         </Button>
+        {selectedTable && hasCodemasterMappings(selectedTable) && (
+          <Button
+            variant={isCodemasterPanelVisible ? "default" : "outline"}
+            size="sm"
+            onClick={handleCodemasterToggle}
+            className="flex items-center gap-2"
+          >
+            <Database className="h-4 w-4" />
+            Code Values
+          </Button>
+        )}
       </div>
 
       {/* Responsive SVG container - industry standard approach */}
@@ -3981,6 +4032,16 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           </div>
         )}
       </div>
+
+      {/* Codemaster Panel */}
+      <CodemasterPanel
+        selectedTable={selectedTable}
+        selectedField={selectedField}
+        codemasterMappings={codemasterMappings}
+        isVisible={isCodemasterPanelVisible}
+        onClose={handleCodemasterPanelClose}
+        onFieldClick={handleCodemasterFieldClick}
+      />
     </div>
   );
 };
@@ -3993,7 +4054,8 @@ const MemoizedERDRenderer = memo(ERDRenderer, (prevProps, nextProps) => {
     prevProps.isDarkMode === nextProps.isDarkMode &&
     prevProps.isLoading === nextProps.isLoading &&
     prevProps.domain === nextProps.domain &&
-    prevProps.selectedTableFromSearch === nextProps.selectedTableFromSearch
+    prevProps.selectedTableFromSearch === nextProps.selectedTableFromSearch &&
+    prevProps.codemasterMappings === nextProps.codemasterMappings
   );
 });
 

@@ -8,11 +8,40 @@ export interface ExcelSheet {
   preview: string[][]; // First 5 rows for preview
 }
 
+// Codemaster/lookup value interfaces
+export interface CodeValue {
+  code: string | number;
+  description: string;
+  isActive?: boolean;
+  notes?: string;
+}
+
+export interface CodemasterMapping {
+  fieldName: string;
+  tableName: string;
+  sheetName: string;
+  codeColumn: string;
+  descriptionColumn: string;
+  codeValues: CodeValue[];
+  totalRecords: number;
+}
+
+export interface CodemasterSheet {
+  name: string;
+  type: 'lookup' | 'enum' | 'reference' | 'code';
+  detectedMappings: CodemasterMapping[];
+  columns: string[];
+  rowCount: number;
+  preview: string[][];
+}
+
 export interface ExcelAnalysis {
   sheets: ExcelSheet[];
+  codemasterSheets: CodemasterSheet[];
   analysis: {
     suggestedTableSheet?: string;
     suggestedColumnSheet?: string;
+    suggestedCodemasterSheets?: string[];
     confidence: number;
   };
 }
@@ -50,11 +79,15 @@ export interface ParseResult {
     targetTable: string;
     targetColumn: string;
   }>;
+  codemasterMappings: CodemasterMapping[];
+  codemasterSheets: CodemasterSheet[];
   errors: string[];
   summary: {
     tablesFound: number;
     columnsFound: number;
     relationshipsFound: number;
+    codemasterSheetsFound: number;
+    codeMappingsFound: number;
   };
 }
 
@@ -120,11 +153,15 @@ export class FlexibleExcelParser {
         });
       }
       
+      // Detect codemaster sheets
+      const codemasterSheets = this.detectCodemasterSheets(workbook, sheets);
+      
       // Generate intelligent suggestions
-      const analysis = this.generateSuggestions(sheets);
+      const analysis = this.generateSuggestions(sheets, codemasterSheets);
       
       return {
         sheets,
+        codemasterSheets,
         analysis
       };
       
@@ -132,6 +169,200 @@ export class FlexibleExcelParser {
       console.error('Error analyzing Excel structure:', error);
       throw new Error('Failed to analyze Excel file structure');
     }
+  }
+  
+  /**
+   * Detect codemaster/lookup sheets based on naming patterns and content structure
+   */
+  private detectCodemasterSheets(workbook: ExcelJS.Workbook, sheets: ExcelSheet[]): CodemasterSheet[] {
+    const codemasterSheets: CodemasterSheet[] = [];
+    
+    // Common patterns for codemaster sheet names
+    const codemasterPatterns = [
+      /code/i, /master/i, /lookup/i, /reference/i, /enum/i, 
+      /list/i, /values/i, /domain/i, /catalogue/i, /catalog/i
+    ];
+    
+    for (const sheet of sheets) {
+      const sheetName = sheet.name.toLowerCase();
+      
+      // Check if sheet name matches codemaster patterns
+      const isCodemasterByName = codemasterPatterns.some(pattern => pattern.test(sheetName));
+      
+      // Check if sheet structure looks like a codemaster (2-3 columns, simple structure)
+      const hasSimpleStructure = sheet.columns.length >= 2 && sheet.columns.length <= 4;
+      const hasCodePattern = sheet.columns.some(col => 
+        /code|id|key|value/i.test(col.toLowerCase())
+      );
+      const hasDescPattern = sheet.columns.some(col => 
+        /desc|description|name|label|text/i.test(col.toLowerCase())
+      );
+      
+      const isCodemasterByStructure = hasSimpleStructure && hasCodePattern && hasDescPattern;
+      
+      if (isCodemasterByName || isCodemasterByStructure) {
+        // Determine codemaster type
+        let type: 'lookup' | 'enum' | 'reference' | 'code' = 'code';
+        if (/lookup/i.test(sheetName)) type = 'lookup';
+        else if (/enum/i.test(sheetName)) type = 'enum';
+        else if (/reference/i.test(sheetName)) type = 'reference';
+        
+        // Find potential code and description columns
+        const codeColumn = sheet.columns.find(col => 
+          /^(code|id|key|value)$/i.test(col) || 
+          /code$/i.test(col) || 
+          /id$/i.test(col)
+        ) || sheet.columns[0];
+        
+        const descColumn = sheet.columns.find(col => 
+          /desc|description|name|label|text/i.test(col.toLowerCase())
+        ) || sheet.columns[1];
+        
+        if (codeColumn && descColumn) {
+          // Extract a sample of code values for preview
+          const sampleMappings: CodemasterMapping[] = [];
+          
+          // Create a basic mapping for this sheet
+          const mapping: CodemasterMapping = {
+            fieldName: sheetName.replace(/[^a-zA-Z0-9]/g, ''),
+            tableName: 'Unknown', // Will be determined during field analysis
+            sheetName: sheet.name,
+            codeColumn,
+            descriptionColumn: descColumn,
+            codeValues: this.extractCodeValues(sheet.preview, codeColumn, descColumn),
+            totalRecords: sheet.rowCount
+          };
+          
+          sampleMappings.push(mapping);
+          
+          codemasterSheets.push({
+            name: sheet.name,
+            type,
+            detectedMappings: sampleMappings,
+            columns: sheet.columns,
+            rowCount: sheet.rowCount,
+            preview: sheet.preview
+          });
+          
+          console.log(`🔍 Detected codemaster sheet: "${sheet.name}" (${type}) with ${sheet.rowCount} rows`);
+        }
+      }
+    }
+    
+    return codemasterSheets;
+  }
+  
+  /**
+   * Extract code values from sheet preview data
+   */
+  private extractCodeValues(preview: string[][], codeColumn: string, descColumn: string): CodeValue[] {
+    if (!preview || preview.length < 2) return [];
+    
+    const headerRow = preview[0];
+    const codeColIndex = headerRow.indexOf(codeColumn);
+    const descColIndex = headerRow.indexOf(descColumn);
+    
+    if (codeColIndex === -1 || descColIndex === -1) return [];
+    
+    const codeValues: CodeValue[] = [];
+    
+    // Process up to 10 sample rows (excluding header)
+    for (let i = 1; i < Math.min(preview.length, 11); i++) {
+      const row = preview[i];
+      if (row && row.length > Math.max(codeColIndex, descColIndex)) {
+        const code = row[codeColIndex];
+        const description = row[descColIndex];
+        
+        if (code && description) {
+          codeValues.push({
+            code: code.toString().trim(),
+            description: description.toString().trim(),
+            isActive: true // Default to active
+          });
+        }
+      }
+    }
+    
+    return codeValues;
+  }
+  
+  /**
+   * Create codemaster mappings by analyzing which table fields might use codemaster sheets
+   */
+  private createCodemasterMappings(tables: ParseResult['tables'], codemasterSheets: CodemasterSheet[]): CodemasterMapping[] {
+    const mappings: CodemasterMapping[] = [];
+    
+    for (const codemasterSheet of codemasterSheets) {
+      // Look for table fields that might reference this codemaster
+      for (const table of tables) {
+        for (const column of table.columns) {
+          // Check if field name suggests it uses this codemaster
+          const fieldName = column.name.toLowerCase();
+          const sheetName = codemasterSheet.name.toLowerCase();
+          
+          // Pattern matching for potential codemaster usage
+          const isMatch = this.fieldMatchesCodemaster(fieldName, sheetName, codemasterSheet.type);
+          
+          if (isMatch && codemasterSheet.detectedMappings.length > 0) {
+            const baseMapping = codemasterSheet.detectedMappings[0];
+            
+            // Create a specific mapping for this field
+            const mapping: CodemasterMapping = {
+              fieldName: column.name,
+              tableName: table.name,
+              sheetName: codemasterSheet.name,
+              codeColumn: baseMapping.codeColumn,
+              descriptionColumn: baseMapping.descriptionColumn,
+              codeValues: baseMapping.codeValues,
+              totalRecords: codemasterSheet.rowCount
+            };
+            
+            mappings.push(mapping);
+            console.log(`🔗 Mapped field "${table.name}.${column.name}" to codemaster "${codemasterSheet.name}"`);
+          }
+        }
+      }
+    }
+    
+    return mappings;
+  }
+  
+  /**
+   * Check if a field name matches a codemaster sheet
+   */
+  private fieldMatchesCodemaster(fieldName: string, sheetName: string, type: CodemasterSheet['type']): boolean {
+    // Remove common suffixes/prefixes for comparison
+    const cleanFieldName = fieldName
+      .replace(/id$/i, '')
+      .replace(/code$/i, '')
+      .replace(/type$/i, '')
+      .replace(/status$/i, '');
+    
+    const cleanSheetName = sheetName
+      .replace(/code/i, '')
+      .replace(/master/i, '')
+      .replace(/lookup/i, '')
+      .replace(/reference/i, '');
+    
+    // Direct name matching
+    if (cleanFieldName.includes(cleanSheetName) || cleanSheetName.includes(cleanFieldName)) {
+      return true;
+    }
+    
+    // Common patterns
+    const commonPatterns = [
+      // Status fields
+      /status/i.test(fieldName) && /status/i.test(sheetName),
+      // Type fields  
+      /type/i.test(fieldName) && /type/i.test(sheetName),
+      // Category fields
+      /categor/i.test(fieldName) && /categor/i.test(sheetName),
+      // Country/State fields
+      /country/i.test(fieldName) && /country/i.test(sheetName),
+      /state/i.test(fieldName) && /state/i.test(sheetName),
+    ];
+    
+    return commonPatterns.some(pattern => pattern);
   }
   
   /**
@@ -149,16 +380,20 @@ export class FlexibleExcelParser {
         return {
           tables: [],
           relationships: [],
+          codemasterMappings: [],
+          codemasterSheets: [],
           errors: validation.errors,
-          summary: { tablesFound: 0, columnsFound: 0, relationshipsFound: 0 }
+          summary: { tablesFound: 0, columnsFound: 0, relationshipsFound: 0, codemasterSheetsFound: 0, codeMappingsFound: 0 }
         };
       }
       
       const result: ParseResult = {
         tables: [],
         relationships: [],
+        codemasterMappings: [],
+        codemasterSheets: analysis.codemasterSheets,
         errors: validation.warnings, // Start with warnings
-        summary: { tablesFound: 0, columnsFound: 0, relationshipsFound: 0 }
+        summary: { tablesFound: 0, columnsFound: 0, relationshipsFound: 0, codemasterSheetsFound: analysis.codemasterSheets.length, codeMappingsFound: 0 }
       };
       
       // Parse tables
@@ -178,6 +413,10 @@ export class FlexibleExcelParser {
       // Auto-create missing target tables for foreign keys
       this.autoCreateMissingTables(result);
       
+      // Create codemaster mappings by analyzing table fields
+      result.codemasterMappings = this.createCodemasterMappings(result.tables, analysis.codemasterSheets);
+      result.summary.codeMappingsFound = result.codemasterMappings.length;
+      
       return result;
       
     } catch (error) {
@@ -185,8 +424,10 @@ export class FlexibleExcelParser {
       return {
         tables: [],
         relationships: [],
+        codemasterMappings: [],
+        codemasterSheets: [],
         errors: [`Failed to parse Excel file: ${error instanceof Error ? error.message : 'Unknown error'}`],
-        summary: { tablesFound: 0, columnsFound: 0, relationshipsFound: 0 }
+        summary: { tablesFound: 0, columnsFound: 0, relationshipsFound: 0, codemasterSheetsFound: 0, codeMappingsFound: 0 }
       };
     }
   }
@@ -194,9 +435,10 @@ export class FlexibleExcelParser {
   /**
    * Generate intelligent suggestions for sheet mappings
    */
-  private generateSuggestions(sheets: ExcelSheet[]): ExcelAnalysis['analysis'] {
+  private generateSuggestions(sheets: ExcelSheet[], codemasterSheets: CodemasterSheet[] = []): ExcelAnalysis['analysis'] {
     let suggestedTableSheet: string | undefined;
     let suggestedColumnSheet: string | undefined;
+    let suggestedCodemasterSheets: string[] = [];
     let confidence = 0;
     
     // Look for sheets that might contain table definitions
@@ -228,6 +470,12 @@ export class FlexibleExcelParser {
       confidence += 0.4;
     }
     
+    // Add codemaster sheet suggestions
+    suggestedCodemasterSheets = codemasterSheets.map(sheet => sheet.name);
+    if (suggestedCodemasterSheets.length > 0) {
+      confidence += 0.1;
+    }
+    
     // Boost confidence if we found both
     if (suggestedTableSheet && suggestedColumnSheet) {
       confidence += 0.2;
@@ -236,6 +484,7 @@ export class FlexibleExcelParser {
     return {
       suggestedTableSheet,
       suggestedColumnSheet,
+      suggestedCodemasterSheets,
       confidence: Math.min(confidence, 1.0)
     };
   }

@@ -7,7 +7,8 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Database, Hash } from "lucide-react";
+import type { CodemasterMapping } from '@/components/excel/types';
 
 interface Column {
   name: string;
@@ -28,11 +29,13 @@ interface Table {
 interface MetadataPreviewProps {
   tables?: Table[];
   errors?: string[];
+  codemasterMappings?: CodemasterMapping[];
 }
 
 const MetadataPreview = ({
   tables = [],
   errors = [],
+  codemasterMappings = [],
 }: MetadataPreviewProps) => {
   const [expandedTables, setExpandedTables] = useState<string[]>([]);
 
@@ -42,6 +45,16 @@ const MetadataPreview = ({
         ? prev.filter((name) => name !== tableName)
         : [...prev, tableName],
     );
+  };
+
+  const getCodemasterMapping = (tableName: string, columnName: string): CodemasterMapping | undefined => {
+    return codemasterMappings.find(
+      mapping => mapping.tableName === tableName && mapping.fieldName === columnName
+    );
+  };
+
+  const hasCodemaster = (tableName: string, columnName: string): boolean => {
+    return !!getCodemasterMapping(tableName, columnName);
   };
 
   if (tables.length === 0) {
@@ -71,14 +84,20 @@ const MetadataPreview = ({
         </Alert>
       )}
 
-      <div className="mb-2">
+      <div className="mb-4">
         <Badge variant="outline" className="mr-2">
           Tables: {tables.length}
         </Badge>
-        <Badge variant="outline">
+        <Badge variant="outline" className="mr-2">
           Columns:{" "}
           {tables.reduce((acc, table) => acc + table.columns.length, 0)}
         </Badge>
+        {codemasterMappings.length > 0 && (
+          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+            <Database className="h-3 w-3 mr-1" />
+            Code Values: {codemasterMappings.length}
+          </Badge>
+        )}
       </div>
 
       <Accordion type="multiple" value={expandedTables} className="w-full">
@@ -113,11 +132,19 @@ const MetadataPreview = ({
                         className="border-b last:border-b-0 hover:bg-gray-50"
                       >
                         <td className="px-4 py-2">
-                          <span
-                            className={`${column.isPrimaryKey ? "font-medium" : ""}`}
-                          >
-                            {column.name}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`${column.isPrimaryKey ? "font-medium" : ""}`}
+                            >
+                              {column.name}
+                            </span>
+                            {hasCodemaster(table.name, column.name) && (
+                              <Database 
+                                className="h-3 w-3 text-purple-600" 
+                                title="Has code values"
+                              />
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-2 text-gray-600">
                           {column.type}

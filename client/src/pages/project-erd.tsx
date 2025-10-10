@@ -773,6 +773,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
                     domain={selectedDomain}
                     selectedTableFromSearch={selectedTable}
                     domainResults={domainResults}
+                    codemasterMappings={[]} // TODO: Load from project data
                     onExternalTableClick={(tableName, targetDomain) => {
                       console.log(`🔗 External table navigation: "${tableName}" in domain "${targetDomain}"`);
                       

@@ -709,6 +709,7 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
               <MetadataPreview 
                 tables={parseResult.tables}
                 errors={parseResult.errors}
+                codemasterMappings={parseResult.codemasterMappings}
               />
               
               {renderNavigationButtons()}
