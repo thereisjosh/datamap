@@ -117,6 +117,18 @@ export interface MappingValidation {
   warnings: string[];
 }
 
+// Codemaster mapping configuration for individual sheets
+export interface CodemasterSheetMapping {
+  sheetName: string;
+  codeColumn: string;
+  descriptionColumn: string;
+  statusColumn?: string;
+  targetFields: Array<{
+    tableName: string;
+    fieldName: string;
+  }>;
+}
+
 // Column mapping form state
 export interface MappingFormState {
   // Table mappings
@@ -134,6 +146,10 @@ export interface MappingFormState {
   primaryKeyColumn: string;
   foreignKeyTableColumn: string;
   foreignKeyColumnColumn: string;
+  
+  // Codemaster mappings
+  codemasterSheets: string[];
+  codemasterMappings: CodemasterSheetMapping[];
 }
 
 // Step validation state

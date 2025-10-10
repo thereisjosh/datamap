@@ -72,7 +72,9 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
     columnTypeColumn: '',
     primaryKeyColumn: '',
     foreignKeyTableColumn: '',
-    foreignKeyColumnColumn: ''
+    foreignKeyColumnColumn: '',
+    codemasterSheets: [],
+    codemasterMappings: []
   });
 
   // Validation state

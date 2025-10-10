@@ -19,9 +19,12 @@ import {
   Columns,
   Key,
   Link,
-  Lightbulb
+  Lightbulb,
+  Database,
+  Plus,
+  Trash2
 } from 'lucide-react';
-import { type ExcelSheet, type ColumnMappings, type MappingFormState, type StepValidation } from './types';
+import { type ExcelSheet, type ColumnMappings, type MappingFormState, type StepValidation, type CodemasterSheetMapping } from './types';
 
 interface ColumnMapperProps {
   sheets: ExcelSheet[];
@@ -139,7 +142,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
     };
   };
 
-  const handleMappingChange = (key: keyof MappingFormState, value: string) => {
+  const handleMappingChange = (key: keyof MappingFormState, value: string | string[] | CodemasterSheetMapping[]) => {
     onMappingsChange({
       ...mappings,
       [key]: value
@@ -369,6 +372,152 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                 </div>
               </div>
             </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Codemaster Mapping */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-purple-600" />
+            Codemaster/Lookup Mapping
+          </CardTitle>
+          <CardDescription>
+            Configure which sheets contain lookup/code values and map them to specific table fields.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Codemaster Sheets</Label>
+            <p className="text-xs text-muted-foreground">
+              Select sheets that contain lookup values, enums, or code tables
+            </p>
+            
+            {/* Sheet Multi-selector */}
+            <div className="space-y-2">
+              {sheets.map((sheet) => (
+                <div key={sheet.name} className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id={`codemaster-${sheet.name}`}
+                    checked={mappings.codemasterSheets.includes(sheet.name)}
+                    onChange={(e) => {
+                      const newSheets = e.target.checked
+                        ? [...mappings.codemasterSheets, sheet.name]
+                        : mappings.codemasterSheets.filter(s => s !== sheet.name);
+                      
+                      handleMappingChange('codemasterSheets', newSheets);
+                      
+                      // Remove mapping if sheet is unchecked
+                      if (!e.target.checked) {
+                        const newMappings = mappings.codemasterMappings.filter(
+                          m => m.sheetName !== sheet.name
+                        );
+                        handleMappingChange('codemasterMappings', newMappings);
+                      }
+                    }}
+                    className="rounded border-gray-300"
+                  />
+                  <label htmlFor={`codemaster-${sheet.name}`} className="text-sm cursor-pointer flex-1">
+                    <div className="flex items-center justify-between">
+                      <span>{sheet.name}</span>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{sheet.columns.length} cols</span>
+                        <span>{sheet.rowCount} rows</span>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Individual Codemaster Sheet Configurations */}
+          {mappings.codemasterSheets.map((sheetName) => {
+            const sheet = sheets.find(s => s.name === sheetName);
+            if (!sheet) return null;
+            
+            const mapping = mappings.codemasterMappings.find(m => m.sheetName === sheetName) || {
+              sheetName,
+              codeColumn: '',
+              descriptionColumn: '',
+              statusColumn: '',
+              targetFields: []
+            };
+
+            return (
+              <Card key={sheetName} className="bg-purple-50/50 border-purple-200">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Database className="h-4 w-4 text-purple-600" />
+                    {sheetName} Configuration
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {renderColumnSelector(
+                      "Code Column",
+                      mapping.codeColumn,
+                      (value) => {
+                        const updatedMapping = { ...mapping, codeColumn: value };
+                        const newMappings = mappings.codemasterMappings.filter(m => m.sheetName !== sheetName);
+                        newMappings.push(updatedMapping);
+                        handleMappingChange('codemasterMappings', newMappings);
+                      },
+                      sheetName,
+                      true,
+                      "Column containing the lookup codes/keys"
+                    )}
+
+                    {renderColumnSelector(
+                      "Description Column",
+                      mapping.descriptionColumn,
+                      (value) => {
+                        const updatedMapping = { ...mapping, descriptionColumn: value };
+                        const newMappings = mappings.codemasterMappings.filter(m => m.sheetName !== sheetName);
+                        newMappings.push(updatedMapping);
+                        handleMappingChange('codemasterMappings', newMappings);
+                      },
+                      sheetName,
+                      true,
+                      "Column containing human-readable descriptions"
+                    )}
+
+                    {renderColumnSelector(
+                      "Status Column (Optional)",
+                      mapping.statusColumn || '',
+                      (value) => {
+                        const updatedMapping = { ...mapping, statusColumn: value };
+                        const newMappings = mappings.codemasterMappings.filter(m => m.sheetName !== sheetName);
+                        newMappings.push(updatedMapping);
+                        handleMappingChange('codemasterMappings', newMappings);
+                      },
+                      sheetName,
+                      false,
+                      "Column indicating if code is active/inactive"
+                    )}
+                  </div>
+
+                  {mapping.codeColumn && mapping.descriptionColumn && (
+                    <div className="flex items-center gap-2 p-2 bg-purple-100 border border-purple-200 rounded-md">
+                      <CheckCircle className="h-4 w-4 text-purple-600" />
+                      <span className="text-sm text-purple-700">
+                        Codemaster "{sheetName}" configured
+                      </span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {mappings.codemasterSheets.length === 0 && (
+            <div className="text-center py-6 text-muted-foreground">
+              <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No codemaster sheets selected</p>
+              <p className="text-xs">Select sheets above to configure lookup value mappings</p>
+            </div>
           )}
         </CardContent>
       </Card>
