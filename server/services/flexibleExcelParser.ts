@@ -57,6 +57,27 @@ export interface CodemasterSheetMapping {
   }>;
 }
 
+// Codemaster configuration types
+export type CodemasterType = 'entity_tables' | 'field_enums' | 'mixed';
+
+export interface CodemasterConfiguration {
+  selectedSheet: string;
+  type: CodemasterType;
+  codeColumn: string;
+  descriptionColumn: string;
+  statusColumn?: string;
+  // For entity_tables type
+  entityColumn?: string;
+  // For field_enums type  
+  fieldColumn?: string;
+  // For mixed type
+  categoryColumn?: string;
+  targetFields: Array<{
+    tableName: string;
+    fieldName: string;
+  }>;
+}
+
 export interface ColumnMappings {
   tableSheet: string;
   tableNameColumn: string;
@@ -68,9 +89,8 @@ export interface ColumnMappings {
   primaryKeyColumn?: string;
   foreignKeyTableColumn?: string;
   foreignKeyColumnColumn?: string;
-  // Codemaster mappings
-  codemasterSheets?: string[];
-  codemasterMappings?: CodemasterSheetMapping[];
+  // Codemaster configurations
+  codemasterConfigurations?: CodemasterConfiguration[];
 }
 
 export interface ParseResult {
@@ -85,6 +105,9 @@ export interface ParseResult {
         table: string;
         column: string;
       };
+      // Codemaster metadata fields
+      codemasterValues?: any[];
+      codemasterSource?: string;
     }>;
   }>;
   relationships: Array<{
@@ -183,44 +206,63 @@ export class FlexibleExcelParser {
   }
   
   /**
-   * Process manual codemaster mappings configured by the user
+   * Process manual codemaster configurations created by the user
+   * If targetFields is empty, automatically enhance existing tables with codemaster values
    */
-  private processCodemasterMappings(workbook: ExcelJS.Workbook, mappings: ColumnMappings): CodemasterMapping[] {
+  private processCodemasterMappings(workbook: ExcelJS.Workbook, mappings: ColumnMappings, parsedTables: ParsedTable[]): CodemasterMapping[] {
+    console.log('🔍 [CODEMASTER DEBUG] processCodemasterMappings called with:', {
+      hasCodemasterConfigs: !!mappings.codemasterConfigurations,
+      configCount: mappings.codemasterConfigurations?.length || 0,
+      allMappingKeys: Object.keys(mappings)
+    });
+
     const codemasterMappings: CodemasterMapping[] = [];
     
-    if (!mappings.codemasterMappings || mappings.codemasterMappings.length === 0) {
+    if (!mappings.codemasterConfigurations || mappings.codemasterConfigurations.length === 0) {
+      console.log('🔍 [CODEMASTER DEBUG] No codemaster configurations found, returning empty array');
       return codemasterMappings;
     }
     
-    for (const sheetMapping of mappings.codemasterMappings) {
-      const worksheet = workbook.getWorksheet(sheetMapping.sheetName);
+    for (const config of mappings.codemasterConfigurations) {
+      const worksheet = workbook.getWorksheet(config.selectedSheet);
       if (!worksheet) {
-        console.warn(`Codemaster sheet "${sheetMapping.sheetName}" not found`);
+        console.warn(`Codemaster sheet "${config.selectedSheet}" not found`);
         continue;
       }
       
-      // Extract code values from the sheet
-      const codeValues = this.extractCodeValuesFromSheet(
+      // Extract code values based on configuration type
+      const codeValues = this.extractCodeValuesFromConfiguration(
         worksheet, 
-        sheetMapping.codeColumn, 
-        sheetMapping.descriptionColumn,
-        sheetMapping.statusColumn
+        config
       );
       
-      // Create mappings for each target field
-      for (const targetField of sheetMapping.targetFields) {
-        const mapping: CodemasterMapping = {
-          fieldName: targetField.fieldName,
-          tableName: targetField.tableName,
-          sheetName: sheetMapping.sheetName,
-          codeColumn: sheetMapping.codeColumn,
-          descriptionColumn: sheetMapping.descriptionColumn,
-          codeValues,
-          totalRecords: codeValues.length
-        };
-        
-        codemasterMappings.push(mapping);
-        console.log(`🔗 Manual mapping: ${targetField.tableName}.${targetField.fieldName} → ${sheetMapping.sheetName}`);
+      console.log(`🔍 [CODEMASTER DEBUG] Extracted ${codeValues.length} code values from ${config.selectedSheet}`);
+      
+      // If targetFields is empty, auto-enhance existing tables
+      if (config.targetFields.length === 0) {
+        console.log('🔍 [CODEMASTER DEBUG] No target fields specified, attempting table enhancement...');
+        const enhancedMappings = this.enhanceTablesWithCodemasterValues(
+          config, 
+          codeValues, 
+          parsedTables
+        );
+        codemasterMappings.push(...enhancedMappings);
+      } else {
+        // Create mappings for each manually specified target field
+        for (const targetField of config.targetFields) {
+          const mapping: CodemasterMapping = {
+            fieldName: targetField.fieldName,
+            tableName: targetField.tableName,
+            sheetName: config.selectedSheet,
+            codeColumn: config.codeColumn,
+            descriptionColumn: config.descriptionColumn,
+            codeValues,
+            totalRecords: codeValues.length
+          };
+          
+          codemasterMappings.push(mapping);
+          console.log(`🔗 ${config.type} mapping: ${targetField.tableName}.${targetField.fieldName} → ${config.selectedSheet}`);
+        }
       }
     }
     
@@ -228,7 +270,173 @@ export class FlexibleExcelParser {
   }
   
   /**
-   * Extract code values from a codemaster sheet
+   * Extract code values based on codemaster configuration type
+   */
+  private extractCodeValuesFromConfiguration(
+    worksheet: ExcelJS.Workbook.Worksheet, 
+    config: CodemasterConfiguration
+  ): CodeValue[] {
+    const jsonData = this.worksheetToArray(worksheet);
+    if (!jsonData || jsonData.length < 2) return [];
+    
+    const headerRow = jsonData[0];
+    const codeColIndex = headerRow.indexOf(config.codeColumn);
+    const descColIndex = headerRow.indexOf(config.descriptionColumn);
+    const statusColIndex = config.statusColumn ? headerRow.indexOf(config.statusColumn) : -1;
+    
+    if (codeColIndex === -1 || descColIndex === -1) {
+      console.warn(`Column mapping error: ${config.codeColumn} or ${config.descriptionColumn} not found`);
+      return [];
+    }
+    
+    const codeValues: CodeValue[] = [];
+    
+    // Process based on configuration type
+    switch (config.type) {
+      case 'field_enums':
+        // Simple code-description pairs for specific fields
+        return this.extractFieldEnumValues(jsonData, codeColIndex, descColIndex, statusColIndex, config);
+        
+      case 'entity_tables':
+        // Codes organized by entity/table categories
+        return this.extractEntityTableValues(jsonData, codeColIndex, descColIndex, statusColIndex, config);
+        
+      case 'mixed':
+        // Multiple code types with category column
+        return this.extractMixedCategoryValues(jsonData, codeColIndex, descColIndex, statusColIndex, config);
+        
+      default:
+        console.warn(`Unknown codemaster type: ${config.type}`);
+        return [];
+    }
+  }
+
+  /**
+   * Extract simple field enum values
+   */
+  private extractFieldEnumValues(
+    jsonData: string[][],
+    codeColIndex: number,
+    descColIndex: number,
+    statusColIndex: number,
+    config: CodemasterConfiguration
+  ): CodeValue[] {
+    const codeValues: CodeValue[] = [];
+    const fieldColIndex = config.fieldColumn ? jsonData[0].indexOf(config.fieldColumn) : -1;
+    
+    // Process all data rows (excluding header)
+    for (let i = 1; i < jsonData.length; i++) {
+      const row = jsonData[i];
+      if (row && row.length > Math.max(codeColIndex, descColIndex)) {
+        // If field column is specified, only include rows for specific fields
+        if (fieldColIndex >= 0 && config.targetFields.length > 0) {
+          const fieldName = row[fieldColIndex]?.toString().toLowerCase();
+          const hasMatchingField = config.targetFields.some(
+            tf => tf.fieldName.toLowerCase() === fieldName
+          );
+          if (!hasMatchingField) continue;
+        }
+        
+        const code = row[codeColIndex];
+        const description = row[descColIndex];
+        const status = statusColIndex >= 0 ? row[statusColIndex] : undefined;
+        
+        if (code && description) {
+          codeValues.push({
+            code: code.toString().trim(),
+            description: description.toString().trim(),
+            isActive: status ? this.parseActiveStatus(status.toString()) : true
+          });
+        }
+      }
+    }
+    
+    return codeValues;
+  }
+
+  /**
+   * Extract entity table values organized by entity/table
+   */
+  private extractEntityTableValues(
+    jsonData: string[][],
+    codeColIndex: number,
+    descColIndex: number,
+    statusColIndex: number,
+    config: CodemasterConfiguration
+  ): CodeValue[] {
+    const codeValues: CodeValue[] = [];
+    const entityColIndex = config.entityColumn ? jsonData[0].indexOf(config.entityColumn) : -1;
+    
+    // Process all data rows (excluding header)
+    for (let i = 1; i < jsonData.length; i++) {
+      const row = jsonData[i];
+      if (row && row.length > Math.max(codeColIndex, descColIndex)) {
+        const code = row[codeColIndex];
+        const description = row[descColIndex];
+        const status = statusColIndex >= 0 ? row[statusColIndex] : undefined;
+        const entityName = entityColIndex >= 0 ? row[entityColIndex]?.toString().trim() : undefined;
+        
+        // If entity column is specified and target fields exist, filter by target tables
+        if (entityColIndex >= 0 && config.targetFields.length > 0) {
+          const hasMatchingEntity = config.targetFields.some(
+            tf => tf.tableName.toLowerCase() === entityName?.toLowerCase()
+          );
+          if (!hasMatchingEntity) continue;
+        }
+        
+        if (code && description) {
+          codeValues.push({
+            code: code.toString().trim(),
+            description: description.toString().trim(),
+            isActive: status ? this.parseActiveStatus(status.toString()) : true,
+            notes: entityName ? `Entity: ${entityName}` : undefined
+          });
+        }
+      }
+    }
+    
+    return codeValues;
+  }
+
+  /**
+   * Extract mixed category values with category grouping
+   */
+  private extractMixedCategoryValues(
+    jsonData: string[][],
+    codeColIndex: number,
+    descColIndex: number,
+    statusColIndex: number,
+    config: CodemasterConfiguration
+  ): CodeValue[] {
+    const codeValues: CodeValue[] = [];
+    const categoryColIndex = config.categoryColumn ? jsonData[0].indexOf(config.categoryColumn) : -1;
+    
+    // Process all data rows (excluding header)
+    for (let i = 1; i < jsonData.length; i++) {
+      const row = jsonData[i];
+      if (row && row.length > Math.max(codeColIndex, descColIndex)) {
+        const code = row[codeColIndex];
+        const description = row[descColIndex];
+        const status = statusColIndex >= 0 ? row[statusColIndex] : undefined;
+        
+        if (code && description) {
+          const notes = categoryColIndex >= 0 ? row[categoryColIndex]?.toString() : undefined;
+          
+          codeValues.push({
+            code: code.toString().trim(),
+            description: description.toString().trim(),
+            isActive: status ? this.parseActiveStatus(status.toString()) : true,
+            notes: notes ? `Category: ${notes}` : undefined
+          });
+        }
+      }
+    }
+    
+    return codeValues;
+  }
+
+  /**
+   * Extract code values from a codemaster sheet (legacy method)
    */
   private extractCodeValuesFromSheet(
     worksheet: ExcelJS.Workbook.Worksheet, 
@@ -280,12 +488,156 @@ export class FlexibleExcelParser {
     // Common patterns for active status
     return !['inactive', 'disabled', 'false', '0', 'no', 'n'].includes(statusLower);
   }
+
+  /**
+   * Enhance existing tables with codemaster values when targetFields is empty
+   * Matches codemaster table names to existing parsed tables and adds value metadata
+   */
+  private enhanceTablesWithCodemasterValues(
+    config: CodemasterConfiguration,
+    codeValues: CodeValue[],
+    parsedTables: ParsedTable[]
+  ): CodemasterMapping[] {
+    const enhancedMappings: CodemasterMapping[] = [];
+    
+    console.log('🔍 [CODEMASTER DEBUG] Attempting to enhance tables with codemaster values');
+    console.log('🔍 [CODEMASTER DEBUG] Available tables:', parsedTables.map(t => t.name));
+    
+    // Extract table names from codemaster data based on configuration type
+    const codemasterTableNames = this.extractTableNamesFromCodemaster(config, codeValues);
+    console.log('🔍 [CODEMASTER DEBUG] Codemaster table names found:', codemasterTableNames);
+    
+    // Match each codemaster table name to existing parsed tables
+    for (const codemasterTableName of codemasterTableNames) {
+      const matchingTable = this.findMatchingTable(codemasterTableName, parsedTables);
+      
+      if (matchingTable) {
+        console.log(`🔗 [CODEMASTER DEBUG] Matched codemaster table "${codemasterTableName}" to existing table "${matchingTable.name}"`);
+        
+        // Get values specific to this table
+        const tableSpecificValues = this.getValuesForTable(codemasterTableName, config, codeValues);
+        
+        // Enhance the table with codemaster values
+        this.enhanceTableWithValues(matchingTable, tableSpecificValues, config);
+        
+        // Create a mapping entry for documentation
+        const mapping: CodemasterMapping = {
+          fieldName: '_table_values', // Special field name indicating table-level enhancement
+          tableName: matchingTable.name,
+          sheetName: config.selectedSheet,
+          codeColumn: config.codeColumn,
+          descriptionColumn: config.descriptionColumn,
+          codeValues: tableSpecificValues,
+          totalRecords: tableSpecificValues.length
+        };
+        
+        enhancedMappings.push(mapping);
+        console.log(`✅ [CODEMASTER DEBUG] Enhanced table "${matchingTable.name}" with ${tableSpecificValues.length} values`);
+      } else {
+        console.log(`⚠️ [CODEMASTER DEBUG] No matching table found for codemaster table "${codemasterTableName}"`);
+      }
+    }
+    
+    return enhancedMappings;
+  }
+
+  /**
+   * Extract table names from codemaster data based on configuration type
+   */
+  private extractTableNamesFromCodemaster(config: CodemasterConfiguration, codeValues: CodeValue[]): string[] {
+    // For entity_tables type, the entity column contains table names
+    if (config.type === 'entity_tables' && config.entityColumn) {
+      // Extract unique table names from the entity column values
+      const tableNames = new Set<string>();
+      codeValues.forEach(value => {
+        if (value.notes && value.notes.includes('Entity:')) {
+          const entityName = value.notes.replace('Entity:', '').trim();
+          if (entityName) {
+            tableNames.add(entityName);
+          }
+        }
+      });
+      return Array.from(tableNames);
+    }
+    
+    // For other types, we might need different extraction logic
+    // For now, return empty array as fallback
+    return [];
+  }
+
+  /**
+   * Find matching table in parsed tables using fuzzy matching
+   */
+  private findMatchingTable(codemasterTableName: string, parsedTables: ParsedTable[]): ParsedTable | null {
+    // First try exact match
+    let match = parsedTables.find(table => 
+      table.name.toLowerCase() === codemasterTableName.toLowerCase()
+    );
+    
+    if (match) return match;
+    
+    // Try case-insensitive partial match
+    match = parsedTables.find(table => 
+      table.name.toLowerCase().includes(codemasterTableName.toLowerCase()) ||
+      codemasterTableName.toLowerCase().includes(table.name.toLowerCase())
+    );
+    
+    return match || null;
+  }
+
+  /**
+   * Get codemaster values specific to a table
+   */
+  private getValuesForTable(tableName: string, config: CodemasterConfiguration, allValues: CodeValue[]): CodeValue[] {
+    // For entity_tables type, filter by entity name in notes
+    if (config.type === 'entity_tables') {
+      return allValues.filter(value => 
+        value.notes && value.notes.includes(`Entity: ${tableName}`)
+      );
+    }
+    
+    // For other types, return all values (can be refined later)
+    return allValues;
+  }
+
+  /**
+   * Enhance a table with codemaster values by adding metadata
+   */
+  private enhanceTableWithValues(table: ParsedTable, values: CodeValue[], config: CodemasterConfiguration): void {
+    // Add codemaster values as table metadata
+    // We can extend the ParsedTable interface later to include metadata
+    // For now, we'll add it as a comment or note in a special column
+    
+    // Look for ID or similar primary key column to enhance
+    const idColumn = table.columns.find(col => 
+      col.isPrimaryKey || 
+      col.name.toLowerCase().includes('id') ||
+      col.name.toLowerCase() === 'code'
+    );
+    
+    if (idColumn && values.length > 0) {
+      // Add values as a comment/note to the column
+      const valuesText = values.map(v => `${v.code}: ${v.description}`).join(', ');
+      
+      // Store the enhancement information (this could be extended to a proper metadata field)
+      (idColumn as any).codemasterValues = values;
+      (idColumn as any).codemasterSource = config.selectedSheet;
+      
+      console.log(`📝 [CODEMASTER DEBUG] Added ${values.length} codemaster values to column "${idColumn.name}" in table "${table.name}"`);
+    }
+  }
   
   /**
    * Parse Excel using provided column mappings
    */
   async parseWithMappings(buffer: Buffer, mappings: ColumnMappings): Promise<ParseResult> {
     try {
+      console.log('🔍 [CODEMASTER DEBUG] Starting parseWithMappings with mappings:', {
+        hasCodemasterConfigs: !!mappings.codemasterConfigurations,
+        codemasterConfigCount: mappings.codemasterConfigurations?.length || 0,
+        codemasterConfigs: mappings.codemasterConfigurations
+      });
+
       // Validate mappings first
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(buffer);
@@ -329,8 +681,13 @@ export class FlexibleExcelParser {
       // Auto-create missing target tables for foreign keys
       this.autoCreateMissingTables(result);
       
-      // Process manual codemaster mappings
-      result.codemasterMappings = this.processCodemasterMappings(workbook, mappings);
+      // Process manual codemaster mappings and enhance existing tables
+      console.log('🔍 [CODEMASTER DEBUG] About to process codemaster mappings...');
+      result.codemasterMappings = this.processCodemasterMappings(workbook, mappings, result.tables);
+      console.log('🔍 [CODEMASTER DEBUG] Processed codemaster mappings:', {
+        count: result.codemasterMappings.length,
+        mappings: result.codemasterMappings
+      });
       result.summary.codeMappingsFound = result.codemasterMappings.length;
       
       return result;

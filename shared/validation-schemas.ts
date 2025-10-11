@@ -98,7 +98,10 @@ export const projectDataSaveSchema = z.object({
         .max(50, 'Column type too long'),
       isPrimaryKey: z.boolean().optional(),
       isForeignKey: z.boolean().optional(),
-      isNullable: z.boolean().optional()
+      isNullable: z.boolean().optional(),
+      // Codemaster metadata fields
+      codemasterValues: z.array(z.any()).optional(),
+      codemasterSource: z.string().optional()
     })).max(200, 'Too many columns')
   })).max(500, 'Too many tables'),
   relationships: z.array(z.object({
@@ -110,7 +113,11 @@ export const projectDataSaveSchema = z.object({
   })).max(1000, 'Too many relationships'),
   mermaidCode: z.string()
     .min(1, 'Mermaid code required')
-    .max(100000, 'Mermaid code too large')
+    .max(200000, 'Mermaid code too large'),
+  filename: z.string()
+    .min(1, 'Filename required')
+    .max(255, 'Filename too long')
+    .optional()
 });
 
 // Organization validation schemas
@@ -173,6 +180,42 @@ export const tokenParamSchema = z.object({
     .regex(/^[a-zA-Z0-9\-_]+$/, 'Invalid token format')
 });
 
+// Codemaster configuration validation
+export const codemasterConfigurationSchema = z.object({
+  selectedSheet: z.string()
+    .min(1, 'Codemaster sheet name is required')
+    .max(100, 'Codemaster sheet name too long'),
+  type: z.enum(['entity_tables', 'field_enums', 'mixed'], {
+    errorMap: () => ({ message: 'Invalid codemaster type' })
+  }),
+  codeColumn: z.string()
+    .min(1, 'Code column is required')
+    .max(100, 'Code column name too long'),
+  descriptionColumn: z.string()
+    .min(1, 'Description column is required')
+    .max(100, 'Description column name too long'),
+  statusColumn: z.string()
+    .max(100, 'Status column name too long')
+    .optional(),
+  entityColumn: z.string()
+    .max(100, 'Entity column name too long')
+    .optional(),
+  fieldColumn: z.string()
+    .max(100, 'Field column name too long')
+    .optional(),
+  categoryColumn: z.string()
+    .max(100, 'Category column name too long')
+    .optional(),
+  targetFields: z.array(z.object({
+    tableName: z.string()
+      .min(1, 'Target table name is required')
+      .max(100, 'Target table name too long'),
+    fieldName: z.string()
+      .min(1, 'Target field name is required')
+      .max(100, 'Target field name too long')
+  })).max(50, 'Too many target fields')
+});
+
 // Flexible parser validation
 export const columnMappingsSchema = z.object({
   tableSheet: z.string()
@@ -204,6 +247,9 @@ export const columnMappingsSchema = z.object({
     .optional(),
   foreignKeyColumnColumn: z.string()
     .max(100, 'Foreign key column column too long')
+    .optional(),
+  codemasterConfigurations: z.array(codemasterConfigurationSchema)
+    .max(20, 'Too many codemaster configurations')
     .optional()
 });
 
@@ -279,5 +325,6 @@ export type ProjectUpdate = z.infer<typeof projectUpdateSchema>;
 export type OrganizationCreate = z.infer<typeof organizationCreateSchema>;
 export type MemberInvite = z.infer<typeof invitationCreateSchema>;
 export type ColumnMappings = z.infer<typeof columnMappingsSchema>;
+export type CodemasterConfiguration = z.infer<typeof codemasterConfigurationSchema>;
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
 export type SecurityEvent = z.infer<typeof securityEventSchema>;

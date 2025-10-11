@@ -50,6 +50,31 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const [searchTargetTable, setSearchTargetTable] = useState<string | null>(null);
   const [isSearchTriggered, setIsSearchTriggered] = useState<boolean>(false);
   
+  // Tooltip state for codemaster values
+  const [tooltip, setTooltip] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    content: string;
+    tableName: string;
+    columnName: string;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    content: '',
+    tableName: '',
+    columnName: ''
+  });
+
+  // Drag state for tooltip
+  const [isDraggingTooltip, setIsDraggingTooltip] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Debug tooltip state changes
+  useEffect(() => {
+    console.log(`📊 [TOOLTIP STATE] Tooltip state changed:`, tooltip);
+  }, [tooltip]);
   
   // Transform-based Pan-Zoom state and refs
   const svgContainerRef = useRef<HTMLDivElement>(null);
@@ -777,12 +802,125 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   }, []);
 
   // Bind ERD-specific event handlers after SVG is rendered (Mermaid best practice)
-  const bindERDEventHandlers = useCallback(() => {
-    const svgContainer = svgContainerRef.current;
-    if (!svgContainer) return;
+  // Get codemaster metadata for the current domain
+  const getCurrentCodemasterMetadata = useCallback(() => {
+    if (!domain || !domainResults[domain]) {
+      console.log(`🔍 [TOOLTIP DEBUG] No domain or domain results for domain: ${domain}`);
+      return {};
+    }
+    const metadata = domainResults[domain].codemasterMetadata || {};
+    const tableCount = Object.keys(metadata).length;
+    console.log(`🔍 [TOOLTIP DEBUG] Domain ${domain} has codemaster metadata for ${tableCount} tables:`, Object.keys(metadata));
+    return metadata;
+  }, [domain, domainResults]);
 
-    const svgRoot = svgContainer.querySelector('svg');
-    if (!svgRoot) return;
+  // Format codemaster values for tooltip display
+  const formatCodemasterTooltip = useCallback((values: any[]) => {
+    if (!values || values.length === 0) return '';
+    
+    return values.map(value => {
+      const code = value.code || '';
+      const description = value.description || '';
+      return `${code}: ${description}`;
+    }).join('\n');
+  }, []);
+
+  // Generate comprehensive codemaster tooltip for a table
+  const generateTableCodemasterTooltip = useCallback((tableName: string) => {
+    const codemasterMetadata = getCurrentCodemasterMetadata();
+    const tableCodemasterData = codemasterMetadata[tableName];
+    
+    if (!tableCodemasterData || Object.keys(tableCodemasterData).length === 0) {
+      return '';
+    }
+    
+    const tooltipLines: string[] = [];
+    
+    Object.keys(tableCodemasterData).forEach(columnName => {
+      const values = tableCodemasterData[columnName];
+      const formattedValues = formatCodemasterTooltip(values);
+      if (formattedValues) {
+        // Clean format: just the codemaster values, no column name header
+        tooltipLines.push(formattedValues);
+      }
+    });
+    
+    return tooltipLines.join('\n\n');
+  }, [getCurrentCodemasterMetadata, formatCodemasterTooltip]);
+
+  // Smart positioning to avoid covering the source table
+  const calculateSmartTooltipPosition = useCallback((tableElement: Element, svgContainer: HTMLDivElement) => {
+    const tableRect = tableElement.getBoundingClientRect();
+    const containerRect = svgContainer.getBoundingClientRect();
+    
+    // Tooltip dimensions (estimated)
+    const tooltipWidth = 400;
+    const tooltipHeight = 300;
+    const margin = 15;
+    
+    // Convert to relative coordinates within the SVG container
+    const relativeTableRect = {
+      left: tableRect.left - containerRect.left,
+      right: tableRect.right - containerRect.left,
+      top: tableRect.top - containerRect.top,
+      bottom: tableRect.bottom - containerRect.top,
+      width: tableRect.width,
+      height: tableRect.height
+    };
+    
+    // Try different positions in order of preference
+    const positions = [
+      // Right side
+      {
+        x: relativeTableRect.right + margin,
+        y: relativeTableRect.top,
+        preference: 1
+      },
+      // Left side  
+      {
+        x: relativeTableRect.left - tooltipWidth - margin,
+        y: relativeTableRect.top,
+        preference: 2
+      },
+      // Bottom
+      {
+        x: relativeTableRect.left,
+        y: relativeTableRect.bottom + margin,
+        preference: 3
+      },
+      // Top
+      {
+        x: relativeTableRect.left,
+        y: relativeTableRect.top - tooltipHeight - margin,
+        preference: 4
+      }
+    ];
+    
+    // Find the best position that fits within viewport
+    const viewportWidth = containerRect.width;
+    const viewportHeight = containerRect.height;
+    
+    for (const pos of positions) {
+      const fitsHorizontally = pos.x >= 0 && pos.x + tooltipWidth <= viewportWidth;
+      const fitsVertically = pos.y >= 0 && pos.y + tooltipHeight <= viewportHeight;
+      
+      if (fitsHorizontally && fitsVertically) {
+        console.log(`📍 [TOOLTIP] Smart positioning: using position ${pos.preference} at (${pos.x}, ${pos.y})`);
+        return { x: pos.x, y: pos.y };
+      }
+    }
+    
+    // Fallback: center of viewport if no position fits perfectly
+    const fallbackX = Math.max(0, (viewportWidth - tooltipWidth) / 2);
+    const fallbackY = Math.max(0, (viewportHeight - tooltipHeight) / 2);
+    
+    console.log(`📍 [TOOLTIP] Smart positioning: using fallback position at (${fallbackX}, ${fallbackY})`);
+    return { x: fallbackX, y: fallbackY };
+  }, []);
+
+  // Separated tooltip binding logic for better organization and timing control
+  const bindTooltipHandlers = useCallback((svgContainer: HTMLDivElement, svgRoot: SVGSVGElement) => {
+    console.log(`🔍 [TOOLTIP DEBUG] bindTooltipHandlers called`);
 
     // Remove existing event listeners to prevent duplicates
     const existingHandlers = svgRoot.querySelectorAll('[data-erd-handler]');
@@ -816,6 +954,115 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         }
       });
     });
+
+    // Add tooltip functionality for codemaster values
+    const codemasterMetadata = getCurrentCodemasterMetadata();
+    
+    // Mermaid uses foreignObject + span elements for text, not SVG text elements
+    const columnElements = svgRoot.querySelectorAll('span, text, tspan');
+    const foreignObjects = svgRoot.querySelectorAll('foreignObject');
+    const spanElements = svgRoot.querySelectorAll('span');
+    
+    console.log(`🔍 [TOOLTIP DEBUG] Found ${columnElements.length} total text elements (spans + text + tspan) in SVG`);
+    console.log(`🔍 [TOOLTIP DEBUG] Breakdown: ${spanElements.length} spans, ${svgRoot.querySelectorAll('text').length} text, ${svgRoot.querySelectorAll('tspan').length} tspan`);
+    console.log(`🔍 [TOOLTIP DEBUG] Found ${foreignObjects.length} foreignObject containers`);
+    console.log(`🔍 [TOOLTIP DEBUG] Codemaster metadata available for tables:`, Object.keys(codemasterMetadata));
+    
+    // Clean approach: No icons needed - use table click events instead
+    // Just log which tables have codemaster data for debugging
+    const tablesWithCodemaster = new Set<string>();
+    
+    Object.keys(codemasterMetadata).forEach(tableName => {
+      if (Object.keys(codemasterMetadata[tableName]).length > 0) {
+        tablesWithCodemaster.add(tableName);
+        console.log(`🏷️ [CODEMASTER DEBUG] Table "${tableName}" has ${Object.keys(codemasterMetadata[tableName]).length} codemaster columns`);
+      }
+    });
+    
+    console.log(`🏷️ [CODEMASTER DEBUG] Found ${tablesWithCodemaster.size} tables with codemaster data:`, Array.from(tablesWithCodemaster));
+    
+    // Remove any existing tooltip icons from previous implementations
+    const existingIcons = svgRoot.querySelectorAll('.codemaster-tooltip-icon');
+    existingIcons.forEach(icon => icon.remove());
+  }, [getCurrentCodemasterMetadata, formatCodemasterTooltip, setTooltip]);
+
+  const bindERDEventHandlers = useCallback(() => {
+    const svgContainer = svgContainerRef.current;
+    if (!svgContainer) {
+      console.log(`🔍 [TOOLTIP DEBUG] No SVG container found, skipping event handlers`);
+      return;
+    }
+
+    const svgRoot = svgContainer.querySelector('svg');
+    if (!svgRoot) {
+      console.log(`🔍 [TOOLTIP DEBUG] No SVG root found, skipping event handlers`);
+      return;
+    }
+    
+    console.log(`🔍 [TOOLTIP DEBUG] Binding ERD event handlers to SVG with ${svgRoot.children.length} children`);
+    
+    // Add small delay to ensure all DOM manipulations are complete
+    // This helps with timing issues when switching domains or initial load
+    setTimeout(() => {
+      bindTooltipHandlers(svgContainer, svgRoot);
+    }, 50);
+  }, [bindTooltipHandlers]);
+
+  // Reset tooltip when domain changes
+  useEffect(() => {
+    setTooltip(prev => ({ ...prev, visible: false }));
+  }, [domain]);
+
+  // Drag event handlers for tooltip
+  useEffect(() => {
+    if (!isDraggingTooltip) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
+      
+      // Keep tooltip within viewport bounds
+      const maxX = window.innerWidth - 400; // tooltip width
+      const maxY = window.innerHeight - 300; // tooltip height
+      
+      const constrainedX = Math.max(0, Math.min(newX, maxX));
+      const constrainedY = Math.max(0, Math.min(newY, maxY));
+      
+      setTooltip(prev => ({
+        ...prev,
+        x: constrainedX,
+        y: constrainedY
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingTooltip(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingTooltip, dragOffset]);
+
+  // Handle tooltip drag start
+  const handleTooltipDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setIsDraggingTooltip(true);
+    setDragOffset({
+      x: e.clientX - tooltip.x,
+      y: e.clientY - tooltip.y
+    });
+  }, [tooltip.x, tooltip.y]);
+
+  // Handle tooltip close
+  const handleTooltipClose = useCallback(() => {
+    setTooltip(prev => ({ ...prev, visible: false }));
   }, []);
 
   // Get entity ID from an entity box element
@@ -1604,16 +1851,43 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             }
             return; // Prevent further processing
           } else {
-            console.log(`🎯 DELEGATED TABLE CLICK: ${tableName}`);
-            console.log(`  Event details:`, {
-              type: event.type,
-              target: target.tagName,
-              entityElement: entityParent.tagName,
-              detectionStrategy: entityParent.closest('g[class*="node"]') ? 'closest(g[class*="node"])' : 'manual traversal'
-            });
+            // Two-click system: First click selects, second click shows tooltip
+            const codemasterTooltipContent = generateTableCodemasterTooltip(tableName);
             
-            // Call the table click handler directly
-            handleTableClick(tableName);
+            if (selectedTable === tableName && codemasterTooltipContent) {
+              // Second click on already-selected table with codemaster data: show tooltip
+              console.log(`🏷️ CODEMASTER TOOLTIP (2nd click): "${tableName}" -> showing tooltip`);
+              
+              // Use smart positioning to avoid covering the table
+              const smartPosition = calculateSmartTooltipPosition(entityParent, svgContainer);
+              
+              setTooltip({
+                visible: true,
+                x: smartPosition.x,
+                y: smartPosition.y,
+                content: codemasterTooltipContent,
+                tableName,
+                columnName: 'All Columns'
+              });
+              
+              // No auto-hide - user will close manually
+              
+              return; // Prevent further processing
+            } else {
+              // First click or table without codemaster data: select/pan-zoom (existing behavior)
+              console.log(`🎯 TABLE SELECT (1st click): ${tableName}${codemasterTooltipContent ? ' (has codemaster - click again for tooltip)' : ''}`);
+              console.log(`  Event details:`, {
+                type: event.type,
+                target: target.tagName,
+                entityElement: entityParent.tagName,
+                detectionStrategy: entityParent.closest('g[class*="node"]') ? 'closest(g[class*="node"])' : 'manual traversal',
+                isAlreadySelected: selectedTable === tableName,
+                hasCodemaster: !!codemasterTooltipContent
+              });
+              
+              // Call the table click handler directly (selects table and triggers pan/zoom)
+              handleTableClick(tableName);
+            }
           }
         } else {
           console.log(`  ❌ No table found for this click - debugging info:`);
@@ -1634,7 +1908,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     
     document.addEventListener('click', delegatedClickHandler, true);
     return () => document.removeEventListener('click', delegatedClickHandler, true);
-  }, [handleTableClick]); // Add handleTableClick to dependencies
+  }, [handleTableClick, generateTableCodemasterTooltip, setTooltip, onExternalTableClick, calculateSmartTooltipPosition, selectedTable]); // Add dependencies
 
   // Clean rendering - no domain styling
 
@@ -1840,6 +2114,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       
+      // Hide tooltip during zoom operations
+      setTooltip(prev => ({ ...prev, visible: false }));
+      
       // Get mouse position relative to container
       const rect = container.getBoundingClientRect();
       const clientX = e.clientX - rect.left;
@@ -1890,10 +2167,18 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       if (!isPanEnabled) return;
       if (e.button !== 0) return; // Only left mouse button
       
-      // Don't start panning if clicking on a table (let table click handler deal with it)
+      // Hide tooltip during pan operations
+      setTooltip(prev => ({ ...prev, visible: false }));
+      
+      // Don't start panning if clicking on a table or tooltip-enhanced element
       const target = e.target as Element;
       const isTable = target.closest('g[data-table-name]');
-      if (isTable) return;
+      const isTooltipElement = target.style?.color === 'rgb(99, 102, 241)' || target.style?.fill === 'rgb(99, 102, 241)';
+      
+      if (isTable || isTooltipElement) {
+        console.log(`🚫 [TOOLTIP DEBUG] Skipping pan for tooltip element:`, target);
+        return;
+      }
       
       e.preventDefault();
       setIsDragging(true);
@@ -3988,6 +4273,28 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 >
                   <Move className="h-4 w-4" />
                 </Button>
+                
+                {/* Debug tooltip test button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    console.log(`🧪 [DEBUG] Testing tooltip manually`);
+                    setTooltip({
+                      visible: true,
+                      x: 200,
+                      y: 100,
+                      content: 'Test tooltip content\nMultiple lines',
+                      tableName: 'TestTable',
+                      columnName: 'TestColumn'
+                    });
+                    setTimeout(() => setTooltip(prev => ({ ...prev, visible: false })), 3000);
+                  }}
+                  title="Test Tooltip"
+                  className="h-8 w-8 p-0 bg-blue-500 text-white"
+                >
+                  T
+                </Button>
               </div>
 
               {/* Selection Info */}
@@ -4032,6 +4339,55 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           </div>
         )}
       </div>
+
+
+      {/* Enhanced Codemaster Tooltip with Drag & Close */}
+      {tooltip.visible && (
+        <div
+          className="absolute z-50 bg-gray-900 text-white rounded-lg shadow-xl border border-gray-600 pointer-events-auto"
+          style={{
+            left: tooltip.x,
+            top: tooltip.y,
+            width: '400px',
+            maxHeight: '300px',
+            cursor: isDraggingTooltip ? 'grabbing' : 'default'
+          }}
+        >
+          {/* Title Bar with Drag Handle and Close Button */}
+          <div
+            className="bg-gray-800 rounded-t-lg px-4 py-2 border-b border-gray-600 flex justify-between items-center cursor-grab active:cursor-grabbing select-none"
+            onMouseDown={handleTooltipDragStart}
+          >
+            <div className="flex items-center space-x-2">
+              <div className="text-blue-300 font-semibold text-sm">
+                {tooltip.tableName}
+              </div>
+              <div className="text-gray-400 text-xs">
+                ⋮⋮ drag to move
+              </div>
+            </div>
+            <button
+              onClick={handleTooltipClose}
+              className="text-gray-400 hover:text-white hover:bg-gray-700 rounded px-2 py-1 text-sm transition-colors"
+              title="Close tooltip"
+            >
+              ✕
+            </button>
+          </div>
+          
+          {/* Content Area */}
+          <div className="p-4 max-h-64 overflow-y-auto">
+            <div className="whitespace-pre-line text-gray-200 text-xs leading-relaxed">
+              {tooltip.content}
+            </div>
+          </div>
+          
+          {/* Optional resize handle in bottom-right corner */}
+          <div className="absolute bottom-0 right-0 w-3 h-3 text-gray-500 text-xs leading-none cursor-se-resize opacity-50 hover:opacity-100">
+            ⋱
+          </div>
+        </div>
+      )}
 
       {/* Codemaster Panel */}
       <CodemasterPanel

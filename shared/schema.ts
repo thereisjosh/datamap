@@ -224,12 +224,22 @@ export const columnSchema = z.object({
     table: z.string(),
     column: z.string(),
   }).optional(),
+  // Extended properties for codemaster metadata
+  codemasterValues: z.array(z.any()).optional(),
+  codemasterSource: z.string().optional(),
 });
 
 export const tableSchema = z.object({
   name: z.string(),
-  attributes: z.array(columnSchema),
-});
+  attributes: z.array(columnSchema).optional(),
+  columns: z.array(columnSchema).optional(),
+}).refine(
+  (data) => data.attributes || data.columns,
+  {
+    message: "Either 'attributes' or 'columns' must be provided",
+    path: ["attributes", "columns"],
+  }
+);
 
 export const relationshipSchema = z.object({
   sourceTable: z.string(),

@@ -41,6 +41,9 @@ export interface ParsedTable {
       table: string;
       column: string;
     };
+    // Codemaster metadata fields
+    codemasterValues?: any[];
+    codemasterSource?: string;
   }>;
 }
 
@@ -128,6 +131,27 @@ export interface CodemasterSheetMapping {
   }>;
 }
 
+// Codemaster configuration types
+export type CodemasterType = 'entity_tables' | 'field_enums' | 'mixed';
+
+export interface CodemasterConfiguration {
+  selectedSheet: string;
+  type: CodemasterType;
+  codeColumn: string;
+  descriptionColumn: string;
+  statusColumn?: string;
+  // For entity_tables type
+  entityColumn?: string;
+  // For field_enums type  
+  fieldColumn?: string;
+  // For mixed type
+  categoryColumn?: string;
+  targetFields: Array<{
+    tableName: string;
+    fieldName: string;
+  }>;
+}
+
 // Column mapping form state
 export interface MappingFormState {
   // Table mappings
@@ -147,8 +171,7 @@ export interface MappingFormState {
   foreignKeyColumnColumn: string;
   
   // Codemaster mappings
-  codemasterSheets: string[];
-  codemasterMappings: CodemasterSheetMapping[];
+  codemasterConfigurations: CodemasterConfiguration[];
 }
 
 // Step validation state

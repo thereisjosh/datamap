@@ -24,7 +24,7 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
-import { type ExcelSheet, type ColumnMappings, type MappingFormState, type StepValidation, type CodemasterSheetMapping } from './types';
+import { type ExcelSheet, type ColumnMappings, type MappingFormState, type StepValidation, type CodemasterSheetMapping, type CodemasterConfiguration, type CodemasterType } from './types';
 
 interface ColumnMapperProps {
   sheets: ExcelSheet[];
@@ -381,135 +381,211 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Database className="h-5 w-5 text-purple-600" />
-            Codemaster/Lookup Mapping
+            Configure Codemaster Sheets
           </CardTitle>
           <CardDescription>
-            Configure which sheets contain lookup/code values and map them to specific table fields.
+            Map lookup tables, enums, and code values to your data fields
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Codemaster Sheets</Label>
-            <p className="text-xs text-muted-foreground">
-              Select sheets that contain lookup values, enums, or code tables
-            </p>
-            
-            {/* Sheet Multi-selector */}
-            <div className="space-y-2">
-              {sheets.map((sheet) => (
-                <div key={sheet.name} className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id={`codemaster-${sheet.name}`}
-                    checked={mappings.codemasterSheets?.includes(sheet.name) ?? false}
-                    onChange={(e) => {
-                      const currentSheets = mappings.codemasterSheets ?? [];
-                      const newSheets = e.target.checked
-                        ? [...currentSheets, sheet.name]
-                        : currentSheets.filter(s => s !== sheet.name);
-                      
-                      handleMappingChange('codemasterSheets', newSheets);
-                      
-                      // Remove mapping if sheet is unchecked
-                      if (!e.target.checked) {
-                        const currentMappings = mappings.codemasterMappings ?? [];
-                        const newMappings = currentMappings.filter(
-                          m => m.sheetName !== sheet.name
-                        );
-                        handleMappingChange('codemasterMappings', newMappings);
-                      }
-                    }}
-                    className="rounded border-gray-300"
-                  />
-                  <label htmlFor={`codemaster-${sheet.name}`} className="text-sm cursor-pointer flex-1">
-                    <div className="flex items-center justify-between">
-                      <span>{sheet.name}</span>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{sheet.columns.length} cols</span>
-                        <span>{sheet.rowCount} rows</span>
-                      </div>
-                    </div>
-                  </label>
-                </div>
-              ))}
-            </div>
+          {/* Add New Codemaster Configuration */}
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Codemaster Configurations</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const newConfig: CodemasterConfiguration = {
+                  selectedSheet: '',
+                  type: 'field_enums',
+                  codeColumn: '',
+                  descriptionColumn: '',
+                  targetFields: []
+                };
+                const currentConfigs = mappings.codemasterConfigurations ?? [];
+                handleMappingChange('codemasterConfigurations', [...currentConfigs, newConfig]);
+              }}
+              className="h-8"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Codemaster
+            </Button>
           </div>
 
-          {/* Individual Codemaster Sheet Configurations */}
-          {(mappings.codemasterSheets ?? []).map((sheetName) => {
-            const sheet = sheets.find(s => s.name === sheetName);
-            if (!sheet) return null;
+          {/* Codemaster Configuration Cards */}
+          {(mappings.codemasterConfigurations ?? []).map((config, index) => {
+            const sheet = sheets.find(s => s.name === config.selectedSheet);
             
-            const mapping = (mappings.codemasterMappings ?? []).find(m => m.sheetName === sheetName) || {
-              sheetName,
-              codeColumn: '',
-              descriptionColumn: '',
-              statusColumn: '',
-              targetFields: []
+            const updateConfig = (updates: Partial<CodemasterConfiguration>) => {
+              const currentConfigs = mappings.codemasterConfigurations ?? [];
+              const newConfigs = [...currentConfigs];
+              newConfigs[index] = { ...config, ...updates };
+              handleMappingChange('codemasterConfigurations', newConfigs);
+            };
+
+            const removeConfig = () => {
+              const currentConfigs = mappings.codemasterConfigurations ?? [];
+              const newConfigs = currentConfigs.filter((_, i) => i !== index);
+              handleMappingChange('codemasterConfigurations', newConfigs);
             };
 
             return (
-              <Card key={sheetName} className="bg-purple-50/50 border-purple-200">
+              <Card key={index} className="bg-purple-50/50 border-purple-200">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Database className="h-4 w-4 text-purple-600" />
-                    {sheetName} Configuration
-                  </CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Database className="h-4 w-4 text-purple-600" />
+                      Codemaster {index + 1}
+                    </CardTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={removeConfig}
+                      className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {renderColumnSelector(
-                      "Code Column",
-                      mapping.codeColumn,
-                      (value) => {
-                        const updatedMapping = { ...mapping, codeColumn: value };
-                        const currentMappings = mappings.codemasterMappings ?? [];
-                        const newMappings = currentMappings.filter(m => m.sheetName !== sheetName);
-                        newMappings.push(updatedMapping);
-                        handleMappingChange('codemasterMappings', newMappings);
-                      },
-                      sheetName,
-                      true,
-                      "Column containing the lookup codes/keys"
-                    )}
-
-                    {renderColumnSelector(
-                      "Description Column",
-                      mapping.descriptionColumn,
-                      (value) => {
-                        const updatedMapping = { ...mapping, descriptionColumn: value };
-                        const currentMappings = mappings.codemasterMappings ?? [];
-                        const newMappings = currentMappings.filter(m => m.sheetName !== sheetName);
-                        newMappings.push(updatedMapping);
-                        handleMappingChange('codemasterMappings', newMappings);
-                      },
-                      sheetName,
-                      true,
-                      "Column containing human-readable descriptions"
-                    )}
-
-                    {renderColumnSelector(
-                      "Status Column (Optional)",
-                      mapping.statusColumn || '',
-                      (value) => {
-                        const updatedMapping = { ...mapping, statusColumn: value };
-                        const currentMappings = mappings.codemasterMappings ?? [];
-                        const newMappings = currentMappings.filter(m => m.sheetName !== sheetName);
-                        newMappings.push(updatedMapping);
-                        handleMappingChange('codemasterMappings', newMappings);
-                      },
-                      sheetName,
-                      false,
-                      "Column indicating if code is active/inactive"
-                    )}
+                  {/* Sheet Selection */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Codemaster Sheet</Label>
+                    <Select
+                      value={config.selectedSheet}
+                      onValueChange={(value) => updateConfig({ selectedSheet: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a sheet containing lookup values" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sheets.map((sheet) => (
+                          <SelectItem key={sheet.name} value={sheet.name}>
+                            <div className="flex items-center justify-between w-full">
+                              <span>{sheet.name}</span>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground ml-2">
+                                <span>{sheet.columns.length} cols</span>
+                                <span>{sheet.rowCount} rows</span>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
-                  {mapping.codeColumn && mapping.descriptionColumn && (
-                    <div className="flex items-center gap-2 p-2 bg-purple-100 border border-purple-200 rounded-md">
-                      <CheckCircle className="h-4 w-4 text-purple-600" />
-                      <span className="text-sm text-purple-700">
-                        Codemaster "{sheetName}" configured
-                      </span>
+                  {/* Codemaster Type Selection */}
+                  {config.selectedSheet && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Codemaster Type</Label>
+                      <Select
+                        value={config.type}
+                        onValueChange={(value: CodemasterType) => updateConfig({ type: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="field_enums">
+                            <div className="space-y-1">
+                              <div className="font-medium">Field Enums</div>
+                              <div className="text-xs text-muted-foreground">
+                                Simple code-description pairs for specific fields
+                              </div>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="entity_tables">
+                            <div className="space-y-1">
+                              <div className="font-medium">Entity Tables</div>
+                              <div className="text-xs text-muted-foreground">
+                                Codes organized by entity/table categories
+                              </div>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="mixed">
+                            <div className="space-y-1">
+                              <div className="font-medium">Mixed Categories</div>
+                              <div className="text-xs text-muted-foreground">
+                                Multiple code types in one sheet with category column
+                              </div>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Column Mappings */}
+                  {config.selectedSheet && sheet && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {renderColumnSelector(
+                          "Code Column",
+                          config.codeColumn,
+                          (value) => updateConfig({ codeColumn: value }),
+                          config.selectedSheet,
+                          true,
+                          "Column containing the lookup codes/keys"
+                        )}
+
+                        {renderColumnSelector(
+                          "Description Column",
+                          config.descriptionColumn,
+                          (value) => updateConfig({ descriptionColumn: value }),
+                          config.selectedSheet,
+                          true,
+                          "Column containing human-readable descriptions"
+                        )}
+
+                        {renderColumnSelector(
+                          "Status Column (Optional)",
+                          config.statusColumn || '',
+                          (value) => updateConfig({ statusColumn: value }),
+                          config.selectedSheet,
+                          false,
+                          "Column indicating if code is active/inactive"
+                        )}
+
+                        {/* Type-specific columns */}
+                        {config.type === 'entity_tables' && renderColumnSelector(
+                          "Entity Column",
+                          config.entityColumn || '',
+                          (value) => updateConfig({ entityColumn: value }),
+                          config.selectedSheet,
+                          true,
+                          "Column containing table/entity names"
+                        )}
+
+                        {config.type === 'field_enums' && renderColumnSelector(
+                          "Field Column",
+                          config.fieldColumn || '',
+                          (value) => updateConfig({ fieldColumn: value }),
+                          config.selectedSheet,
+                          true,
+                          "Column containing field names"
+                        )}
+
+                        {config.type === 'mixed' && renderColumnSelector(
+                          "Category Column",
+                          config.categoryColumn || '',
+                          (value) => updateConfig({ categoryColumn: value }),
+                          config.selectedSheet,
+                          true,
+                          "Column containing category/grouping information"
+                        )}
+                      </div>
+
+                      {/* Configuration Status */}
+                      {config.codeColumn && config.descriptionColumn && (
+                        <div className="flex items-center gap-2 p-2 bg-purple-100 border border-purple-200 rounded-md">
+                          <CheckCircle className="h-4 w-4 text-purple-600" />
+                          <span className="text-sm text-purple-700">
+                            Codemaster configuration ready for "{config.selectedSheet}"
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -517,11 +593,12 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
             );
           })}
 
-          {(mappings.codemasterSheets ?? []).length === 0 && (
-            <div className="text-center py-6 text-muted-foreground">
+          {/* Empty State */}
+          {(mappings.codemasterConfigurations ?? []).length === 0 && (
+            <div className="text-center py-6 text-muted-foreground border-2 border-dashed border-gray-200 rounded-lg">
               <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No codemaster sheets selected</p>
-              <p className="text-xs">Select sheets above to configure lookup value mappings</p>
+              <p className="text-sm">No codemaster configurations</p>
+              <p className="text-xs">Click "Add Codemaster" to configure lookup value mappings</p>
             </div>
           )}
         </CardContent>
