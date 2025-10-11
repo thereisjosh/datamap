@@ -135,7 +135,7 @@ export class AdvancedDomainBoundaryService {
     includeTransitiveDeps: false,   // Conservative - direct dependencies only
     businessWeighting: 0.3,         // Business naming influence
     
-    enableLLM: false,              // Disabled for mathematical approach
+    enableLLM: process.env.USE_INTELLIGENT_CLUSTERING === 'true', // Use environment configuration
     enableValidation: true,
     performanceMode: 'balanced',
     batchProcessing: true,
@@ -1258,9 +1258,14 @@ export class AdvancedDomainBoundaryService {
       const allHubs = domain.referencedHubs.concat(domain.masterHub ? [domain.masterHub] : []);
       const hubTables = [...new Set(allHubs)]; // Remove duplicates
       
+      // Generate proper hub-based domain name
+      const primaryHub = domain.masterHub || hubTables[0] || `UnknownDomain${index + 1}`;
+      const properDomainName = `${primaryHub} Domain`;
+      
+      
       return {
         id: domain.id,
-        name: domain.name,
+        name: properDomainName,
         tables: domain.totalTables,
         size: domain.totalTables.length,
         confidence: domain.confidence,
@@ -1285,14 +1290,17 @@ export class AdvancedDomainBoundaryService {
    */
   private generateBusinessContext(domain: DomainResult): string {
     if (domain.masterHub) {
-      return `Domain centered around ${domain.masterHub} with ${domain.coreTables.length} core tables`;
+      // Return clean hub-based name (same as domain.name)
+      return `${domain.masterHub} Domain`;
     }
     
     if (domain.referencedHubs.length > 0) {
-      return `Domain referencing hubs: ${domain.referencedHubs.join(', ')}`;
+      // Use the first referenced hub for naming
+      const primaryHub = domain.referencedHubs[0];
+      return `${primaryHub} Domain`;
     }
     
-    return `Self-contained domain with ${domain.coreTables.length} tables`;
+    return `General Domain`;
   }
 
   /**
@@ -1527,14 +1535,6 @@ export class AdvancedDomainBoundaryService {
       verbose: true  // Enable debugging to track hub-centered initialization
     };
 
-    // Debug logging to verify parameters
-    console.log(`🔍 DEBUG: Calling Louvain with:`);
-    console.log(`   📊 Tables: ${tables.length}`);
-    console.log(`   🔗 Edge weights: ${edgeWeights.size}`);
-    console.log(`   🎯 Hub tables: ${hubDetection.hubs.length} [${hubDetection.hubs.slice(0, 3).join(', ')}...]`);
-    console.log(`   🧠 Semantic vectors: ${semanticVectors ? semanticVectors.length : 0}`);
-    console.log(`   ⚙️ Resolution: ${louvainOptions.resolution}`);
-    console.log(`   📏 Min cluster size: ${louvainOptions.minClusterSize}`);
     
     // Pass hub table names and semantic vectors for complete conservative clustering  
     return await this.louvainEngine.clusterTables(tables, relationships, edgeWeights, hubDetection.hubs, semanticVectors);

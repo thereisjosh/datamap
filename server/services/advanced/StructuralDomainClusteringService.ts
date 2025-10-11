@@ -337,28 +337,80 @@ export class StructuralDomainClusteringService {
     hubOwnership: Map<string, HubOwnership>
   ): Map<string, DomainResult> {
     
+    // Group hubs by domain to handle multiple hubs per domain properly
+    const hubsByDomain = new Map<string, HubOwnership[]>();
+    
     for (const [hubTable, ownership] of hubOwnership) {
-      const ownerDomain = domains.get(ownership.ownerDomain);
-      if (ownerDomain) {
-        // Set this domain as the master of this hub
-        ownerDomain.masterHub = hubTable;
+      if (!hubsByDomain.has(ownership.ownerDomain)) {
+        hubsByDomain.set(ownership.ownerDomain, []);
+      }
+      hubsByDomain.get(ownership.ownerDomain)!.push(ownership);
+    }
+    
+    // Process each domain and choose the best hub as masterHub
+    for (const [domainId, domainHubs] of hubsByDomain) {
+      const ownerDomain = domains.get(domainId);
+      if (!ownerDomain) continue;
+      
+      // Choose the hub with the highest dependency score as masterHub
+      const bestHub = domainHubs.reduce((best, current) => 
+        current.dependencyScore > best.dependencyScore ? current : best
+      );
+      
+      // Set the best hub as the masterHub
+      if (!ownerDomain.masterHub || bestHub.dependencyScore > 0) {
+        ownerDomain.masterHub = bestHub.hubTable;
         
-        // Add hub and its related tables to core tables
-        ownerDomain.coreTables.push(hubTable);
-        ownerDomain.coreTables.push(...ownership.relatedTables);
-        
-        // Update total tables
-        ownerDomain.totalTables = [
-          ...new Set([...ownerDomain.coreTables, ...ownerDomain.referencedHubs])
-        ];
-        
-        logger.info('Hub ownership assigned', {
-          hub: hubTable,
-          domain: ownership.ownerDomain,
-          relatedTables: ownership.relatedTables.length,
-          domainTotalTables: ownerDomain.totalTables.length
+        logger.info('🏆 Master hub assigned', {
+          domain: domainId,
+          masterHub: bestHub.hubTable,
+          dependencyScore: bestHub.dependencyScore.toFixed(3),
+          totalHubsInDomain: domainHubs.length,
+          alternativeHubs: domainHubs.filter(h => h.hubTable !== bestHub.hubTable).map(h => h.hubTable)
         });
       }
+      
+      // Add all hubs and their related tables to core tables
+      for (const hubOwnership of domainHubs) {
+        ownerDomain.coreTables.push(hubOwnership.hubTable);
+        ownerDomain.coreTables.push(...hubOwnership.relatedTables);
+        
+        logger.info('Hub ownership assigned', {
+          hub: hubOwnership.hubTable,
+          domain: domainId,
+          relatedTables: hubOwnership.relatedTables.length,
+          isMasterHub: hubOwnership.hubTable === ownerDomain.masterHub
+        });
+      }
+      
+      // Update total tables (remove duplicates)
+      ownerDomain.totalTables = [
+        ...new Set([...ownerDomain.coreTables, ...ownerDomain.referencedHubs])
+      ];
+      
+      // CRITICAL FIX: Regenerate domain name using the assigned masterHub
+      if (ownerDomain.masterHub) {
+        ownerDomain.name = this.generateMeaningfulDomainName(
+          domainId, 
+          ownerDomain.totalTables, 
+          [ownerDomain.masterHub]  // Use the masterHub for naming
+        );
+        
+        logger.info('🏷️ Domain name updated using masterHub', {
+          domain: domainId,
+          newName: ownerDomain.name,
+          masterHub: ownerDomain.masterHub,
+          previousName: ownerDomain.name !== this.generateMeaningfulDomainName(domainId, ownerDomain.totalTables, [ownerDomain.masterHub]) ? 'different' : 'same'
+        });
+      }
+      
+      logger.info('✅ Domain hub assignment complete', {
+        domain: domainId,
+        masterHub: ownerDomain.masterHub,
+        finalName: ownerDomain.name,
+        totalHubs: domainHubs.length,
+        domainTotalTables: ownerDomain.totalTables.length
+      });
     }
     
     return domains;

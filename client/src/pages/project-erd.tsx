@@ -99,7 +99,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
 
   // Helper function to find the primary domain for a table
   const findDomainForTable = (tableName: string): string | null => {
-    console.log(`🔎 Finding domain for table "${tableName}"`);
     
     for (const [domainName, domainData] of Object.entries(domainResults)) {
       if (domainData?.diagram) {
@@ -113,7 +112,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
               trimmedLine.includes(tableName + ' ||') ||
               trimmedLine.includes('|| ' + tableName) ||
               trimmedLine.includes(tableName + ' }')) {
-            console.log(`✅ Found table "${tableName}" in domain "${domainName}"`);
             return domainName;
           }
         }
@@ -122,11 +120,9 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
     
     // Fallback to overview if not found in specific domains
     if (domainResults.overview) {
-      console.log(`⚠️ Table "${tableName}" not found in any domain, defaulting to overview`);
       return 'overview';
     }
     
-    console.log(`❌ Table "${tableName}" not found and no overview available`);
     return null;
   };
 
@@ -152,7 +148,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         // Generate domain views after loading project data
         await generateDomainViews(data.tables, data.relationships);
       } catch (err) {
-        console.error('Failed to load project data:', err);
         setError('Failed to load project data. Please try again.');
         toast({
           title: "Error Loading Project",
@@ -175,7 +170,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
     
     // Validate input data
     if (!Array.isArray(projectTables) || !Array.isArray(projectRelationships)) {
-      console.error('Invalid data format: tables or relationships is not an array');
       setDomainResults({
         overview: {
           diagram: mermaidCode,
@@ -207,6 +201,12 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
       
       // Transform database Table format to API-expected format
       // Database has 'attributes', API expects 'columns'
+      // Debug: Check if projectTables have codemaster metadata before transformation
+      const tablesWithCodemaster = projectTables.filter(table => {
+        const columns = table.columns || table.attributes || [];
+        return columns.some((col: any) => col.codemasterValues && col.codemasterValues.length > 0);
+      });
+      
       const transformedTables = projectTables.map(table => {
         // Handle both database format (attributes) and API format (columns)
         const columns = table.columns || table.attributes || [];
@@ -220,6 +220,9 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
               type: col.type || 'text',
               isPrimaryKey: col.isPrimaryKey || false,
               isForeignKey: col.isForeignKey || false,
+              // Preserve codemaster metadata
+              ...(col.codemasterValues && { codemasterValues: col.codemasterValues }),
+              ...(col.codemasterSource && { codemasterSource: col.codemasterSource }),
             };
             
             // Handle references field - must be either undefined or a valid object
@@ -247,6 +250,11 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
           columns: normalizedColumns
         };
       });
+
+      // Debug: Check if transformedTables preserve codemaster metadata after transformation
+      const transformedTablesWithCodemaster = transformedTables.filter(table => 
+        table.columns.some((col: any) => col.codemasterValues && col.codemasterValues.length > 0)
+      );
       
       
       // Call the domain generation API with correct parameters (not an object)
@@ -281,7 +289,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         throw new Error('Server response missing domains field');
       }
     } catch (err) {
-      console.error('Failed to generate domain views:', err);
       
       // Extract more specific error message
       let errorMessage = 'Failed to generate domain views';
@@ -389,7 +396,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
   };
 
   const handleSearchResultClick = (type: string, item: string, domain?: string) => {
-    console.log(`🔍 Search result clicked: type=${type}, item=${typeof item === 'object' ? JSON.stringify(item) : item}, domain=${domain}`);
     
     if (type === 'table') {
       // Use provided domain or find which domain contains this table
@@ -397,7 +403,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
       
       if (!targetDomain) {
         // Table not found in any domain
-        console.error(`❌ Table "${item}" not found in any domain`);
         toast({
           title: "Table Not Found",
           description: `Table "${item}" could not be found in any domain. It may have been removed or renamed.`,
@@ -406,14 +411,12 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         return;
       }
       
-      console.log(`🎯 Navigating to domain "${targetDomain}" for table "${item}"`);
       
       // Update domain state first, then table selection with enhanced delay to prevent race conditions
       setSelectedDomain(targetDomain);
       
       // Set table selection after a longer delay to ensure domain change and SVG rendering completes
       setTimeout(() => {
-        console.log(`🔄 Setting selectedTable to "${item}" after domain change`);
         setSelectedTable(item);
       }, 150); // Increased delay to allow SVG rendering to complete
       
@@ -433,18 +436,15 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
       const containingTable = columnObj?.table || null;
       
       if (containingTable && columnObj) {
-        console.log(`📋 Column search: found "${columnObj.name}" in table "${containingTable}"`);
         const targetDomain = findDomainForTable(containingTable);
         
         if (targetDomain) {
-          console.log(`🎯 Navigating to domain "${targetDomain}" for column table "${containingTable}"`);
           
           // Update domain state first, then table selection with enhanced delay to prevent race conditions
           setSelectedDomain(targetDomain);
           
           // Set table selection after a longer delay to ensure domain change and SVG rendering completes
           setTimeout(() => {
-            console.log(`🔄 Setting selectedTable to "${containingTable}" after domain change`);
             setSelectedTable(containingTable);
           }, 150); // Increased delay to allow SVG rendering to complete
           
@@ -459,7 +459,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
           window.history.replaceState({}, '', url.toString());
         }
       } else {
-        console.error(`❌ Invalid column object or missing table information:`, columnObj);
       }
     } else if (type === 'relationship') {
       // For relationships, extract table names and highlight both
@@ -468,20 +467,17 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         const sourceTable = relationshipParts[0];
         const targetTable = relationshipParts[1];
         
-        console.log(`🔗 Relationship search: from "${sourceTable}" to "${targetTable}"`);
         
         // Find domain for the first table (we'll switch to that domain)
         const targetDomain = findDomainForTable(sourceTable);
         
         if (targetDomain) {
-          console.log(`🎯 Navigating to domain "${targetDomain}" for relationship source table "${sourceTable}"`);
           
           // Update domain state first, then table selection with enhanced delay to prevent race conditions
           setSelectedDomain(targetDomain);
           
           // Set table selection after a longer delay to ensure domain change and SVG rendering completes
           setTimeout(() => {
-            console.log(`🔄 Setting selectedTable to "${sourceTable}" after domain change`);
             setSelectedTable(sourceTable);
           }, 150); // Increased delay to allow SVG rendering to complete
           
@@ -775,14 +771,12 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
                     domainResults={domainResults}
                     codemasterMappings={[]} // TODO: Load from project data
                     onExternalTableClick={(tableName, targetDomain) => {
-                      console.log(`🔗 External table navigation: "${tableName}" in domain "${targetDomain}"`);
                       
                       // Update domain state first, then table selection with enhanced delay to prevent race conditions
                       setSelectedDomain(targetDomain);
                       
                       // Set table selection after a longer delay to ensure domain change and SVG rendering completes
                       setTimeout(() => {
-                        console.log(`🔄 Setting selectedTable to "${tableName}" after domain change`);
                         setSelectedTable(tableName);
                       }, 150); // Increased delay to allow SVG rendering to complete
                       

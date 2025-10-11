@@ -28,9 +28,7 @@ const Welcome = () => {
 
   // Redirect authenticated users to dashboard
   useEffect(() => {
-    console.log('Welcome page - auth state:', { loading, user: user?.email || 'none' })
     if (!loading && user) {
-      console.log('✅ User authenticated, redirecting to dashboard')
       setLocation('/projects')
     }
   }, [loading, user, setLocation])

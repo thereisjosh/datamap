@@ -343,3 +343,117 @@ svg #pan-zoom-group g.table-selected foreignObject {
   outline-offset: 2px;
 }
 
+/* Responsive Codemaster Tooltip Styles */
+.codemaster-tooltip {
+  position: absolute;
+  z-index: 50;
+  background-color: rgb(17, 24, 39); /* gray-900 */
+  color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgb(75, 85, 99); /* gray-600 */
+  pointer-events: auto;
+  
+  /* Container-relative sizing controlled by JavaScript via CSS custom properties */
+  width: var(--tooltip-width, 350px);
+  max-height: var(--tooltip-max-height, 250px);
+  min-width: var(--tooltip-min-width, 280px);
+  min-height: var(--tooltip-min-height, 150px);
+  
+  /* Ensure tooltip never exceeds container bounds */
+  max-width: var(--tooltip-max-width, 400px);
+  
+  /* Prevent content overflow */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Title bar styling */
+.codemaster-tooltip-title {
+  background-color: rgb(31, 41, 55); /* gray-800 */
+  border-radius: 0.5rem 0.5rem 0 0;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid rgb(75, 85, 99); /* gray-600 */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: grab;
+  user-select: none;
+}
+
+.codemaster-tooltip-title:active {
+  cursor: grabbing;
+}
+
+.codemaster-tooltip-title .table-name {
+  color: rgb(147, 197, 253); /* blue-300 */
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.codemaster-tooltip-title .drag-hint {
+  color: rgb(156, 163, 175); /* gray-400 */
+  font-size: 0.75rem;
+}
+
+.codemaster-tooltip-close {
+  color: rgb(156, 163, 175); /* gray-400 */
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.codemaster-tooltip-close:hover {
+  color: white;
+  background-color: rgb(55, 65, 81); /* gray-700 */
+}
+
+/* Content area styling */
+.codemaster-tooltip-content {
+  padding: 1rem;
+  flex: 1; /* Take remaining space after title bar */
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0; /* Allow shrinking in flex container */
+}
+
+.codemaster-tooltip-content .content-text {
+  white-space: pre-line;
+  color: rgb(229, 231, 235); /* gray-200 */
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+/* Resize handle */
+.codemaster-tooltip-resize {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  color: rgb(107, 114, 128); /* gray-500 */
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: se-resize;
+  opacity: 0.5;
+  transition: opacity 0.15s ease-in-out;
+}
+
+.codemaster-tooltip-resize:hover {
+  opacity: 1;
+}
+
+/* Dragging state */
+.codemaster-tooltip.dragging {
+  cursor: grabbing !important;
+}
+
+.codemaster-tooltip.dragging .codemaster-tooltip-title {
+  cursor: grabbing !important;
+}
+

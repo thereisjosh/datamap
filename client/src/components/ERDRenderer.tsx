@@ -58,6 +58,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     content: string;
     tableName: string;
     columnName: string;
+    calculatedWidth?: number;
+    calculatedHeight?: number;
   }>({
     visible: false,
     x: 0,
@@ -71,10 +73,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const [isDraggingTooltip, setIsDraggingTooltip] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Debug tooltip state changes
-  useEffect(() => {
-    console.log(`📊 [TOOLTIP STATE] Tooltip state changed:`, tooltip);
-  }, [tooltip]);
   
   // Transform-based Pan-Zoom state and refs
   const svgContainerRef = useRef<HTMLDivElement>(null);
@@ -202,62 +200,47 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         },
       });
     } catch (err) {
-      console.error('Mermaid initialization error:', err);
     }
   }, [isDarkMode]);
 
   // SVG-native transform-based pan-zoom functions (NO CSS transforms)
   const zoomToScale = useCallback((scale: number, centerX?: number, centerY?: number) => {
-    console.log(`🔧 SVG-native zoomToScale: scale=${scale}, centerX=${centerX}, centerY=${centerY}`);
     
     if (!svgContainerRef.current) {
-      console.error('❌ zoomToScale: Container ref is NULL');
       return;
     }
     
     const container = svgContainerRef.current;
     
     // ALWAYS search for live element instead of using potentially stale refs
-    console.log('🔍 Searching for live transform group element...');
     const transformGroup = container.querySelector('#pan-zoom-group') as SVGGElement;
     
     if (!transformGroup) {
-      console.error('❌ zoomToScale: Transform group #pan-zoom-group not found in live DOM');
-      console.log('🔍 Available elements with IDs:');
       const elementsWithIds = container.querySelectorAll('[id]');
       elementsWithIds.forEach((el, i) => {
-        console.log(`  ${i + 1}. ${el.tagName}#${el.id}`);
       });
       return;
     }
     
     // Verify element is connected to the document
     const isConnected = document.contains(transformGroup);
-    console.log('🔍 Element verification:');
-    console.log('  - Found transform group:', transformGroup);
-    console.log('  - Element connected to document:', isConnected);
     
     if (!isConnected) {
-      console.error('❌ zoomToScale: Transform group found but NOT connected to document');
       return;
     }
     
-    console.log('✅ Live transform group element found and verified');
     
     // Validate input parameters
     if (!isFinite(scale) || scale <= 0) {
-      console.warn('Invalid scale provided:', scale);
       return;
     }
     
     // Get container dimensions for viewport center calculation
     const containerRect = container.getBoundingClientRect();
-    console.log(`📐 Container: ${containerRect.width} x ${containerRect.height}`);
     
     // Get SVG element and its viewBox (SVG coordinate space)
     const svg = container.querySelector('svg') as SVGSVGElement;
     const viewBoxAttr = svg.getAttribute('viewBox');
-    console.log(`📊 SVG viewBox: "${viewBoxAttr}"`);
     
     // Parse viewBox to understand SVG coordinate system
     let viewBoxX = 0, viewBoxY = 0, viewBoxWidth = 800, viewBoxHeight = 600; // defaults
@@ -265,14 +248,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const viewBoxParts = viewBoxAttr.split(' ').map(Number);
       if (viewBoxParts.length === 4) {
         [viewBoxX, viewBoxY, viewBoxWidth, viewBoxHeight] = viewBoxParts;
-        console.log(`📊 Parsed viewBox: x=${viewBoxX}, y=${viewBoxY}, w=${viewBoxWidth}, h=${viewBoxHeight}`);
       }
     }
     
     // Calculate viewport center in SVG coordinate space
     const viewportCenterX = viewBoxX + viewBoxWidth / 2;
     const viewportCenterY = viewBoxY + viewBoxHeight / 2;
-    console.log(`📍 Viewport center in SVG space: (${viewportCenterX}, ${viewportCenterY})`);
     
     // Determine the point to center on
     let targetCenterX, targetCenterY;
@@ -281,12 +262,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // Use provided SVG coordinates (already in SVG coordinate space)
       targetCenterX = centerX;
       targetCenterY = centerY;
-      console.log(`🎯 Using provided target: (${targetCenterX}, ${targetCenterY})`);
     } else {
       // No specific target - zoom on current viewport center
       targetCenterX = viewportCenterX;
       targetCenterY = viewportCenterY; 
-      console.log(`🎯 Using viewport center as target: (${targetCenterX}, ${targetCenterY})`);
     }
     
     // SVG transform calculation for centering:
@@ -308,32 +287,18 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     
     // Validate calculations before applying
     if (!isFinite(finalTranslateX) || !isFinite(finalTranslateY) || !isFinite(scale)) {
-      console.error('🚨 Invalid transform calculation detected!');
-      console.error(`  - finalTranslateX: ${finalTranslateX}`);
-      console.error(`  - finalTranslateY: ${finalTranslateY}`);
-      console.error(`  - scale: ${scale}`);
       return;
     }
     
     // Create the SVG transform string (ONLY SVG, no CSS)
     const svgTransformString = `translate(${finalTranslateX}, ${finalTranslateY}) scale(${scale})`;
     
-    console.log(`🧮 SVG Transform calculation:`);
-    console.log(`  - Target point: (${targetCenterX}, ${targetCenterY})`);
-    console.log(`  - Viewport center: (${viewportCenterX}, ${viewportCenterY})`);
-    console.log(`  - Translate to origin: (${translateToOriginX}, ${translateToOriginY})`);
-    console.log(`  - Translate to center: (${translateToCenterX}, ${translateToCenterY})`);
-    console.log(`  - Final translate: (${finalTranslateX.toFixed(2)}, ${finalTranslateY.toFixed(2)})`);
-    console.log(`  - Scale: ${scale}`);
-    console.log(`  - SVG transform: "${svgTransformString}"`);
     
     // Clear any CSS transforms that might interfere
     (transformGroup as any).style.transform = '';
-    console.log('🧹 Cleared CSS transforms to prevent conflicts');
     
     // Apply ONLY SVG transform attribute (no CSS)
     transformGroup.setAttribute('transform', svgTransformString);
-    console.log('✅ Applied SVG-native transform');
     
     // Update state for consistency
     setCurrentZoom(scale);
@@ -342,20 +307,15 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     // Verify transform was applied
     setTimeout(() => {
       const actualTransform = transformGroup.getAttribute('transform');
-      console.log(`🔍 Verification - Applied transform: "${actualTransform}"`);
       
       // Check that no CSS transforms are applied
       const computedStyles = window.getComputedStyle(transformGroup);
-      console.log('🔍 Verification - CSS transform should be none:', computedStyles.transform);
       
       // Check SVG dimensions (should remain stable)
       const svgRect = svg.getBoundingClientRect();
-      console.log(`🔍 Verification - SVG dimensions: ${svgRect?.width} x ${svgRect?.height}`);
       
       if (svgRect?.width === 0 || svgRect?.height === 0) {
-        console.error('🚨 SVG collapsed to zero dimensions after transform!');
       } else {
-        console.log('✅ SVG dimensions stable after SVG-native transform');
       }
     }, 10);
   }, [currentZoom, currentPan]);
@@ -369,7 +329,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const transformGroup = container.querySelector('#pan-zoom-group') as SVGGElement;
     
     if (!transformGroup || !document.contains(transformGroup)) {
-      console.warn('❌ panToPosition: Transform group not found or disconnected');
       return;
     }
     
@@ -379,11 +338,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     
     // Validate pan values
     if (!isFinite(newPanX) || !isFinite(newPanY)) {
-      console.error('🚨 Invalid pan calculation detected!');
-      console.error(`  - newPanX: ${newPanX}`);
-      console.error(`  - newPanY: ${newPanY}`);
-      console.error(`  - deltaX: ${deltaX}`);
-      console.error(`  - deltaY: ${deltaY}`);
       return;
     }
     
@@ -429,7 +383,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         return { x: transformedPoint.x, y: transformedPoint.y };
       }
     } catch (error) {
-      console.warn('Failed to get transformation matrix, falling back to basic conversion');
     }
 
     // Fallback: basic coordinate conversion using current zoom and pan
@@ -447,21 +400,17 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const transformGroup = container.querySelector('#pan-zoom-group') as SVGGElement;
     
     if (!transformGroup || !document.contains(transformGroup)) {
-      console.warn('❌ zoomAtCursor: Transform group not found or disconnected');
       return;
     }
 
     // Validate inputs
     if (!isFinite(newZoom) || newZoom <= 0) {
-      console.warn('Invalid zoom value:', newZoom);
       return;
     }
 
     // Get cursor position in current transformed coordinate space
     const cursorPos = getTransformedCursorPosition(cursorX, cursorY, container);
     
-    console.log(`🎯 Cursor-centered zoom: Client(${cursorX.toFixed(1)}, ${cursorY.toFixed(1)}) -> Transformed(${cursorPos.x.toFixed(1)}, ${cursorPos.y.toFixed(1)})`);
-    console.log(`🔍 Zoom: ${currentZoom.toFixed(2)}x -> ${newZoom.toFixed(2)}x`);
 
     // Calculate zoom factor
     const zoomFactor = newZoom / currentZoom;
@@ -479,17 +428,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
 
     // Validate calculations
     if (!isFinite(newPanX) || !isFinite(newPanY)) {
-      console.error('🚨 Invalid cursor-centered zoom calculation!');
-      console.error(`  - newPanX: ${newPanX}, newPanY: ${newPanY}`);
-      console.error(`  - cursorPos: (${cursorPos.x}, ${cursorPos.y})`);
-      console.error(`  - zoomFactor: ${zoomFactor}`);
       return;
     }
 
     // Apply the new transform
     const svgTransformString = `translate(${newPanX}, ${newPanY}) scale(${newZoom})`;
     
-    console.log(`🧮 Cursor-centered transform: "${svgTransformString}"`);
     
     // Clear CSS transforms to prevent conflicts
     (transformGroup as any).style.transform = '';
@@ -526,7 +470,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const div = tableElement.querySelector('div') as HTMLDivElement;
     
     if (!foreignObject || !div) {
-      console.warn(`Could not find foreignObject or div for table ${tableName}`);
       return;
     }
     
@@ -540,11 +483,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const originalWidth = storedOriginalWidth ? parseFloat(storedOriginalWidth) : 120;
     const originalHeight = parseFloat(foreignObject.getAttribute('height') || '50');
     
-    console.log(`🔍 SELECTION HANDLES DEBUG for ${tableName}:`);
-    console.log(`  - storedOriginalWidth: "${storedOriginalWidth}"`);
-    console.log(`  - originalWidth: ${originalWidth}px`);
-    console.log(`  - foreignObject height: "${foreignObject.getAttribute('height')}"`);
-    console.log(`  - originalHeight: ${originalHeight}px`);
     
     // Simple positioning - use foreignObject coordinates
     const divX = foreignX;
@@ -552,8 +490,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const divWidth = Math.max(originalWidth, 120); // Match the constraint we apply to selected div
     const divHeight = Math.max(originalHeight, 40);
     
-    console.log(`  - Calculated handle dimensions: ${divWidth}px x ${divHeight}px`);
-    console.log(`  - Handle positions will be at: (${divX}, ${divY}) to (${divX + divWidth}, ${divY + divHeight})`);
     
     // Create corner handles aligned with actual visible table content
     const handleSize = 6;
@@ -582,7 +518,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       svg.appendChild(handle);
     });
     
-    console.log(`✨ Selection handles aligned with content: width=${divWidth.toFixed(0)}px, height=${divHeight.toFixed(0)}px for table: ${tableName}`);
   }, []);
 
   // Remove selection handles
@@ -720,7 +655,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const relationships = new Map<string, string[]>();
     const lines = diagramCode.split('\n');
     
-    console.log(`🔍 Parsing relationships from ${lines.length} lines...`);
     
     
     for (const line of lines) {
@@ -733,7 +667,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           trimmedLine.startsWith('erDiagram') || trimmedLine.startsWith('classDiagram') ||
           trimmedLine.startsWith('%%') || trimmedLine.startsWith('classDef')) {
         if (trimmedLine.includes('PaymentTransaction')) {
-          console.log(`🚫 SKIPPED PaymentTransaction line: "${trimmedLine}" (reason: empty/table definition/comment)`);
         }
         continue;
       }
@@ -766,7 +699,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         
         // Debug: Show successful matches only (suppress excessive REGEX FAIL logs)
         if (match && (trimmedLine.includes('PaymentTransaction') || trimmedLine.includes('BankStatementAllocation'))) {
-          console.log(`✅ REGEX MATCH: "${trimmedLine}" -> ${match[1]} <-> ${match[2]}`);
         }
         
         if (match) {
@@ -792,11 +724,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       }
       
       if (!matched && (trimmedLine.includes('|') || trimmedLine.includes('-'))) {
-        console.log(`⚠️ Unmatched potential relationship line: "${trimmedLine}"`);
       }
     }
     
-    console.log(`🔗 Parsed ${relationships.size} entities with relationships`);
     
     return relationships;
   }, []);
@@ -805,24 +735,29 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Get codemaster metadata for the current domain
   const getCurrentCodemasterMetadata = useCallback(() => {
     if (!domain || !domainResults[domain]) {
-      console.log(`🔍 [TOOLTIP DEBUG] No domain or domain results for domain: ${domain}`);
       return {};
     }
     const metadata = domainResults[domain].codemasterMetadata || {};
-    const tableCount = Object.keys(metadata).length;
-    console.log(`🔍 [TOOLTIP DEBUG] Domain ${domain} has codemaster metadata for ${tableCount} tables:`, Object.keys(metadata));
     return metadata;
   }, [domain, domainResults]);
 
-  // Format codemaster values for tooltip display
+  // Format codemaster values for tooltip display with ascending sort by code
   const formatCodemasterTooltip = useCallback((values: any[]) => {
     if (!values || values.length === 0) return '';
     
-    return values.map(value => {
-      const code = value.code || '';
-      const description = value.description || '';
-      return `${code}: ${description}`;
-    }).join('\n');
+    // Sort by code in ascending order before formatting
+    return values
+      .sort((a, b) => {
+        const codeA = (a.code || '').toString();
+        const codeB = (b.code || '').toString();
+        return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      })
+      .map(value => {
+        const code = value.code || '';
+        const description = value.description || '';
+        return `${code}: ${description}`;
+      })
+      .join('\n');
   }, []);
 
   // Generate comprehensive codemaster tooltip for a table
@@ -848,17 +783,49 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     return tooltipLines.join('\n\n');
   }, [getCurrentCodemasterMetadata, formatCodemasterTooltip]);
 
-  // Smart positioning to avoid covering the source table
+  // Smart positioning to avoid covering the source table and stay within ERD container
   const calculateSmartTooltipPosition = useCallback((tableElement: Element, svgContainer: HTMLDivElement) => {
     const tableRect = tableElement.getBoundingClientRect();
     const containerRect = svgContainer.getBoundingClientRect();
     
-    // Tooltip dimensions (estimated)
-    const tooltipWidth = 400;
-    const tooltipHeight = 300;
-    const margin = 15;
+    // Get dynamic tooltip dimensions based on container size
+    const containerWidth = containerRect.width;
+    const containerHeight = containerRect.height;
     
-    // Convert to relative coordinates within the SVG container
+    // Calculate responsive tooltip dimensions with container size-based scaling
+    const isSmallContainer = containerWidth < 800 || containerHeight < 600;
+    
+    const tooltipWidth = isSmallContainer 
+      ? Math.min(Math.max(240, containerWidth * 0.35), containerWidth * 0.6) // Smaller for normal preview
+      : Math.min(Math.max(280, containerWidth * 0.3), Math.min(400, containerWidth * 0.8)); // Original for full preview
+      
+    const tooltipHeight = isSmallContainer
+      ? Math.min(Math.max(150, containerHeight * 0.3), containerHeight * 0.5) // Smaller for normal preview  
+      : Math.min(Math.max(180, containerHeight * 0.25), Math.min(300, containerHeight * 0.6)); // Original for full preview
+      
+    const margin = isSmallContainer ? 10 : 20; // Smaller margins for constrained spaces
+    
+    // Check if container has valid dimensions
+    if (containerWidth === 0 || containerHeight === 0) {
+      return { 
+        x: 50, 
+        y: 50, 
+        calculatedWidth: 350, 
+        calculatedHeight: 250 
+      };
+    }
+    
+    // Check if table has valid dimensions
+    if (tableRect.width === 0 || tableRect.height === 0) {
+      return { 
+        x: margin, 
+        y: margin, 
+        calculatedWidth: tooltipWidth, 
+        calculatedHeight: tooltipHeight 
+      };
+    }
+    
+    // Convert to relative coordinates within the SVG container - FIXED conversion
     const relativeTableRect = {
       left: tableRect.left - containerRect.left,
       right: tableRect.right - containerRect.left,
@@ -868,59 +835,103 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       height: tableRect.height
     };
     
-    // Try different positions in order of preference
+    // Validate that table position makes sense
+    const isTableLeftValid = relativeTableRect.left >= 0;
+    const isTableTopValid = relativeTableRect.top >= 0;
+    const isTableRightValid = relativeTableRect.right <= containerWidth;
+    const isTableBottomValid = relativeTableRect.bottom <= containerHeight;
+    
+    if (!isTableLeftValid || !isTableTopValid || !isTableRightValid || !isTableBottomValid) {
+      
+      // Emergency fallback: position tooltip in top-left with small offset
+      const emergencyX = Math.min(margin, containerWidth * 0.1);
+      const emergencyY = Math.min(margin, containerHeight * 0.1);
+      
+      // Convert to document-absolute coordinates
+      const absoluteEmergencyX = containerRect.left + emergencyX;
+      const absoluteEmergencyY = containerRect.top + emergencyY;
+      
+      return { 
+        x: absoluteEmergencyX, 
+        y: absoluteEmergencyY, 
+        calculatedWidth: tooltipWidth, 
+        calculatedHeight: tooltipHeight 
+      };
+    }
+    
+    // Available space in the container (accounting for margins)
+    const availableWidth = containerWidth - (margin * 2);
+    const availableHeight = containerHeight - (margin * 2);
+    
+    // Try different positions in order of preference with better spacing
     const positions = [
       // Right side
       {
         x: relativeTableRect.right + margin,
-        y: relativeTableRect.top,
-        preference: 1
+        y: Math.max(margin, relativeTableRect.top),
+        preference: 1,
+        name: 'right'
       },
       // Left side  
       {
         x: relativeTableRect.left - tooltipWidth - margin,
-        y: relativeTableRect.top,
-        preference: 2
+        y: Math.max(margin, relativeTableRect.top),
+        preference: 2,
+        name: 'left'
       },
       // Bottom
       {
-        x: relativeTableRect.left,
+        x: Math.max(margin, relativeTableRect.left),
         y: relativeTableRect.bottom + margin,
-        preference: 3
+        preference: 3,
+        name: 'bottom'
       },
       // Top
       {
-        x: relativeTableRect.left,
+        x: Math.max(margin, relativeTableRect.left),
         y: relativeTableRect.top - tooltipHeight - margin,
-        preference: 4
+        preference: 4,
+        name: 'top'
       }
     ];
     
-    // Find the best position that fits within viewport
-    const viewportWidth = containerRect.width;
-    const viewportHeight = containerRect.height;
-    
+    // Find the best position that fits within ERD container
     for (const pos of positions) {
-      const fitsHorizontally = pos.x >= 0 && pos.x + tooltipWidth <= viewportWidth;
-      const fitsVertically = pos.y >= 0 && pos.y + tooltipHeight <= viewportHeight;
+      const fitsHorizontally = pos.x >= margin && (pos.x + tooltipWidth) <= (containerWidth - margin);
+      const fitsVertically = pos.y >= margin && (pos.y + tooltipHeight) <= (containerHeight - margin);
       
       if (fitsHorizontally && fitsVertically) {
-        console.log(`📍 [TOOLTIP] Smart positioning: using position ${pos.preference} at (${pos.x}, ${pos.y})`);
-        return { x: pos.x, y: pos.y };
+        // Convert container-relative to document-absolute coordinates
+        const absoluteX = containerRect.left + pos.x;
+        const absoluteY = containerRect.top + pos.y;
+        
+        return { 
+          x: absoluteX, 
+          y: absoluteY, 
+          calculatedWidth: tooltipWidth, 
+          calculatedHeight: tooltipHeight 
+        };
       }
     }
     
-    // Fallback: center of viewport if no position fits perfectly
-    const fallbackX = Math.max(0, (viewportWidth - tooltipWidth) / 2);
-    const fallbackY = Math.max(0, (viewportHeight - tooltipHeight) / 2);
+    // Fallback: find best fit within container bounds
+    const fallbackX = Math.max(margin, Math.min(relativeTableRect.left, containerWidth - tooltipWidth - margin));
+    const fallbackY = Math.max(margin, Math.min(relativeTableRect.top + relativeTableRect.height + margin, containerHeight - tooltipHeight - margin));
     
-    console.log(`📍 [TOOLTIP] Smart positioning: using fallback position at (${fallbackX}, ${fallbackY})`);
-    return { x: fallbackX, y: fallbackY };
+    // Convert container-relative to document-absolute coordinates
+    const absoluteFallbackX = containerRect.left + fallbackX;
+    const absoluteFallbackY = containerRect.top + fallbackY;
+    
+    return { 
+      x: absoluteFallbackX, 
+      y: absoluteFallbackY, 
+      calculatedWidth: tooltipWidth, 
+      calculatedHeight: tooltipHeight 
+    };
   }, []);
 
   // Separated tooltip binding logic for better organization and timing control
   const bindTooltipHandlers = useCallback((svgContainer: HTMLDivElement, svgRoot: SVGSVGElement) => {
-    console.log(`🔍 [TOOLTIP DEBUG] bindTooltipHandlers called`);
 
     // Remove existing event listeners to prevent duplicates
     const existingHandlers = svgRoot.querySelectorAll('[data-erd-handler]');
@@ -949,7 +960,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         // Try to determine entity ID from the box element
         const entityId = getEntityIdFromBox(box as Element);
         if (entityId) {
-          console.log(`🎯 ERD entity clicked: ${entityId}`);
           highlightERDRelationships(entityId, svgRoot);
         }
       });
@@ -963,10 +973,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const foreignObjects = svgRoot.querySelectorAll('foreignObject');
     const spanElements = svgRoot.querySelectorAll('span');
     
-    console.log(`🔍 [TOOLTIP DEBUG] Found ${columnElements.length} total text elements (spans + text + tspan) in SVG`);
-    console.log(`🔍 [TOOLTIP DEBUG] Breakdown: ${spanElements.length} spans, ${svgRoot.querySelectorAll('text').length} text, ${svgRoot.querySelectorAll('tspan').length} tspan`);
-    console.log(`🔍 [TOOLTIP DEBUG] Found ${foreignObjects.length} foreignObject containers`);
-    console.log(`🔍 [TOOLTIP DEBUG] Codemaster metadata available for tables:`, Object.keys(codemasterMetadata));
     
     // Clean approach: No icons needed - use table click events instead
     // Just log which tables have codemaster data for debugging
@@ -975,11 +981,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     Object.keys(codemasterMetadata).forEach(tableName => {
       if (Object.keys(codemasterMetadata[tableName]).length > 0) {
         tablesWithCodemaster.add(tableName);
-        console.log(`🏷️ [CODEMASTER DEBUG] Table "${tableName}" has ${Object.keys(codemasterMetadata[tableName]).length} codemaster columns`);
       }
     });
     
-    console.log(`🏷️ [CODEMASTER DEBUG] Found ${tablesWithCodemaster.size} tables with codemaster data:`, Array.from(tablesWithCodemaster));
     
     // Remove any existing tooltip icons from previous implementations
     const existingIcons = svgRoot.querySelectorAll('.codemaster-tooltip-icon');
@@ -989,17 +993,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const bindERDEventHandlers = useCallback(() => {
     const svgContainer = svgContainerRef.current;
     if (!svgContainer) {
-      console.log(`🔍 [TOOLTIP DEBUG] No SVG container found, skipping event handlers`);
       return;
     }
 
     const svgRoot = svgContainer.querySelector('svg');
     if (!svgRoot) {
-      console.log(`🔍 [TOOLTIP DEBUG] No SVG root found, skipping event handlers`);
       return;
     }
     
-    console.log(`🔍 [TOOLTIP DEBUG] Binding ERD event handlers to SVG with ${svgRoot.children.length} children`);
     
     // Add small delay to ensure all DOM manipulations are complete
     // This helps with timing issues when switching domains or initial load
@@ -1089,22 +1090,18 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       if (text) return text;
     }
     
-    console.warn('⚠️ Could not determine entity ID from box:', box);
     return null;
   }, []);
 
   // Simple relationship line highlighting using CSS classes
   const highlightRelationshipLines = useCallback((tableName: string, svgRoot: Element) => {
-    console.log(`🔗 Highlighting relationship lines for table: ${tableName}`);
     
     // Parse relationships to find connected tables
     const relationships = parseRelationships(mermaidCode);
     const connectedTables = relationships.get(tableName) || [];
     
-    console.log(`🔗 Found ${connectedTables.length} connected tables: [${connectedTables.join(', ')}]`);
     
     if (connectedTables.length === 0) {
-      console.log(`⚠️ No relationships found for ${tableName}`);
       return;
     }
     
@@ -1116,20 +1113,16 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     if (entityById) {
       entityById.classList.add('is-highlighted');
       clickedEntityBox = entityById;
-      console.log(`✅ Found entity by ID pattern: ${entityById.getAttribute('id')}`);
     } else {
       // Fallback: try data-table-name attribute
       const entityByDataAttr = svgRoot.querySelector(`g[data-table-name="${entityId}"]`);
       if (entityByDataAttr) {
         entityByDataAttr.classList.add('is-highlighted');
         clickedEntityBox = entityByDataAttr;
-        console.log(`✅ Found entity by data-table-name: ${entityId}`);
       }
     }
     
     if (!clickedEntityBox) {
-      console.warn(`⚠️ Could not find entity box for: ${entityId}`);
-      console.log(`🔍 Available entities:`, Array.from(svgRoot.querySelectorAll('g[id*="entity"]')).map(g => g.getAttribute('id')));
       return;
     }
     
@@ -1138,17 +1131,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const relationshipMap = parseRelationships(mermaidCode);
       const connectedTables = relationshipMap.get(entityId) || [];
       
-      console.log(`🔗 Found ${connectedTables.length} connected tables:`, connectedTables);
       
       // Debug: Show all relationships found in the diagram
-      console.log(`🔍 DEBUG: All relationships in diagram:`, Array.from(relationshipMap.entries()));
       
       // Debug: Check if entity appears in any relationships with different case/format
       const entityVariations = [entityId, entityId.toLowerCase(), entityId.toUpperCase()];
       entityVariations.forEach(variation => {
         const found = relationshipMap.get(variation);
         if (found && found.length > 0) {
-          console.log(`🔍 Found relationships for variation "${variation}":`, found);
         }
       });
       
@@ -1156,7 +1146,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const erdLines = mermaidCode.split('\n').filter(line => 
         line.includes('||') || line.includes('}|') || line.includes('--')
       ).slice(0, 5);
-      console.log(`🔍 Sample ERD relationship lines:`, erdLines);
       
       // Highlight connected entities
       connectedTables.forEach(connectedEntity => {
@@ -1164,7 +1153,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                                 svgRoot.querySelector(`g[data-table-name="${connectedEntity}"]`);
         if (connectedElement) {
           connectedElement.classList.add('is-highlighted');
-          console.log(`✅ Highlighted connected entity: ${connectedEntity}`);
         }
       });
       
@@ -1172,7 +1160,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       let highlightedCount = 0;
       
       if (connectedTables.length > 0) {
-        console.log(`🔍 Looking for relationship paths between ${entityId} and connected entities...`);
         
         // Find and highlight relationship paths
         const allPaths = svgRoot.querySelectorAll('path');
@@ -1185,7 +1172,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             return { entity: connectedEntity, center };
           }).filter(item => item.center !== null);
           
-          console.log(`🔍 Checking ${allPaths.length} paths for connections between entities...`);
           
           allPaths.forEach((path, index) => {
             try {
@@ -1213,7 +1199,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 // If path is close to both entities, it's likely the connecting path
                 if (distanceToSelected < 200 && distanceToConnected < 200) {
                   connectsEntities = true;
-                  console.log(`✅ Path ${index + 1} connects ${entityId} to ${connectedEntity}`);
                   break;
                 }
               }
@@ -1228,31 +1213,22 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           });
         }
       } else {
-        console.log(`⚠️ No connected tables found for ${entityId}, skipping path highlighting`);
       }
       
       // Always add container class to enable dimming when any table is selected
       svgRoot.classList.add('has-erd-selection');
-      console.log(`✅ Applied .has-erd-selection class to SVG root for dimming effect`);
       
       // Debug: Check what elements should be dimmed
       const allEntities = svgRoot.querySelectorAll('g[id*="entity"], g[data-table-name], g.table-entity');
       const highlightedEntities = svgRoot.querySelectorAll('g.is-highlighted');
-      console.log(`🔍 Dimming Debug: ${allEntities.length} total entities, ${highlightedEntities.length} highlighted, ${allEntities.length - highlightedEntities.length} should be dimmed`);
       
       // Debug: Check CSS classes and selectors
-      console.log(`🔍 CSS Debug:`);
-      console.log(`  - SVG root has .has-erd-selection: ${svgRoot.classList.contains('has-erd-selection')}`);
-      console.log(`  - Sample entity classes: ${allEntities[0]?.className}`);
-      console.log(`  - Sample highlighted entity classes: ${highlightedEntities[0]?.className}`);
       
       // Test CSS selector matching
       const shouldBeDimmed = svgRoot.querySelectorAll('.has-erd-selection g[id*="entity"]:not(.is-highlighted)');
       const shouldBeDimmed2 = svgRoot.querySelectorAll('.has-erd-selection g[data-table-name]:not(.is-highlighted)');
       const shouldBeDimmed3 = svgRoot.querySelectorAll('.has-erd-selection g.table-entity:not(.is-highlighted)');
-      console.log(`  - Entities matching dimming selectors: ${shouldBeDimmed.length}, ${shouldBeDimmed2.length}, ${shouldBeDimmed3.length}`);
       
-      console.log(`✨ Highlighted ${highlightedCount} relationship paths and ${connectedTables.length} connected entities for "${entityId}"`);
     }
     
     // Update React state for compatibility with existing system
@@ -1277,23 +1253,18 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     svgRoot.classList.remove('has-erd-selection');
     
     setHighlightedRelationships(new Set());
-    console.log(`🧹 Cleared ERD relationship highlighting`);
   }, []);
 
   // Enhanced table centering function with improved handling for complex tables
   const centerOnTable = useCallback((tableName: string, retryCount: number = 0) => {
-    console.log(`🎯 centerOnTable called for: ${tableName} (attempt ${retryCount + 1})`);
     
     // Enhanced error checking and validation
     if (!tableName || typeof tableName !== 'string') {
-      console.error(`❌ Invalid table name provided:`, tableName);
       return;
     }
     
     if (!svgContainerRef.current) {
-      console.warn(`❌ Cannot center on table ${tableName}: Container not available`);
       if (retryCount < 2) {
-        console.log(`⏳ Retrying centerOnTable in 100ms...`);
         setTimeout(() => centerOnTable(tableName, retryCount + 1), 100);
       }
       return;
@@ -1301,7 +1272,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     
     // Special debugging for problematic tables
     if (tableName.toLowerCase().includes('opportunity')) {
-      console.log(`🔍 Special handling for Opportunity table (high relationship count)`);
     }
     
     const svgContainer = svgContainerRef.current;
@@ -1309,92 +1279,69 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     // Always search for live SVG element
     const svg = svgContainer.querySelector('svg') as SVGSVGElement;
     if (!svg) {
-      console.warn(`❌ Cannot center on table ${tableName}: SVG element not found in DOM`);
       
       // Retry logic for race conditions
       if (retryCount < 2) {
-        console.log(`🔄 Retrying centerOnTable in 50ms... (attempt ${retryCount + 2})`);
         setTimeout(() => centerOnTable(tableName, retryCount + 1), 50);
       }
       return;
     }
     
-    console.log(`✅ Found live SVG element for table centering`);
 
     // Try multiple strategies to find the table entity
     let tableEntity: Element | null = null;
     
-    console.log(`🔍 Searching for table entity: "${tableName}"`);
     
     // Strategy 1: Use data-table-name attribute (set during styling)
-    console.log(`  Strategy 1: Looking for g[data-table-name="${tableName}"]`);
     tableEntity = svg.querySelector(`g[class*="node"][data-table-name="${tableName}"]`) || 
                   svg.querySelector(`g[data-table-name="${tableName}"]`);
     
     if (tableEntity) {
-      console.log(`  ✅ Strategy 1 found entity:`, tableEntity);
     } else {
-      console.log(`  ❌ Strategy 1 failed`);
       
       // Debug: Show all elements with data-table-name
       const allDataElements = Array.from(svg.querySelectorAll('g[data-table-name]'));
-      console.log(`  - Found ${allDataElements.length} elements with data-table-name:`);
       allDataElements.slice(0, 5).forEach((el, i) => {
-        console.log(`    ${i + 1}. data-table-name="${el.getAttribute('data-table-name')}"`);
       });
     }
     
     // Strategy 2: Use Mermaid-generated ID (more reliable)
     if (!tableEntity) {
-      console.log(`  Strategy 2: Looking for g[id*="entity-${tableName}-"]`);
       tableEntity = svg.querySelector(`g[id*="entity-${tableName}-"]`);
       
       if (tableEntity) {
-        console.log(`  ✅ Strategy 2 found entity:`, tableEntity);
       } else {
-        console.log(`  ❌ Strategy 2 failed`);
         
         // Debug: Show all elements with entity IDs
         const allEntityIds = Array.from(svg.querySelectorAll('g[id*="entity-"]'));
-        console.log(`  - Found ${allEntityIds.length} elements with entity IDs:`);
         allEntityIds.slice(0, 5).forEach((el, i) => {
-          console.log(`    ${i + 1}. id="${el.getAttribute('id')}"`);
         });
       }
     }
     
     // Strategy 3: Search by text content in nodeLabel spans
     if (!tableEntity) {
-      console.log(`  Strategy 3: Looking for nodeLabel with text "${tableName}"`);
       const nodeLabels = Array.from(svg.querySelectorAll('span.nodeLabel'));
-      console.log(`  - Found ${nodeLabels.length} nodeLabel spans`);
       
       // Show first few nodeLabel contents for debugging
       nodeLabels.slice(0, 5).forEach((label, i) => {
-        console.log(`    ${i + 1}. nodeLabel text: "${label.textContent?.trim()}"`);
       });
       
       for (const label of nodeLabels) {
         if (label.textContent?.trim() === tableName) {
           tableEntity = label.closest('g[class*="node"]');
           if (tableEntity) {
-            console.log(`  ✅ Strategy 3 found entity via nodeLabel:`, tableEntity);
             break;
           }
         }
       }
       
       if (!tableEntity) {
-        console.log(`  ❌ Strategy 3 failed`);
       }
     }
 
     if (tableEntity) {
       try {
-        console.log(`🎯 Centering on table: ${tableName}`);
-        console.log(`  - Found table entity:`, tableEntity.tagName, tableEntity.getAttribute('class'));
-        console.log(`  - Entity ID:`, tableEntity.getAttribute('id'));
-        console.log(`  - Entity data-table-name:`, tableEntity.getAttribute('data-table-name'));
         
         // Industry-standard coordinate detection: getBBox() first, then transforms
         let elementCenterX = 0;
@@ -1402,12 +1349,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         let coordinatesFound = false;
         
         // Strategy 1: getBBox() - Most reliable for SVG elements (industry standard)
-        console.log(`  🔄 Strategy 1: getBBox() coordinate detection (industry standard)...`);
         try {
           // Ensure element is properly attached before calling getBBox
           if (tableEntity.ownerDocument && typeof tableEntity.getBoundingClientRect === 'function') {
             const bbox = (tableEntity as SVGGraphicsElement).getBBox();
-            console.log(`  - getBBox() result:`, bbox);
             
             // Enhanced validation with bounds checking
             if (bbox && bbox.width > 0 && bbox.height > 0 && 
@@ -1433,24 +1378,16 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               elementCenterY = transformY + (bbox.y + bbox.height / 2);
               coordinatesFound = true;
               
-              console.log(`  ✅ getBBox() with transform coordinates:`);
-              console.log(`    - Local bbox center: (${bbox.x + bbox.width / 2}, ${bbox.y + bbox.height / 2})`);
-              console.log(`    - Transform: translate(${transformX}, ${transformY})`);
-              console.log(`    - Final SVG center: (${elementCenterX}, ${elementCenterY})`);
             } else {
-              console.log(`  ❌ getBBox() returned invalid dimensions:`, bbox);
             }
           }
         } catch (bboxError) {
-          console.log(`  ❌ getBBox() failed:`, bboxError);
         }
         
         // Strategy 2: Transform attributes - Reliable fallback for positioned elements  
         if (!coordinatesFound) {
-          console.log(`  🔄 Strategy 2: Transform coordinate detection...`);
           const transform = tableEntity.getAttribute('transform');
           if (transform) {
-            console.log(`  - Transform attribute:`, transform);
             
             const translateMatch = transform.match(/translate\(([^,\)]+)(?:,\s*([^,\)]+))?\)/);
             if (translateMatch) {
@@ -1464,21 +1401,16 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 elementCenterX = transformX;
                 elementCenterY = transformY;
                 coordinatesFound = true;
-                console.log(`  ✅ Transform coordinates found: (${elementCenterX}, ${elementCenterY})`);
               } else {
-                console.log(`  ❌ Transform coordinates invalid/out-of-bounds: (${transformX}, ${transformY})`);
               }
             } else {
-              console.log(`  ❌ Could not parse transform:`, transform);
             }
           } else {
-            console.log(`  ❌ No transform attribute found`);
           }
         }
         
         // For debugging: if neither method worked, log element structure
         if (!coordinatesFound && tableName.toLowerCase().includes('opportunity')) {
-          console.log(`  🔍 Opportunity table coordinate detection failed - element structure:`, {
             tagName: tableEntity.tagName,
             className: tableEntity.getAttribute('class'),
             id: tableEntity.getAttribute('id'),
@@ -1489,7 +1421,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         
         // Strategy 3: Simple fallback using foreignObject coordinates
         if (!coordinatesFound) {
-          console.log(`  🔄 Strategy 3: Simple foreignObject coordinate fallback...`);
           
           const foreignObjects = Array.from(tableEntity.querySelectorAll('foreignObject'));
           if (foreignObjects.length > 0) {
@@ -1503,7 +1434,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               elementCenterX = foreignX + foreignWidth / 2;
               elementCenterY = foreignY + foreignHeight / 2;
               coordinatesFound = true;
-              console.log(`  ✅ ForeignObject coordinates found: (${elementCenterX}, ${elementCenterY})`);
             }
           }
         }
@@ -1527,44 +1457,31 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           const isValidY = isFinite(elementCenterY) && elementCenterY > -1000 && elementCenterY < maxY;
           
           if (isValidX && isValidY) {
-            console.log(`  📍 Final element center: (${elementCenterX}, ${elementCenterY})`);
             
             // For problematic tables like Opportunity, use more conservative zoom
             const isComplexTable = tableName.toLowerCase().includes('opportunity');
             const targetZoom = isComplexTable ? 2.5 : 3.0; // Slightly less aggressive zoom for complex tables
             
             zoomToScale(targetZoom, elementCenterX, elementCenterY);
-            console.log(`✅ Centered table ${tableName} at zoom ${targetZoom}x${isComplexTable ? ' (complex table)' : ''}`);
             
             // Update lastClickPosition to ensure zoom controls center on this table
             setLastClickPosition({ x: elementCenterX, y: elementCenterY });
-            console.log(`🎯 Updated lastClickPosition for zoom controls: (${elementCenterX}, ${elementCenterY})`);
           } else {
-            console.log(`  ❌ Final coordinates are out of bounds: (${elementCenterX}, ${elementCenterY})`);
-            console.log(`  🔄 Falling back to basic zoom without centering`);
             zoomToScale(2.0); // More conservative fallback zoom
           }
         } else {
-          console.log(`  ❌ Could not determine coordinates for table ${tableName}`);
-          console.log(`  🔄 Falling back to basic zoom without centering`);
           // For tables that fail centering, try a gentle zoom to at least improve visibility
           zoomToScale(2.0); // More conservative fallback zoom
         }
         
       } catch (error) {
-        console.error(`❌ Exception in centerOnTable for "${tableName}":`, error);
-        console.log(`🔄 Applying fallback zoom due to error`);
         zoomToScale(2.5); // Slightly less aggressive fallback
       }
     } else {
-      console.warn(`⚠️ Table element not found for: "${tableName}"`);
-      console.log(`🔍 Available tables in current domain:`, Array.from(svgContainer.querySelectorAll('g[data-table-name]')).map(el => el.getAttribute('data-table-name')).slice(0, 10));
       
       if (retryCount < 2) {
-        console.log(`⏳ Retrying to find table element in 200ms...`);
         setTimeout(() => centerOnTable(tableName, retryCount + 1), 200);
       } else {
-        console.log(`🔄 Applying fallback zoom after failed table search`);
         zoomToScale(2.5);
       }
     }
@@ -1572,7 +1489,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
 
   // Define handleTableClick before it's used in event delegation
   const handleTableClick = useCallback((tableName: string, event?: MouseEvent, isFromSearch: boolean = false, isAfterDomainSwitch: boolean = false) => {
-    console.log(`🎯 Selected table: ${tableName} ${isFromSearch ? '(from search)' : isAfterDomainSwitch ? '(after domain switch)' : '(direct click)'}`);
     
     // Domain detection: Check if table exists in current domain (skip for search calls and after domain switches)
     const svgContainer = svgContainerRef.current;
@@ -1580,7 +1496,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const tableElement = svgContainer.querySelector(`g[data-table-name="${tableName}"]`);
       
       if (!tableElement) {
-        console.log(`🔍 Table "${tableName}" not found in current domain "${domain || 'unknown'}"`);
         
         // Use real domainResults to find which domain contains this table
         let targetDomain = null;
@@ -1600,7 +1515,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                     trimmedLine.includes('|| ' + tableName) ||
                     trimmedLine.includes(tableName + ' }')) {
                   targetDomain = domainName;
-                  console.log(`📊 Table "${tableName}" found in domain "${domainName}"`);
                   break;
                 }
               }
@@ -1612,20 +1526,16 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           // Fallback to overview if not found in specific domains
           if (!targetDomain && domainResults.overview) {
             targetDomain = 'overview';
-            console.log(`📊 Table "${tableName}" not found in specific domains, falling back to overview`);
           }
         }
         
         if (targetDomain && targetDomain !== domain) {
-          console.log(`🎯 Table "${tableName}" is in domain "${targetDomain}" (current: "${domain}")`);
           if (onExternalTableClick) {
             onExternalTableClick(tableName, targetDomain);
           } else {
-            console.warn(`⚠️ No onExternalTableClick handler provided`);
           }
           return; // Don't proceed with centering since table is in different domain
         } else {
-          console.warn(`⚠️ Could not determine domain for table "${tableName}" - proceeding in current domain`);
         }
       }
       
@@ -1633,7 +1543,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const svg = svgContainer.querySelector('svg');
       if (svg) {
         const beforeRect = svg.getBoundingClientRect();
-        console.log(`📏 SVG dimensions BEFORE state changes: ${beforeRect.width} x ${beforeRect.height}`);
       }
     }
     
@@ -1652,7 +1561,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       }
     }
     
-    console.log(`⚛️ About to update React state: selectedTable, highlightedTables, viewMode`);
     
     // Remove previous selection handles
     removeSelectionHandles();
@@ -1675,7 +1583,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     setHighlightedTables(relatedTables);
     
     // Switch to focus mode
-    console.log(`🎯 Setting viewMode to 'focus' (re-enabled after fixing SVG collapse)`);
     setViewMode('focus');
     
     // Add selection handles after a short delay to ensure styling is applied
@@ -1683,7 +1590,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       addSelectionHandles(tableName);
     }, 100);
     
-    console.log(`⏰ State updates scheduled, checking dimensions after React updates...`);
     
     // Check dimensions after state updates
     setTimeout(() => {
@@ -1691,27 +1597,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         const svg = svgContainer.querySelector('svg');
         if (svg) {
           const afterRect = svg.getBoundingClientRect();
-          console.log(`📏 SVG dimensions AFTER state changes: ${afterRect.width} x ${afterRect.height}`);
           
           if (afterRect.width === 0 || afterRect.height === 0) {
-            console.log(`🚨 SVG became zero dimensions after state changes!`);
             
             // Check CSS that might be causing this
             const computedStyles = window.getComputedStyle(svg);
-            console.log(`🎨 SVG styles after state change:`);
-            console.log(`  - display: "${computedStyles.display}"`);
-            console.log(`  - visibility: "${computedStyles.visibility}"`);
-            console.log(`  - width: "${computedStyles.width}"`);
-            console.log(`  - height: "${computedStyles.height}"`);
-            console.log(`  - position: "${computedStyles.position}"`);
-            console.log(`  - opacity: "${computedStyles.opacity}"`);
             
             // Check container styles too
             const containerStyles = window.getComputedStyle(svgContainer);
-            console.log(`📦 Container styles after state change:`);
-            console.log(`  - display: "${containerStyles.display}"`);
-            console.log(`  - width: "${containerStyles.width}"`);
-            console.log(`  - height: "${containerStyles.height}"`);
           }
         }
       }
@@ -1749,7 +1642,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             // Step 1: Transform screen coordinates to base SVG coordinates
             const svgMatrix = svgElement.getScreenCTM();
             if (!svgMatrix) {
-              console.warn('Could not get SVG screen CTM');
               return;
             }
             
@@ -1790,7 +1682,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             setTimeout(() => setLastClickPosition(null), 30000);
             
           } catch (error) {
-            console.warn('Could not convert click coordinates to SVG space:', error);
           }
         }
         
@@ -1802,7 +1693,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         entityParent = target.closest('g[class*="node"]');
         if (entityParent) {
           tableName = entityParent.getAttribute('data-table-name');
-          console.log(`  🎯 Strategy 1 - Found entity with table: "${tableName}"`);
         }
         
         // Strategy 2: Try direct data-table-name search  
@@ -1810,7 +1700,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           entityParent = target.closest('g[data-table-name]');
           if (entityParent) {
             tableName = entityParent.getAttribute('data-table-name');
-            console.log(`  🎯 Strategy 2 - Found entity with table: "${tableName}"`);
           }
         }
         
@@ -1823,7 +1712,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             if (currentTableName) {
               tableName = currentTableName;
               entityParent = currentElement;
-              console.log(`  🎯 Strategy 3 - Found table at depth ${depth}: "${tableName}"`);
               break;
             }
             currentElement = currentElement.parentElement as Element;
@@ -1841,13 +1729,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           const targetDomain = entityParent.getAttribute('data-target-domain');
           
           if (isGhostTable && targetDomain) {
-            console.log(`👻 GHOST TABLE CLICK: "${tableName}" -> navigating to domain "${targetDomain}"`);
             // Directly navigate to target domain (we already know it from metadata)
             if (onExternalTableClick) {
               onExternalTableClick(tableName, targetDomain);
-              console.log(`🚀 Navigated to domain "${targetDomain}" for ghost table "${tableName}"`);
             } else {
-              console.warn('onExternalTableClick handler not available for ghost table navigation');
             }
             return; // Prevent further processing
           } else {
@@ -1856,7 +1741,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             
             if (selectedTable === tableName && codemasterTooltipContent) {
               // Second click on already-selected table with codemaster data: show tooltip
-              console.log(`🏷️ CODEMASTER TOOLTIP (2nd click): "${tableName}" -> showing tooltip`);
               
               // Use smart positioning to avoid covering the table
               const smartPosition = calculateSmartTooltipPosition(entityParent, svgContainer);
@@ -1867,7 +1751,9 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 y: smartPosition.y,
                 content: codemasterTooltipContent,
                 tableName,
-                columnName: 'All Columns'
+                columnName: 'All Columns',
+                calculatedWidth: smartPosition.calculatedWidth,
+                calculatedHeight: smartPosition.calculatedHeight
               });
               
               // No auto-hide - user will close manually
@@ -1875,8 +1761,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               return; // Prevent further processing
             } else {
               // First click or table without codemaster data: select/pan-zoom (existing behavior)
-              console.log(`🎯 TABLE SELECT (1st click): ${tableName}${codemasterTooltipContent ? ' (has codemaster - click again for tooltip)' : ''}`);
-              console.log(`  Event details:`, {
                 type: event.type,
                 target: target.tagName,
                 entityElement: entityParent.tagName,
@@ -1890,16 +1774,11 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             }
           }
         } else {
-          console.log(`  ❌ No table found for this click - debugging info:`);
-          console.log(`    Target data-table-name:`, target.getAttribute('data-table-name'));
-          console.log(`    Target class:`, (target as any).className?.baseVal || target.className);
-          console.log(`    Target ID:`, target.id);
           
           // Show parent chain for debugging
           let el = target;
           for (let i = 0; i < 5 && el; i++) {
             const elementClass = (el as any).className?.baseVal || el.className || '';
-            console.log(`    Parent ${i}: ${el.tagName} (class: "${elementClass}", data-table-name: "${el.getAttribute('data-table-name')}")`);
             el = el.parentElement as Element;
           }
         }
@@ -1943,7 +1822,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         const hasGhostTables = mermaidCode.includes('GHOST-META:');
         const hasGhostClass = mermaidCode.includes('classDef ghostTable') || mermaidCode.includes('class ') && mermaidCode.includes('ghostTable');
         
-        console.log('  🎨 Ghost class definition found:', hasGhostClass);
         
         if (hasGhostTables) {
           // Extract ghost table metadata for debugging (new format)
@@ -1980,10 +1858,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                      id.includes('Entity') || className.includes('Entity');
             });
             
-            console.log('  🏢 Entity-related elements found:', entityElements.length);
             entityElements.forEach((el, i) => {
               if (i < 5) { // Log first 5 for debugging
-                console.log(`    ${i + 1}. ${el.tagName}#${el.getAttribute('id')} .${el.getAttribute('class')}`);
               }
             });
             
@@ -1999,16 +1875,13 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             
             // Analyze g elements (groups) which typically contain table structures
             const groupElements = Array.from(svgElement.querySelectorAll('g'));
-            console.log('  📦 Group elements found:', groupElements.length);
             
             const elementsWithIds = groupElements.filter(el => el.getAttribute('id'));
-            console.log('  🆔 Groups with IDs:', elementsWithIds.length);
             elementsWithIds.forEach((el, i) => {
               if (i < 10) { // Log first 10 for debugging
                 const id = el.getAttribute('id');
                 const hasGhostContent = Array.from(el.querySelectorAll('text, tspan'))
                   .some(textEl => (textEl.textContent || '').includes('Ghost-Table'));
-                console.log(`    ${i + 1}. g#${id} ${hasGhostContent ? '👻 (has ghost content)' : ''}`);
               }
             });
             
@@ -2053,7 +1926,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         }
         
       } catch (error) {
-        console.error('Mermaid rendering failed:', error);
         
         if (!cancelled) {
           // Try simplified ERD fallback
@@ -2106,7 +1978,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const svg = container.querySelector('svg') as SVGSVGElement;
     
     if (!svg) {
-      console.log('⚠️ Mouse handlers: SVG not found, skipping event handler setup');
       return;
     }
     
@@ -2122,7 +1993,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const clientX = e.clientX - rect.left;
       const clientY = e.clientY - rect.top;
       
-      console.log(`🖱️ Wheel zoom at client position: (${clientX.toFixed(2)}, ${clientY.toFixed(2)})`);
       
       // Normalize deltaY across different browsers and devices
       // Standard sensitivity: 0.0008 per deltaY unit (industry standard)
@@ -2148,7 +2018,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const scaleDelta = -deltaY * effectiveZoomSensitivity;
       const zoomFactor = Math.exp(scaleDelta); // Smooth exponential scaling
       
-      console.log(`🔍 Zoom sensitivity: deltaY=${deltaY}, trackpad=${isPotentialTrackpad}, sensitivity=${effectiveZoomSensitivity.toFixed(4)}, factor=${zoomFactor.toFixed(3)}`);
       
       // Calculate new zoom with limits
       const newZoom = Math.max(0.1, Math.min(10, currentZoom * zoomFactor));
@@ -2176,7 +2045,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const isTooltipElement = target.style?.color === 'rgb(99, 102, 241)' || target.style?.fill === 'rgb(99, 102, 241)';
       
       if (isTable || isTooltipElement) {
-        console.log(`🚫 [TOOLTIP DEBUG] Skipping pan for tooltip element:`, target);
         return;
       }
       
@@ -2202,7 +2070,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const adjustedDeltaX = deltaX * effectiveSensitivity;
       const adjustedDeltaY = deltaY * effectiveSensitivity;
       
-      console.log(`🎯 Pan sensitivity: raw(${deltaX.toFixed(1)}, ${deltaY.toFixed(1)}) -> adjusted(${adjustedDeltaX.toFixed(1)}, ${adjustedDeltaY.toFixed(1)}) [zoom: ${currentZoom.toFixed(2)}x, sensitivity: ${effectiveSensitivity.toFixed(2)}x]`);
       
       panToPosition(adjustedDeltaX, adjustedDeltaY);
       setDragStart({ x: e.clientX, y: e.clientY });
@@ -2248,15 +2115,11 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
 
   // Transform wrapper creation for SVG content with comprehensive debugging
   const wrapSVGWithTransformGroup = useCallback((svgContent: string): string => {
-    console.log('🔄 wrapSVGWithTransformGroup called');
-    console.log('  - Input content length:', svgContent?.length || 0);
     
     if (!svgContent) {
-      console.log('  - No content provided, returning empty');
       return svgContent;
     }
     
-    console.log('  - Parsing SVG content...');
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgContent, 'image/svg+xml');
     const svg = doc.querySelector('svg');
@@ -2266,55 +2129,41 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       return svgContent;
     }
     
-    console.log('  - ✅ SVG element found');
-    console.log('  - Original SVG children count:', svg.children.length);
     
     // Check if transform group already exists
     const existingGroup = svg.querySelector('#pan-zoom-group');
     if (existingGroup) {
-      console.log('  - ⚠️ Transform group already exists, skipping wrap');
       return svgContent;
     }
     
     // Create transform group wrapper
-    console.log('  - Creating transform group...');
     const transformGroup = doc.createElementNS('http://www.w3.org/2000/svg', 'g');
     transformGroup.setAttribute('id', 'pan-zoom-group');
     transformGroup.setAttribute('transform', 'translate(0, 0) scale(1)');
     
     // Move all SVG children into the transform group
-    console.log('  - Moving children into transform group...');
     const children = Array.from(svg.children);
-    console.log(`  - Moving ${children.length} children`);
     
     children.forEach((child, i) => {
-      console.log(`    ${i + 1}. Moving ${child.tagName} (id: "${child.id}")`);
       transformGroup.appendChild(child);
     });
     
     // Add the transform group as the only child of SVG
     svg.appendChild(transformGroup);
     
-    console.log('  - Transform group added to SVG');
-    console.log('  - Final SVG children count:', svg.children.length);
-    console.log('  - Transform group children count:', transformGroup.children.length);
     
     // Ensure proper SVG attributes
     if (svg.getAttribute('height') === 'null' || !svg.getAttribute('height')) {
-      console.log('  - Fixing SVG height attribute');
       svg.setAttribute('height', '100%');
     }
     if (!svg.getAttribute('width')) {
-      console.log('  - Fixing SVG width attribute');
       svg.setAttribute('width', '100%');
     }
     
     const result = new XMLSerializer().serializeToString(doc);
-    console.log('  - ✅ SVG wrapping complete, result length:', result.length);
     
     // Verify the result contains the transform group
     if (result.includes('id="pan-zoom-group"')) {
-      console.log('  - ✅ Verified: Result contains pan-zoom-group');
     } else {
       console.error('  - ❌ ERROR: Result does NOT contain pan-zoom-group');
     }
@@ -2325,17 +2174,13 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Enhanced SVG initialization after content is set with comprehensive debugging
   const initializeTransformSystem = useCallback(() => {
     if (!svgContainerRef.current) {
-      console.warn('❌ initializeTransformSystem: No container ref');
       return;
     }
     
     const container = svgContainerRef.current;
-    console.log('🔧 Initializing transform-based pan-zoom system');
-    console.log('📦 Container element:', container);
     
     // Check for SVG element
     const svg = container.querySelector('svg') as SVGSVGElement;
-    console.log('📊 Found SVG element:', svg);
     
     if (!svg) {
       console.error('❌ No SVG element found in container');
@@ -2343,25 +2188,18 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     }
     
     // Debug SVG structure
-    console.log('📋 SVG children count:', svg.children.length);
-    console.log('📋 SVG innerHTML preview:', svg.innerHTML.substring(0, 200) + '...');
     
     // Look for transform group
     const transformGroup = container.querySelector('#pan-zoom-group') as SVGGElement;
-    console.log('🎯 Transform group search result:', transformGroup);
     
     if (!transformGroup) {
       console.error('❌ Transform group #pan-zoom-group NOT FOUND');
-      console.log('🔍 Available elements with IDs:');
       const elementsWithIds = container.querySelectorAll('[id]');
       elementsWithIds.forEach((el, i) => {
-        console.log(`  ${i + 1}. ${el.tagName}#${el.id}`);
       });
       
-      console.log('🔍 All immediate SVG children:');
       Array.from(svg.children).forEach((child, i) => {
         const childClass = (child as any).className?.baseVal || child.className || '';
-        console.log(`  ${i + 1}. ${child.tagName} (id: "${child.id}", class: "${childClass}")`);
       });
       return;
     }
@@ -2370,10 +2208,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     svgRef.current = svg;
     transformGroupRef.current = transformGroup;
     
-    console.log('✅ Transform system initialized successfully');
-    console.log('  - SVG ref set:', !!svgRef.current);
-    console.log('  - Transform group ref set:', !!transformGroupRef.current);
-    console.log('  - Transform group children count:', transformGroup.children.length);
     
     // Apply initial dimension fixes
     svg.style.height = '100%';
@@ -2384,12 +2218,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
 
   // Monitor SVG content and initialize transform system
   useEffect(() => {
-    console.log('📊 SVG Content Change Monitor TRIGGERED');
-    console.log(`  - svgContent length: ${svgContent ? svgContent.length : 0} characters`);
-    console.log(`  - svgContainerRef exists: ${!!svgContainerRef.current}`);
     
     // Clear potentially stale refs when SVG content changes
-    console.log('🧹 Clearing potentially stale element refs');
     svgRef.current = null;
     transformGroupRef.current = null;
     
@@ -2402,7 +2232,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // Retry initialization if needed
       setTimeout(() => {
         if (!transformGroupRef.current) {
-          console.log('🔄 Retrying transform system initialization...');
           initializeTransformSystem();
         }
       }, 50);
@@ -2418,7 +2247,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         setTimeout(() => {
           // For transform-based approach, we don't need to recalculate on resize
           // The transform will maintain proper scaling automatically
-          console.log('📱 Window resized - transform system is responsive automatically');
         }, 100);
       }
     };
@@ -2467,14 +2295,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const handleReset = useCallback(() => {
     if (!svgContainerRef.current) return;
     
-    console.log('🔄 Resetting pan-zoom to default state');
     
     // Always search for live element
     const container = svgContainerRef.current;
     const transformGroup = container.querySelector('#pan-zoom-group') as SVGGElement;
     
     if (!transformGroup || !document.contains(transformGroup)) {
-      console.warn('❌ handleReset: Transform group not found or disconnected');
       return;
     }
     
@@ -2486,7 +2312,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     setCurrentZoom(1.0);
     setCurrentPan({ x: 0, y: 0 });
     
-    console.log('✅ Reset complete: zoom=1, pan=(0,0)');
   }, []);
 
   const handleFit = useCallback(() => {
@@ -2502,7 +2327,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         const transformGroup = transformGroupRef.current;
         if (transformGroup) {
           svgBBox = transformGroup.getBBox();
-          console.log(`📊 Using transform group bbox: ${svgBBox.width}x${svgBBox.height}`);
         } else {
           // Fallback: calculate bounds from actual table elements
           const svg = svgRef.current;
@@ -2530,16 +2354,13 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 width: maxX - minX,
                 height: maxY - minY
               };
-              console.log(`📊 Calculated bbox from ${tableElements.length} table elements: ${svgBBox.width}x${svgBBox.height}`);
             } else {
               // Final fallback to entire SVG
               svgBBox = svgRef.current.getBBox();
-              console.log(`📊 Using fallback SVG bbox: ${svgBBox.width}x${svgBBox.height}`);
             }
           } else {
             // No table elements found, use entire SVG
             svgBBox = svgRef.current.getBBox();
-            console.log(`📊 No table elements found, using entire SVG bbox: ${svgBBox.width}x${svgBBox.height}`);
           }
         }
         
@@ -2589,13 +2410,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           
           zoomToScale(fitScale, centerX, centerY);
           
-          console.log(`📏 OptimalFit: bbox=(${svgBBox.x}, ${svgBBox.y}, ${svgBBox.width}x${svgBBox.height}), container=(${containerRect.width}x${containerRect.height}), actualTables=${actualTableCount}, minZoom=${(intelligentMinimum * 100).toFixed(0)}%, finalScale=${fitScale.toFixed(3)}, padding=${(padding * 100).toFixed(0)}%`);
         } else {
-          console.warn('Invalid SVG bbox dimensions, using fallback');
           zoomToScale(0.8); // Better fallback zoom
         }
       } catch (error) {
-        console.warn('SVG getBBox failed, using enhanced fallback strategy:', error);
         
         // Enhanced fallback: try to get viewBox dimensions
         const svg = svgRef.current;
@@ -2626,7 +2444,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             fallbackScale = Math.max(fallbackScale * padding, intelligentMinimum);
             
             zoomToScale(fallbackScale, x + width / 2, y + height / 2);
-            console.log(`📏 Fallback fit using viewBox: scale=${fallbackScale.toFixed(3)}`);
             return;
           }
         }
@@ -2651,18 +2468,15 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         handleFit();
         setSelectedTable(null);
         setHighlightedTables(new Set());
-        console.log('📊 Switched to Overview mode');
         break;
         
       case 'detail':
         // Zoom to 150% for better detail viewing
         zoomToScale(1.5);
-        console.log('🔍 Switched to Detail mode (150% zoom)');
         break;
         
       case 'focus':
         // Focus mode: zoom to 200% - centering on specific table handled separately
-        console.log('🎯 Switched to Focus mode - centering will be handled by selected table');
         break;
     }
   }, [handleFit, zoomToScale]);
@@ -2689,11 +2503,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       // Remove visual selection CSS classes and stop animations - WITH DEBUGGING
       const tableSelectedElements = svgContainer.querySelectorAll('.table-selected');
-      console.log(`🔍 [DEBUG] Selection clearing found ${tableSelectedElements.length} elements with .table-selected class`);
       
       tableSelectedElements.forEach((element, index) => {
-        console.log(`🔍 [DEBUG] Processing element ${index + 1}:`, element);
-        console.log(`🔍 [DEBUG] Element tag:`, element.tagName, 'ID:', element.id, 'Classes:', element.className);
         
         // Stop any running animations first
         element.style.animation = 'none';
@@ -2703,11 +2514,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         element.classList.remove('table-selected');
         const stillHasClass = element.classList.contains('table-selected');
         
-        console.log(`🔍 [DEBUG] Had .table-selected: ${hadClass}, Still has: ${stillHasClass}`);
-        console.log(`🔍 [DEBUG] Classes after removal:`, element.className);
         
         // Log all inline styles before clearing
-        console.log(`🔍 [DEBUG] Inline styles before clearing:`, element.getAttribute('style'));
         
         // Force clear ALL possible visual effect styles
         const stylesToClear = [
@@ -2728,51 +2536,38 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         
         // Get computed styles and override any that might be causing visual effects
         const computedStyle = getComputedStyle(element);
-        console.log(`🔍 [DEBUG] Computed filter: ${computedStyle.filter}`);
-        console.log(`🔍 [DEBUG] Computed animation: ${computedStyle.animation}`);
         
         // Force override computed styles that might persist
         if (computedStyle.filter && computedStyle.filter !== 'none') {
           element.style.setProperty('filter', 'none', 'important');
         }
         
-        console.log(`🔍 [DEBUG] Inline styles after clearing:`, element.getAttribute('style'));
         
         // Clear browser focus states and debug CSS pseudo-classes
-        console.log(`🔍 [DEBUG] Checking CSS pseudo-classes:`);
-        console.log(`  - :focus: ${element.matches(':focus')}`);
-        console.log(`  - :focus-visible: ${element.matches(':focus-visible')}`);
-        console.log(`  - :hover: ${element.matches(':hover')}`);
-        console.log(`  - tabindex: ${element.getAttribute('tabindex')}`);
         
         // Force remove focus and blur the element
         if (element.matches(':focus')) {
           (element as HTMLElement).blur();
-          console.log(`🔍 [DEBUG] Blurred focused element`);
         }
         
         // Temporarily clear tabindex to prevent focus
         const originalTabIndex = element.getAttribute('tabindex');
         if (originalTabIndex !== null) {
           element.setAttribute('tabindex', '-1');
-          console.log(`🔍 [DEBUG] Set tabindex to -1 (was: ${originalTabIndex})`);
         }
         
         // Clear SVG presentation attributes (not just CSS styles)
         const svgAttributes = ['stroke', 'stroke-width', 'stroke-dasharray', 'stroke-opacity', 'fill', 'fill-opacity', 'filter'];
-        console.log(`🔍 [DEBUG] Clearing SVG presentation attributes...`);
         
         svgAttributes.forEach(attr => {
           if (element.hasAttribute(attr)) {
             const oldValue = element.getAttribute(attr);
             element.removeAttribute(attr);
-            console.log(`🔍 [DEBUG] Removed SVG attribute ${attr}: ${oldValue}`);
           }
         });
         
         // Also clear selection styles from child elements
         const childRects = element.querySelectorAll('rect, foreignObject');
-        console.log(`🔍 [DEBUG] Found ${childRects.length} child rect/foreignObject elements`);
         
         childRects.forEach((child, childIndex) => {
           
@@ -2843,7 +2638,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     setSearchTargetTable(null);
     setIsSearchTriggered(false);
     
-    console.log(`🧹 Cleared table selection "${previousSelection || 'none'}" (background click - no zoom)`);
   }, [selectedTable, removeSelectionHandles]);
 
   // Clear selection with zoom (used for control panel clear button)
@@ -2911,7 +2705,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     // Use the enhanced fit function to properly center all tables
     handleFit();
     
-    console.log(`🧹 Cleared table selection "${previousSelection || 'none'}" and reset to overview with proper fit`);
   }, [selectedTable, handleFit, removeSelectionHandles, clearERDRelationshipHighlighting]);
 
   const handleDomainFocus = useCallback(() => {
@@ -2919,14 +2712,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     handleFit();
     setViewMode('detail');
     
-    console.log(`🏷️ Focusing on domain: ${domain || 'overview'}`);
   }, [domain, handleFit]);
 
   // Layout and display option handlers
   const handleToggleCompactView = useCallback(() => {
     setIsCompactView(prev => {
       const newValue = !prev;
-      console.log(`📦 ${newValue ? 'Enabled' : 'Disabled'} compact view`);
       return newValue;
     });
   }, []);
@@ -2934,7 +2725,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const handleToggleRelationshipLabels = useCallback(() => {
     setShowRelationshipLabels(prev => {
       const newValue = !prev;
-      console.log(`🏷️ ${newValue ? 'Showing' : 'Hiding'} relationship labels`);
       return newValue;
     });
   }, []);
@@ -2942,7 +2732,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   const handleToggleAttributeDetails = useCallback(() => {
     setShowAttributeDetails(prev => {
       const newValue = !prev;
-      console.log(`📝 ${newValue ? 'Showing' : 'Hiding'} attribute details`);
       return newValue;
     });
   }, []);
@@ -3060,7 +2849,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             // Check if target table is external (not in current domain)
             if (!currentDomainTables.includes(targetTable) && targetTable !== sourceTable) {
               externalTables.add(targetTable);
-              console.log(`🔗 Found external table reference: "${targetTable}" (not in current domain)`);
             }
           }
           
@@ -3078,7 +2866,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 
                 if (domainData?.diagram && domainData.diagram.includes(`${possibleTableName} {`)) {
                   externalTables.add(possibleTableName);
-                  console.log(`🔗 Found external table reference from FK: "${possibleTableName}" (from ${baseTableName}_id FK)`);
                   break;
                 }
               }
@@ -3093,7 +2880,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
 
   // Handle clicks on external table references
   const handleExternalTableClick = useCallback((tableName: string, event?: MouseEvent) => {
-    console.log(`🔗 External table clicked: "${tableName}"`);
     
     if (event) {
       event.preventDefault();
@@ -3108,20 +2894,16 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       if (domainData?.diagram && domainData.diagram.includes(`${tableName} {`)) {
         targetDomain = domainName;
-        console.log(`🎯 External table "${tableName}" found in domain "${domainName}"`);
         break;
       }
     }
     
     if (targetDomain) {
-      console.log(`🚀 Navigating to domain "${targetDomain}" for table "${tableName}"`);
       if (onExternalTableClick) {
         onExternalTableClick(tableName, targetDomain);
       } else {
-        console.warn(`⚠️ No onExternalTableClick handler provided`);
       }
     } else {
-      console.warn(`⚠️ Could not find domain for external table "${tableName}"`);
     }
   }, [domainResults, domain]);
 
@@ -3141,7 +2923,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       if (!svgElement) return svgString;
       
-      console.log(`🔍 Setting up clean table detection (no styling applied)...`);
       
       // Debug: Count all potential entity containers first
       const allPotentialBoxes = Array.from(svgElement.querySelectorAll('g'));
@@ -3155,7 +2936,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         // Exclude containers like "nodes" - only include individual "node" elements
         return !className.includes('nodes') && (className.includes('node'));
       });
-      console.log(`🔍 Found ${entityBoxes.length} individual table nodes for detection...`);
       
       // Debug: Show the first few boxes to understand structure
       // Count entity boxes for detection
@@ -3175,7 +2955,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           const match = entityId.match(/entity-(.+)-\d+$/);
           if (match && match[1]) {
             foundTableName = match[1];
-            console.log(`  ✅ Found table: "${foundTableName}" from ID pattern`);
           }
         }
         
@@ -3189,7 +2968,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           
           if (tableSpan) {
             foundTableName = tableSpan.textContent?.trim() || null;
-            console.log(`  ✅ Found table: "${foundTableName}" from text content`);
           }
         }
         
@@ -3220,7 +2998,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         }
       });
       
-      console.log(`✅ Clean setup complete - ${tablesFound.length} clickable tables: [${tablesFound.join(', ')}]`);
       
       
       
@@ -3246,12 +3023,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           const matches = Array.from(mermaidCode.matchAll(pattern));
           if (matches.length > 0) {
             foundMatches = true;
-            console.log(`👻 Found ghost metadata with pattern: ${pattern.source}`, matches.map(m => m[0]));
             matches.forEach((matchResult) => {
               const [, tableName, targetDomain] = matchResult;
               if (tableName && targetDomain) {
                 ghostTableMap.set(tableName, targetDomain);
-                console.log(`👻 Mapped ghost table: ${tableName} -> ${targetDomain}`);
               }
             });
             break; // Use first matching pattern
@@ -3259,7 +3034,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         }
         
         if (!foundMatches) {
-          console.log(`👻 No ghost metadata matches found. Sample mermaidCode snippet:`, 
             mermaidCode.substring(0, 500));
         }
       }
@@ -3309,7 +3083,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           
           
           if (isGhostTable && targetDomain) {
-            console.log(`👻 Setting up ghost table styling: ${tableName}`);
             
             
             try {
@@ -3327,7 +3100,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               tableElement.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                console.log(`👻 Ghost table clicked: "${tableName}" -> ${targetDomain}`);
                 
                 if (onExternalTableClick) {
                   onExternalTableClick(tableName, targetDomain);
@@ -3346,23 +3118,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         }
       });
       
-      console.log(`🏁 [SUMMARY] Ghost table detection completed for domain: ${domain || 'undefined'}`);
-      console.log(`🏁 [SUMMARY] Total tables checked: ${tablesFound.length}`);
-      console.log(`🏁 [SUMMARY] Ghost tables found in metadata: ${ghostTableMap.size}`);
       if (ghostTableMap.size > 0) {
-        console.log(`🏁 [SUMMARY] Ghost table mappings:`, Object.fromEntries(ghostTableMap));
       }
-      console.log(`🏁 [SUMMARY] Ghost tables successfully configured: ${ghostTablesFound}`);
       
       if (ghostTablesFound > 0) {
-        console.log(`👻 ✅ Found and styled ${ghostTablesFound} ghost tables`);
         
       } else {
-        console.log(`👻 ❌ No ghost tables were found or configured`);
         if (ghostTableMap.size > 0) {
-          console.log(`👻 🔍 Ghost tables were in metadata but not found in DOM - check element selectors`);
         } else {
-          console.log(`👻 🔍 No ghost tables in metadata - check mermaidCode content`);
         }
       }
       
@@ -3371,7 +3134,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       let externalReferencesAdded = 0;
       
       if (externalTables.size > 0) {
-        console.log(`🔗 Found ${externalTables.size} external table references: [${Array.from(externalTables).join(', ')}]`);
         
         // Find text elements that might contain FK column names
         const textElements = Array.from(svgElement.querySelectorAll('text, span, tspan'));
@@ -3413,13 +3175,11 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                   externalReferencesAdded++;
                 }
                 
-                console.log(`  ✅ Added clickable external reference: "${externalTable}"`);
               }
             });
           }
         });
         
-        console.log(`✅ Added ${externalReferencesAdded} clickable external table references`);
       }
       
       // Update debugging info
@@ -3479,7 +3239,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     const svgContainer = svgContainerRef.current;
     if (!svgContainer || !selectedTable) return;
 
-    console.log(`✨ Applying simple highlighting to selected table: ${selectedTable}`);
     
     // RACE CONDITION DEBUG: Track DOM element lifecycle
     const trackElementLifecycle = (tableName: string) => {
@@ -3491,14 +3250,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         if (tableElement) {
           const elementId = tableElement.getAttribute('id');
           const hasClass = tableElement.classList.contains('table-selected');
-          console.log(`🔍 LIFECYCLE: Found element ${elementId} for ${tableName}, hasClass: ${hasClass}`);
           
           // Monitor this element for changes
           const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
               if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
                 const currentHasClass = (mutation.target as Element).classList.contains('table-selected');
-                console.log(`🚨 CLASS CHANGE: ${elementId} table-selected: ${currentHasClass}`);
               }
             });
           });
@@ -3510,7 +3267,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           
           return { elementId, hasClass };
         } else {
-          console.log(`❌ LIFECYCLE: No element found for ${tableName}`);
           return null;
         }
       }
@@ -3522,21 +3278,17 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     
     // Always clear old highlighting first
     const oldHighlighted = svgContainer.querySelectorAll('.table-selected, .relationship-highlighted');
-    console.log(`🧹 CLEARING: Found ${oldHighlighted.length} elements to clear`);
     oldHighlighted.forEach(el => {
       const elementId = el.getAttribute('id');
-      console.log(`🧹 CLEARING: Removing classes from ${elementId}`);
       el.classList.remove('table-selected', 'relationship-highlighted');
     });
     svgContainer.classList.remove('has-selection');
 
     // Enhanced retry mechanism for robust highlighting during domain switches
     const attemptHighlighting = (attempt: number = 1, maxAttempts: number = 5) => {
-      console.log(`🎨 Attempting highlighting for: ${selectedTable} (attempt ${attempt}/${maxAttempts})`);
       
       const svgRoot = svgContainer.querySelector('svg');
       if (!svgRoot) {
-        console.log(`❌ No SVG root found (attempt ${attempt})`);
         if (attempt < maxAttempts) {
           setTimeout(() => attemptHighlighting(attempt + 1, maxAttempts), 200);
         }
@@ -3546,7 +3298,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       // Check SVG dimensions to ensure it's fully rendered
       const svgRect = svgRoot.getBoundingClientRect();
       if (svgRect.width === 0 || svgRect.height === 0) {
-        console.log(`❌ SVG not fully rendered yet: ${svgRect.width}x${svgRect.height} (attempt ${attempt})`);
         if (attempt < maxAttempts) {
           setTimeout(() => attemptHighlighting(attempt + 1, maxAttempts), 250);
         }
@@ -3568,16 +3319,13 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       }
           
       if (selectedEntity) {
-        console.log(`✅ Found table element: ${selectedTable} (attempt ${attempt})`);
         
         // Apply table highlighting
         selectedEntity.classList.add('table-selected');
-        console.log(`✅ Added .table-selected to ${selectedTable}`);
         
         // RACE CONDITION DEBUG: Verify class was actually applied and monitor persistence
         const elementId = selectedEntity.getAttribute('id');
         const hasClassAfterAdd = selectedEntity.classList.contains('table-selected');
-        console.log(`🔍 VERIFY: Class applied to ${elementId}? ${hasClassAfterAdd}`);
         
         // Monitor if class persists for next 5 seconds
         const monitorPersistence = () => {
@@ -3587,18 +3335,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             const stillHasClass = selectedEntity.classList.contains('table-selected');
             const stillInDOM = document.contains(selectedEntity);
             
-            console.log(`🕐 PERSISTENCE CHECK ${checkCount}: ${elementId} stillInDOM: ${stillInDOM}, hasClass: ${stillHasClass}`);
             
             if (!stillInDOM) {
-              console.log(`🚨 ELEMENT REMOVED: ${elementId} was removed from DOM`);
               clearInterval(checkInterval);
             } else if (!stillHasClass) {
-              console.log(`🚨 CLASS REMOVED: ${elementId} lost .table-selected class`);
               clearInterval(checkInterval);
             }
             
             if (checkCount >= 10) { // Check for 5 seconds (500ms * 10)
-              console.log(`✅ PERSISTENCE SUCCESS: ${elementId} maintained highlighting for 5 seconds`);
               clearInterval(checkInterval);
             }
           }, 500);
@@ -3608,14 +3352,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         
         // Enable dimming by adding container class
         svgContainer.classList.add('has-selection');
-        console.log(`✅ Added .has-selection for dimming effect`);
         
         // Highlight relationship lines (smart path detection)
         const relationships = parseRelationships(mermaidCode);
         const connectedTables = relationships.get(selectedTable) || [];
         
         if (connectedTables.length > 0) {
-          console.log(`🔗 Highlighting relationships for ${selectedTable}: ${connectedTables.join(', ')}`);
           
           // Smart approach: find paths that connect the selected table to its related tables
           const relationshipPaths = svgRoot.querySelectorAll('path[id*="entity-"], .edgePath path');
@@ -3651,18 +3393,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           });
           
           if (highlightedCount > 0) {
-            console.log(`✅ Highlighted ${highlightedCount} relationships for ${selectedTable}`);
           }
         } else {
-          console.log(`⚠️ No relationships found for ${selectedTable}`);
         }
         
       } else if (attempt < maxAttempts) {
         // Retry if element not found yet (SVG might still be rendering)
-        console.log(`⚠️ Table element not found for ${selectedTable}, retrying (attempt ${attempt + 1}/${maxAttempts})`);
         setTimeout(() => attemptHighlighting(attempt + 1, maxAttempts), 200 * attempt);
       } else {
-        console.log(`❌ Failed to find table element for ${selectedTable} after ${maxAttempts} attempts`);
       }
     };
     
@@ -3693,7 +3431,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           
           if (selectedEntity) {
             if (!selectedEntity.classList.contains('table-selected')) {
-              console.log(`🔄 Re-applying highlighting after SVG change for: ${targetTable} (attempt ${attempt})`);
               selectedEntity.classList.add('table-selected');
               svgContainer.classList.add('has-selection');
               
@@ -3767,7 +3504,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         selectedTableFromSearch !== lastProcessedSearchTable.current &&
         svgContent.length > 0) {
       
-      console.log(`🔍 Processing new search selection: ${selectedTableFromSearch}`);
       
       // Update the last processed ref
       lastProcessedSearchTable.current = selectedTableFromSearch;
@@ -3787,7 +3523,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                                svg?.querySelector(`g[id*="entity-${selectedTableFromSearch}"]`);
           
           if (tableElement && svg) {
-            console.log(`✅ SVG content ready for search selection: ${selectedTableFromSearch}`);
             
             // Now trigger the table click with proper domain switch flag
             handleTableClick(selectedTableFromSearch, undefined, false, true);
@@ -3800,12 +3535,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             }
             
           } else {
-            console.log(`⏳ SVG not ready yet for ${selectedTableFromSearch}, retrying...`);
             // Retry after a short delay if SVG isn't ready
             setTimeout(waitForDomainSwitch, 100);
           }
         } else {
-          console.log(`⏳ SVG container not ready for ${selectedTableFromSearch}, retrying...`);
           setTimeout(waitForDomainSwitch, 100);
         }
       };
@@ -3833,7 +3566,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         const tableElement = svgContainer?.querySelector(`g[data-table-name="${searchTargetTable}"]`);
         
         if (tableElement) {
-          console.log(`✅ Table element found, proceeding with centering`);
           centerOnTable(searchTargetTable);
           
           // Trigger table selection after successful centering
@@ -3842,9 +3574,7 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           // Clear search target after successful centering
           setSearchTargetTable(null);
           setIsSearchTriggered(false);
-          console.log(`✅ Search centering completed for table: ${searchTargetTable}`);
         } else if (attempt < maxAttempts) {
-          console.log(`⚠️ Table element not found, retrying in ${200 * attempt}ms (attempt ${attempt + 1}/${maxAttempts})`);
           setTimeout(() => attemptCentering(attempt + 1, maxAttempts), 200 * attempt);
         } else {
           console.error(`❌ Failed to find table "${searchTargetTable}" after ${maxAttempts} attempts`);
@@ -3858,7 +3588,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       const isLikelyCrossDomain = !svgContainerRef.current?.querySelector(`g[data-table-name="${searchTargetTable}"]`);
       const initialDelay = isLikelyCrossDomain ? 500 : 200; // 500ms for cross-domain, 200ms for same-domain
       
-      console.log(`⏱️ Using ${initialDelay}ms delay for ${isLikelyCrossDomain ? 'cross-domain' : 'same-domain'} centering`);
       
       const timeoutId = setTimeout(() => attemptCentering(), initialDelay);
       return () => clearTimeout(timeoutId);
@@ -3869,7 +3598,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   useEffect(() => {
     if (searchTargetTable && !isSearchTriggered && svgContent) {
       // This handles the case where domain switch completed and ERD re-rendered
-      console.log(`🌐 Domain switch completed, re-triggering search centering for: ${searchTargetTable}`);
       setIsSearchTriggered(true);
     }
   }, [svgContent, searchTargetTable, isSearchTriggered]);
@@ -3889,7 +3617,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       
       // If no table was clicked and we have a selection, clear it
       if (!clickedTable && selectedTable) {
-        console.log(`🎯 Background click detected, clearing selection: "${selectedTable}"`);
         handleClearSelectionOnly();
       }
     };
@@ -3905,19 +3632,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Bind ERD event handlers after SVG content is rendered
   useEffect(() => {
     if (svgContent && svgContainerRef.current) {
-      console.log('🔍 ERD Event Handler Binding - useEffect triggered');
-      console.log('  - svgContent length:', svgContent.length);
-      console.log('  - svgContainerRef exists:', !!svgContainerRef.current);
       
       // Small delay to ensure SVG is fully rendered in the DOM
       const timeoutId = setTimeout(() => {
-        console.log('🔍 ERD Event Handler Binding - timeout executing, calling bindERDEventHandlers...');
         bindERDEventHandlers();
       }, 100);
       
       return () => clearTimeout(timeoutId);
     } else {
-      console.log('🔍 ERD Event Handler Binding - useEffect skipped:', {
         svgContent: !!svgContent,
         svgContainerRef: !!svgContainerRef.current
       });
@@ -4279,7 +4001,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    console.log(`🧪 [DEBUG] Testing tooltip manually`);
                     setTooltip({
                       visible: true,
                       x: 200,
@@ -4341,34 +4062,38 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       </div>
 
 
-      {/* Enhanced Codemaster Tooltip with Drag & Close */}
+      {/* Enhanced Codemaster Tooltip with Responsive Sizing */}
       {tooltip.visible && (
         <div
-          className="absolute z-50 bg-gray-900 text-white rounded-lg shadow-xl border border-gray-600 pointer-events-auto"
+          className={`codemaster-tooltip ${isDraggingTooltip ? 'dragging' : ''}`}
           style={{
             left: tooltip.x,
             top: tooltip.y,
-            width: '400px',
-            maxHeight: '300px',
-            cursor: isDraggingTooltip ? 'grabbing' : 'default'
-          }}
+            cursor: isDraggingTooltip ? 'grabbing' : 'default',
+            // Dynamic CSS custom properties for container-relative sizing
+            '--tooltip-width': `${tooltip.calculatedWidth || 350}px`,
+            '--tooltip-max-height': `${tooltip.calculatedHeight || 250}px`,
+            '--tooltip-min-width': `${Math.min(280, (tooltip.calculatedWidth || 350) * 0.8)}px`,
+            '--tooltip-min-height': '120px',
+            '--tooltip-max-width': `${tooltip.calculatedWidth || 350}px`
+          } as React.CSSProperties}
         >
           {/* Title Bar with Drag Handle and Close Button */}
           <div
-            className="bg-gray-800 rounded-t-lg px-4 py-2 border-b border-gray-600 flex justify-between items-center cursor-grab active:cursor-grabbing select-none"
+            className="codemaster-tooltip-title"
             onMouseDown={handleTooltipDragStart}
           >
             <div className="flex items-center space-x-2">
-              <div className="text-blue-300 font-semibold text-sm">
+              <div className="table-name">
                 {tooltip.tableName}
               </div>
-              <div className="text-gray-400 text-xs">
+              <div className="drag-hint">
                 ⋮⋮ drag to move
               </div>
             </div>
             <button
               onClick={handleTooltipClose}
-              className="text-gray-400 hover:text-white hover:bg-gray-700 rounded px-2 py-1 text-sm transition-colors"
+              className="codemaster-tooltip-close"
               title="Close tooltip"
             >
               ✕
@@ -4376,14 +4101,14 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           </div>
           
           {/* Content Area */}
-          <div className="p-4 max-h-64 overflow-y-auto">
-            <div className="whitespace-pre-line text-gray-200 text-xs leading-relaxed">
+          <div className="codemaster-tooltip-content">
+            <div className="content-text">
               {tooltip.content}
             </div>
           </div>
           
           {/* Optional resize handle in bottom-right corner */}
-          <div className="absolute bottom-0 right-0 w-3 h-3 text-gray-500 text-xs leading-none cursor-se-resize opacity-50 hover:opacity-100">
+          <div className="codemaster-tooltip-resize">
             ⋱
           </div>
         </div>

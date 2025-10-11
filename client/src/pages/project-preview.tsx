@@ -85,17 +85,10 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
         setRelationships(data.relationships);
         setMermaidCode(data.mermaidCode);
         
-        console.log('Loaded project data for preview:', {
-          project: data.project.name,
-          tables: data.tables.length,
-          relationships: data.relationships.length,
-          mermaidCode: data.mermaidCode.length
-        });
         
         // Generate domain views after loading project data
         await generateDomainViews(data.tables, data.relationships);
       } catch (err) {
-        console.error('Failed to load project data:', err);
         setError('Failed to load project data. Please try again.');
         toast({
           title: "Error Loading Project",
@@ -114,7 +107,6 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
   const generateDomainViews = async (projectTables: Table[], projectRelationships: Relationship[]) => {
     // Validate input data
     if (!Array.isArray(projectTables) || !Array.isArray(projectRelationships)) {
-      console.error('Invalid data format: tables or relationships is not an array');
       setDomainResults({
         overview: {
           diagram: mermaidCode,
@@ -143,6 +135,12 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
       setDomainError(null);
       
       // Transform database Table format to API-expected format
+      // Debug: Check if projectTables have codemaster metadata before transformation
+      const tablesWithCodemaster = projectTables.filter(table => {
+        const columns = table.columns || table.attributes || [];
+        return columns.some((col: any) => col.codemasterValues && col.codemasterValues.length > 0);
+      });
+      
       const transformedTables = projectTables.map(table => {
         const columns = table.columns || table.attributes || [];
         
@@ -153,6 +151,9 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
               type: col.type || 'text',
               isPrimaryKey: col.isPrimaryKey || false,
               isForeignKey: col.isForeignKey || false,
+              // Preserve codemaster metadata
+              ...(col.codemasterValues && { codemasterValues: col.codemasterValues }),
+              ...(col.codemasterSource && { codemasterSource: col.codemasterSource }),
             };
             
             // Handle references field - must be either undefined or a valid object
@@ -178,8 +179,12 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
           columns: normalizedColumns
         };
       });
+
+      // Debug: Check if transformedTables preserve codemaster metadata after transformation
+      const transformedTablesWithCodemaster = transformedTables.filter(table => 
+        table.columns.some((col: any) => col.codemasterValues && col.codemasterValues.length > 0)
+      );
       
-      console.log('Transformed tables for preview API:', transformedTables);
       
       // Call the domain generation API with correct parameters
       const response = await api.generateDomainMermaid(
@@ -191,8 +196,6 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
       // Server returns {domains: {...}, metadata: {...}} format
       if (response.domains) {
         setDomainResults(response.domains);
-        console.log('Generated preview domain results:', Object.keys(response.domains));
-        console.log('Preview domain metadata:', response.metadata);
         
         // Validate selected domain from URL parameter
         const domains = Object.keys(response.domains);
@@ -210,7 +213,6 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
         throw new Error('Server response missing domains field');
       }
     } catch (err) {
-      console.error('Failed to generate preview domain views:', err);
       
       let errorMessage = 'Failed to generate domain views';
       if (err instanceof Error) {
