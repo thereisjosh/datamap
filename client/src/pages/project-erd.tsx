@@ -64,6 +64,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
   const [tables, setTables] = useState<Table[]>([]);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [mermaidCode, setMermaidCode] = useState('');
+  const [codemasterMappings, setCodemasterMappings] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   
   // Domain data state
@@ -143,6 +144,9 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         setTables(data.tables);
         setRelationships(data.relationships);
         setMermaidCode(data.mermaidCode);
+        setCodemasterMappings(data.codemasterMappings || []);
+        
+        console.log('🔍 [TOOLTIP DEBUG] Loaded project ERD data with codemasterMappings:', data.codemasterMappings?.length || 0);
         
         
         // Generate domain views after loading project data
@@ -769,7 +773,7 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
                     domain={selectedDomain}
                     selectedTableFromSearch={selectedTable}
                     domainResults={domainResults}
-                    codemasterMappings={[]} // TODO: Load from project data
+                    codemasterMappings={codemasterMappings}
                     onExternalTableClick={(tableName, targetDomain) => {
                       
                       // Update domain state first, then table selection with enhanced delay to prevent race conditions

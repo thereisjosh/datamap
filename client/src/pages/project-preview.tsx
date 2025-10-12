@@ -58,6 +58,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
   const [tables, setTables] = useState<Table[]>([]);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [mermaidCode, setMermaidCode] = useState('');
+  const [codemasterMappings, setCodemasterMappings] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   
   // Domain data state
@@ -84,6 +85,9 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
         setTables(data.tables);
         setRelationships(data.relationships);
         setMermaidCode(data.mermaidCode);
+        setCodemasterMappings(data.codemasterMappings || []);
+        
+        console.log('🔍 [TOOLTIP DEBUG] Loaded project data with codemasterMappings:', data.codemasterMappings?.length || 0);
         
         
         // Generate domain views after loading project data
@@ -773,7 +777,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
           domain={selectedDomain}
           selectedTableFromSearch={pendingTableSelection}
           domainResults={domainResults}
-          codemasterMappings={[]} // TODO: Load from project data
+          codemasterMappings={codemasterMappings}
           onExternalTableClick={handleDomainSwitchForTable}
           onTableSelectionComplete={handleTableSelectionComplete}
         />

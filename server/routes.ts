@@ -444,7 +444,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const cachedDomains = await domainPersistenceService.getStoredDomains(projectId);
           
           if (cachedDomains && cachedDomains.domains.length > 0 && !options.forceRefresh) {
-            console.log(`📦 Using cached domains for project ${projectId} (${cachedDomains.domains.length} domains)`);
+            console.log(`📦 [DOMAIN DEBUG] Using cached domains for project ${projectId} (${cachedDomains.domains.length} domains) - RETURNING EARLY`);
             
             // Transform cached domains to response format
             const { transformHybridClustersToDomainsResponse } = await import('./utils/domainTransformer');
@@ -486,7 +486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
         } catch (error) {
-          console.warn('⚠️ Could not load cached domains:', error);
+          console.warn('⚠️ [DOMAIN DEBUG] Could not load cached domains:', error);
           // Continue with clustering if cache fails
         }
       }
@@ -589,6 +589,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Import transformer function
       const { transformHybridClustersToDomainsResponse } = await import('./utils/domainTransformer');
+      
+      console.log(`🔄 [DOMAIN DEBUG] Processing FRESH domains - generating ${hybridResult.hybridClusters.length} domains`);
       
       // Transform hybrid clusters to frontend domain format
       const domainResults = transformHybridClustersToDomainsResponse(
@@ -1001,11 +1003,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mermaidCode: mermaidCode.length
       });
 
+      // Debug: Check if codemaster data exists in tables
+      console.log('🔍 [CODEMASTER DEBUG] Checking tables for codemaster data...');
+      tables.forEach((table, index) => {
+        if (index < 3) { // Only log first 3 tables to avoid spam
+          console.log(`🔍 [CODEMASTER DEBUG] Table ${table.name}:`, {
+            hasAttributes: !!table.attributes,
+            attributesType: typeof table.attributes,
+            attributesKeys: table.attributes ? Object.keys(table.attributes) : [],
+            hasCodemasterValues: table.attributes && typeof table.attributes === 'object' && 
+              Object.values(table.attributes).some((col: any) => col?.codemasterValues),
+            hasColumns: !!table.columns,
+            columnCount: table.columns ? table.columns.length : 0,
+            sampleColumn: table.columns && table.columns[0] ? {
+              name: table.columns[0].name,
+              hasCodemaster: !!table.columns[0].codemasterValues,
+              codemasterLength: table.columns[0].codemasterValues?.length || 0
+            } : null,
+            fullTableStructure: JSON.stringify(table).substring(0, 500)
+          });
+        }
+      });
+
+      // Extract codemaster mappings from table column data
+      const codemasterMappings: any[] = [];
+      tables.forEach(table => {
+        // Check both table.attributes (legacy format) and table.columns (current format)
+        
+        // Method 1: Check table.attributes
+        if (table.attributes && typeof table.attributes === 'object') {
+          Object.entries(table.attributes).forEach(([columnName, columnData]: [string, any]) => {
+            if (columnData?.codemasterValues && Array.isArray(columnData.codemasterValues)) {
+              codemasterMappings.push({
+                tableName: table.name,
+                fieldName: columnName,
+                sheetName: columnData.codemasterSource || 'unknown',
+                codeValues: columnData.codemasterValues,
+                totalRecords: columnData.codemasterValues.length
+              });
+            }
+          });
+        }
+        
+        // Method 2: Check table.columns (appears to be the current format)
+        if (table.columns && Array.isArray(table.columns)) {
+          table.columns.forEach((column: any) => {
+            if (column?.codemasterValues && Array.isArray(column.codemasterValues)) {
+              codemasterMappings.push({
+                tableName: table.name,
+                fieldName: column.name,
+                sheetName: column.codemasterSource || 'unknown',
+                codeValues: column.codemasterValues,
+                totalRecords: column.codemasterValues.length
+              });
+              console.log(`🏷️ [CODEMASTER DEBUG] Found codemaster data: ${table.name}.${column.name} with ${column.codemasterValues.length} values`);
+            }
+          });
+        }
+      });
+
+      console.log(`🔍 [CODEMASTER DEBUG] Extracted ${codemasterMappings.length} codemaster mappings from project data`);
+
       res.json({
         project,
         tables,
         relationships,
         mermaidCode,
+        codemasterMappings, // Add the extracted codemaster mappings
         metadata: {
           tables_count: tables.length,
           relationships_count: relationships.length

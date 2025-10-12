@@ -268,6 +268,7 @@ export const api = {
     tables: Table[];
     relationships: Relationship[];
     mermaidCode: string;
+    codemasterMappings?: any[];
     metadata: {
       tables_count: number;
       relationships_count: number;
