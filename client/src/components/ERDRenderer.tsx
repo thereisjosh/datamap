@@ -34,12 +34,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   onFieldClick
 }) => {
   
-  // Debug: Log component props
-  console.log(`🔍 [TOOLTIP DEBUG] ERDRenderer props - codemasterMappings.length: ${codemasterMappings.length}, domain: ${domain}`);
-  if (codemasterMappings.length > 0) {
-    console.log(`🏷️ [TOOLTIP DEBUG] Received codemasterMappings:`, codemasterMappings.slice(0, 3).map(m => `${m.tableName}.${m.fieldName} (${m.codeValues?.length || 0} values)`));
-  }
-  
   // Track last processed selectedTableFromSearch to prevent duplicate processing
   const lastProcessedSearchTable = useRef<string | null>(null);
   
@@ -740,8 +734,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   // Transform codemasterMappings prop into domainResults metadata format
   // This restores the missing logic that was accidentally removed during debug cleanup
   useEffect(() => {
-    console.log(`🔍 [TOOLTIP DEBUG] useEffect triggered - codemasterMappings.length: ${codemasterMappings.length}, domain: ${domain}, domainResults[domain]: ${!!domainResults[domain]}`);
-    
     if (codemasterMappings.length > 0 && domain && domainResults[domain]) {
       // Transform codemasterMappings into the expected metadata format
       const metadata: Record<string, Record<string, any[]>> = {};
@@ -751,29 +743,20 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           metadata[mapping.tableName] = {};
         }
         metadata[mapping.tableName][mapping.fieldName] = mapping.codeValues || [];
-        console.log(`🏷️ [TOOLTIP DEBUG] Added codemaster data for ${mapping.tableName}.${mapping.fieldName} with ${mapping.codeValues?.length || 0} values`);
       });
       
       // Set the transformed metadata into domainResults
       domainResults[domain].codemasterMetadata = metadata;
-      console.log(`✅ [TOOLTIP DEBUG] Set codemaster metadata for domain ${domain}:`, Object.keys(metadata));
-    } else {
-      console.log(`⚠️ [TOOLTIP DEBUG] Skipping codemaster transformation - missing requirements`);
     }
   }, [codemasterMappings, domain, domainResults]);
 
   // Bind ERD-specific event handlers after SVG is rendered (Mermaid best practice)
   // Get codemaster metadata for the current domain
   const getCurrentCodemasterMetadata = useCallback(() => {
-    console.log(`🔍 [TOOLTIP DEBUG] getCurrentCodemasterMetadata called - domain: ${domain}, domainResults[domain]: ${!!domainResults[domain]}`);
-    
     if (!domain || !domainResults[domain]) {
-      console.log(`⚠️ [TOOLTIP DEBUG] No domain or domain results for domain: ${domain}`);
       return {};
     }
     const metadata = domainResults[domain].codemasterMetadata || {};
-    const tableCount = Object.keys(metadata).length;
-    console.log(`🏷️ [TOOLTIP DEBUG] Domain ${domain} has codemaster metadata for ${tableCount} tables:`, Object.keys(metadata));
     return metadata;
   }, [domain, domainResults]);
 
@@ -798,15 +781,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
 
   // Generate comprehensive codemaster tooltip for a table
   const generateTableCodemasterTooltip = useCallback((tableName: string) => {
-    console.log(`🎯 [TOOLTIP DEBUG] generateTableCodemasterTooltip called for table: ${tableName}`);
-    
     const codemasterMetadata = getCurrentCodemasterMetadata();
     const tableCodemasterData = codemasterMetadata[tableName];
     
-    console.log(`🔍 [TOOLTIP DEBUG] Table ${tableName} codemaster data:`, tableCodemasterData);
-    
     if (!tableCodemasterData || Object.keys(tableCodemasterData).length === 0) {
-      console.log(`❌ [TOOLTIP DEBUG] No codemaster data found for table ${tableName}`);
       return '';
     }
     
@@ -815,16 +793,13 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     Object.keys(tableCodemasterData).forEach(columnName => {
       const values = tableCodemasterData[columnName];
       const formattedValues = formatCodemasterTooltip(values);
-      console.log(`📝 [TOOLTIP DEBUG] Column ${columnName} formatted values: "${formattedValues}"`);
       if (formattedValues) {
         // Clean format: just the codemaster values, no column name header
         tooltipLines.push(formattedValues);
       }
     });
     
-    const finalTooltip = tooltipLines.join('\n\n');
-    console.log(`✅ [TOOLTIP DEBUG] Generated tooltip for ${tableName}: "${finalTooltip}"`);
-    return finalTooltip;
+    return tooltipLines.join('\n\n');
   }, [getCurrentCodemasterMetadata, formatCodemasterTooltip]);
 
   // Smart positioning to avoid covering the source table and stay within ERD container
@@ -1772,14 +1747,10 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
             return; // Prevent further processing
           } else {
             // Two-click system: First click selects, second click shows tooltip
-            console.log(`🖱️ [TOOLTIP DEBUG] Table click detected: ${tableName}, currently selected: ${selectedTable}`);
-            
             const codemasterTooltipContent = generateTableCodemasterTooltip(tableName);
-            console.log(`📋 [TOOLTIP DEBUG] Generated tooltip content length: ${codemasterTooltipContent.length}`);
             
             if (selectedTable === tableName && codemasterTooltipContent) {
               // Second click on already-selected table with codemaster data: show tooltip
-              console.log(`🎯 [TOOLTIP DEBUG] SECOND CLICK - Showing tooltip for ${tableName}`);
               
               // Use smart positioning to avoid covering the table
               const smartPosition = calculateSmartTooltipPosition(entityParent, svgContainer);
@@ -1795,14 +1766,11 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 calculatedHeight: smartPosition.calculatedHeight
               });
               
-              console.log(`✅ [TOOLTIP DEBUG] Tooltip state set for ${tableName}`);
-              
               // No auto-hide - user will close manually
               
               return; // Prevent further processing
             } else {
               // First click or table without codemaster data: select/pan-zoom (existing behavior)
-              console.log(`🖱️ [TOOLTIP DEBUG] FIRST CLICK - Selecting table ${tableName} (selectedTable: ${selectedTable}, hasContent: ${!!codemasterTooltipContent})`);
               // Call the table click handler directly (selects table and triggers pan/zoom)
               handleTableClick(tableName);
             }

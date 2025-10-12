@@ -146,9 +146,6 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
         setMermaidCode(data.mermaidCode);
         setCodemasterMappings(data.codemasterMappings || []);
         
-        console.log('🔍 [TOOLTIP DEBUG] Loaded project ERD data with codemasterMappings:', data.codemasterMappings?.length || 0);
-        
-        
         // Generate domain views after loading project data
         await generateDomainViews(data.tables, data.relationships);
       } catch (err) {
