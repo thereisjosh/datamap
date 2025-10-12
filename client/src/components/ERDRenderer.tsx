@@ -1752,14 +1752,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
               return; // Prevent further processing
             } else {
               // First click or table without codemaster data: select/pan-zoom (existing behavior)
-                type: event.type,
-                target: target.tagName,
-                entityElement: entityParent.tagName,
-                detectionStrategy: entityParent.closest('g[class*="node"]') ? 'closest(g[class*="node"])' : 'manual traversal',
-                isAlreadySelected: selectedTable === tableName,
-                hasCodemaster: !!codemasterTooltipContent
-              });
-              
               // Call the table click handler directly (selects table and triggers pan/zoom)
               handleTableClick(tableName);
             }
