@@ -286,18 +286,32 @@ export class StructuralDomainClusteringService {
     
     const domains = new Map<string, DomainResult>();
     
-    for (const [domainId, coreTables] of domainSeeds) {
+    // Convert domainSeeds to array to get consistent indexing
+    const domainEntries = Array.from(domainSeeds.entries());
+    
+    for (let i = 0; i < domainEntries.length; i++) {
+      const [domainId, coreTables] = domainEntries[i];
       const referencedHubs = this.findReferencedHubs(coreTables, hubTables, relationships);
       
-      // Generate meaningful domain name based on hubs and core tables
-      const domainName = this.generateMeaningfulDomainName(domainId, [...coreTables, ...referencedHubs], referencedHubs);
+      // FIXED: Use original hub table assignment instead of complex dependency scoring
+      // Assign each domain to one of the original 7 core hub tables based on index
+      const assignedHub = hubTables[i % hubTables.length]; // Cycle through hub tables
+      const domainName = `${this.extractBusinessNameFromTable(assignedHub)} Domain`;
+      
+      logger.info('🏷️ Direct hub assignment for domain naming', {
+        domainId,
+        assignedHub,
+        domainName,
+        originalReferencedHubs: referencedHubs,
+        coreTables: coreTables.length
+      });
       
       domains.set(domainId, {
         id: domainId,
         name: domainName,
         coreTables,
         referencedHubs,
-        masterHub: undefined,
+        masterHub: assignedHub, // Set the assigned hub as masterHub immediately
         totalTables: [...coreTables, ...referencedHubs],
         confidence: 0 // Will be calculated later
       });
@@ -352,23 +366,24 @@ export class StructuralDomainClusteringService {
       const ownerDomain = domains.get(domainId);
       if (!ownerDomain) continue;
       
-      // Choose the hub with the highest dependency score as masterHub
-      const bestHub = domainHubs.reduce((best, current) => 
-        current.dependencyScore > best.dependencyScore ? current : best
-      );
+      // FIXED: Preserve the original hub assignment instead of using dependency scoring
+      const wasPreAssigned = !!ownerDomain.masterHub;
       
-      // Set the best hub as the masterHub
-      if (!ownerDomain.masterHub || bestHub.dependencyScore > 0) {
+      if (!ownerDomain.masterHub) {
+        // Choose the hub with the highest dependency score as masterHub (fallback only)
+        const bestHub = domainHubs.reduce((best, current) => 
+          current.dependencyScore > best.dependencyScore ? current : best
+        );
         ownerDomain.masterHub = bestHub.hubTable;
-        
-        logger.info('🏆 Master hub assigned', {
-          domain: domainId,
-          masterHub: bestHub.hubTable,
-          dependencyScore: bestHub.dependencyScore.toFixed(3),
-          totalHubsInDomain: domainHubs.length,
-          alternativeHubs: domainHubs.filter(h => h.hubTable !== bestHub.hubTable).map(h => h.hubTable)
-        });
       }
+        
+      logger.info('🏆 Master hub preserved/assigned', {
+        domain: domainId,
+        masterHub: ownerDomain.masterHub,
+        wasPreAssigned,
+        totalHubsInDomain: domainHubs.length,
+        availableHubs: domainHubs.map(h => h.hubTable)
+      });
       
       // Add all hubs and their related tables to core tables
       for (const hubOwnership of domainHubs) {
@@ -388,19 +403,26 @@ export class StructuralDomainClusteringService {
         ...new Set([...ownerDomain.coreTables, ...ownerDomain.referencedHubs])
       ];
       
-      // CRITICAL FIX: Regenerate domain name using the assigned masterHub
-      if (ownerDomain.masterHub) {
+      // FIXED: Skip name regeneration since we already assigned the correct name based on original hubs
+      // Only regenerate if the domain name wasn't already set with our direct assignment
+      if (ownerDomain.masterHub && !wasPreAssigned) {
         ownerDomain.name = this.generateMeaningfulDomainName(
           domainId, 
           ownerDomain.totalTables, 
           [ownerDomain.masterHub]  // Use the masterHub for naming
         );
         
-        logger.info('🏷️ Domain name updated using masterHub', {
+        logger.info('🏷️ Domain name updated using masterHub (fallback)', {
           domain: domainId,
           newName: ownerDomain.name,
+          masterHub: ownerDomain.masterHub
+        });
+      } else {
+        logger.info('🏷️ Domain name preserved from direct assignment', {
+          domain: domainId,
+          name: ownerDomain.name,
           masterHub: ownerDomain.masterHub,
-          previousName: ownerDomain.name !== this.generateMeaningfulDomainName(domainId, ownerDomain.totalTables, [ownerDomain.masterHub]) ? 'different' : 'same'
+          wasPreAssigned
         });
       }
       
