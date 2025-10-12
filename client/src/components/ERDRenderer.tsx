@@ -18,6 +18,7 @@ interface ERDRendererProps {
   selectedTableFromSearch?: string | null;
   codemasterMappings?: CodemasterMapping[];
   onFieldClick?: (tableName: string, fieldName: string) => void;
+  hideActions?: boolean;
 }
 
 
@@ -31,7 +32,8 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   onTableSelectionComplete,
   selectedTableFromSearch = null,
   codemasterMappings = [],
-  onFieldClick
+  onFieldClick,
+  hideActions = false
 }) => {
   
   // Track last processed selectedTableFromSearch to prevent duplicate processing
@@ -3850,38 +3852,40 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
   return (
     <div className="flex flex-col h-full space-y-4">
       {/* Action buttons */}
-      <div className="flex justify-end space-x-2 flex-shrink-0">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleCopyMermaidCode}
-          className="flex items-center gap-2"
-        >
-          <Copy className="h-4 w-4" />
-          Copy Code
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleDownloadSVG}
-          className="flex items-center gap-2"
-          disabled={!svgContent}
-        >
-          <Download className="h-4 w-4" />
-          Download SVG
-        </Button>
-        {selectedTable && hasCodemasterMappings(selectedTable) && (
+      {!hideActions && (
+        <div className="flex justify-end space-x-2 flex-shrink-0">
           <Button
-            variant={isCodemasterPanelVisible ? "default" : "outline"}
+            variant="outline"
             size="sm"
-            onClick={handleCodemasterToggle}
+            onClick={handleCopyMermaidCode}
             className="flex items-center gap-2"
           >
-            <Database className="h-4 w-4" />
-            Code Values
+            <Copy className="h-4 w-4" />
+            Copy Code
           </Button>
-        )}
-      </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadSVG}
+            className="flex items-center gap-2"
+            disabled={!svgContent}
+          >
+            <Download className="h-4 w-4" />
+            Download SVG
+          </Button>
+          {selectedTable && hasCodemasterMappings(selectedTable) && (
+            <Button
+              variant={isCodemasterPanelVisible ? "default" : "outline"}
+              size="sm"
+              onClick={handleCodemasterToggle}
+              className="flex items-center gap-2"
+            >
+              <Database className="h-4 w-4" />
+              Code Values
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Responsive SVG container - industry standard approach */}
       <div 

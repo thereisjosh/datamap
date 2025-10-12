@@ -577,7 +577,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
                 placeholder="Search tables, columns, relationships..."
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                className="w-[500px] pl-10 pr-10 h-8"
+                className="w-[350px] pl-10 pr-10 h-8"
               />
               {searchQuery && (
                 <button
@@ -702,7 +702,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
               onValueChange={handleDomainChange}
               disabled={isDomainLoading || Object.keys(domainResults).length === 0}
             >
-              <SelectTrigger className="w-64 h-8">
+              <SelectTrigger className="w-52 h-8">
                 <SelectValue placeholder={isDomainLoading ? "Loading..." : "Select domain"}>
                   {selectedDomain && (
                     <span className="truncate">
@@ -777,6 +777,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
           codemasterMappings={codemasterMappings}
           onExternalTableClick={handleDomainSwitchForTable}
           onTableSelectionComplete={handleTableSelectionComplete}
+          hideActions={true}
         />
       </div>
 
