@@ -1409,15 +1409,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
           }
         }
         
-        // For debugging: if neither method worked, log element structure
-        if (!coordinatesFound && tableName.toLowerCase().includes('opportunity')) {
-            tagName: tableEntity.tagName,
-            className: tableEntity.getAttribute('class'),
-            id: tableEntity.getAttribute('id'),
-            hasTransform: !!tableEntity.getAttribute('transform'),
-            childElementCount: tableEntity.children.length
-          });
-        }
         
         // Strategy 3: Simple fallback using foreignObject coordinates
         if (!coordinatesFound) {
