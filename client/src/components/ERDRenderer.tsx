@@ -3017,7 +3017,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
         }
         
         if (!foundMatches) {
-            mermaidCode.substring(0, 500));
         }
       }
       
@@ -3622,10 +3621,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
       }, 100);
       
       return () => clearTimeout(timeoutId);
-    } else {
-        svgContent: !!svgContent,
-        svgContainerRef: !!svgContainerRef.current
-      });
     }
   }, [svgContent, bindERDEventHandlers]);
 
