@@ -3992,27 +3992,6 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
                 >
                   <Move className="h-4 w-4" />
                 </Button>
-                
-                {/* Debug tooltip test button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setTooltip({
-                      visible: true,
-                      x: 200,
-                      y: 100,
-                      content: 'Test tooltip content\nMultiple lines',
-                      tableName: 'TestTable',
-                      columnName: 'TestColumn'
-                    });
-                    setTimeout(() => setTooltip(prev => ({ ...prev, visible: false })), 3000);
-                  }}
-                  title="Test Tooltip"
-                  className="h-8 w-8 p-0 bg-blue-500 text-white"
-                >
-                  T
-                </Button>
               </div>
 
               {/* Selection Info */}
