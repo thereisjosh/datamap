@@ -566,23 +566,103 @@ export class FlexibleExcelParser {
   }
 
   /**
-   * Find matching table in parsed tables using fuzzy matching
+   * Calculate string similarity using Jaro-Winkler algorithm
+   */
+  private calculateSimilarity(str1: string, str2: string): number {
+    // Normalize strings to lowercase for comparison
+    const s1 = str1.toLowerCase();
+    const s2 = str2.toLowerCase();
+    
+    if (s1 === s2) return 1.0;
+    if (s1.length === 0 || s2.length === 0) return 0.0;
+    
+    // Calculate Jaro similarity
+    const matchWindow = Math.floor(Math.max(s1.length, s2.length) / 2) - 1;
+    const s1Matches = new Array(s1.length).fill(false);
+    const s2Matches = new Array(s2.length).fill(false);
+    
+    let matches = 0;
+    let transpositions = 0;
+    
+    // Find matches
+    for (let i = 0; i < s1.length; i++) {
+      const start = Math.max(0, i - matchWindow);
+      const end = Math.min(i + matchWindow + 1, s2.length);
+      
+      for (let j = start; j < end; j++) {
+        if (s2Matches[j] || s1[i] !== s2[j]) continue;
+        s1Matches[i] = true;
+        s2Matches[j] = true;
+        matches++;
+        break;
+      }
+    }
+    
+    if (matches === 0) return 0.0;
+    
+    // Count transpositions
+    let k = 0;
+    for (let i = 0; i < s1.length; i++) {
+      if (!s1Matches[i]) continue;
+      while (!s2Matches[k]) k++;
+      if (s1[i] !== s2[k]) transpositions++;
+      k++;
+    }
+    
+    const jaro = (matches / s1.length + matches / s2.length + (matches - transpositions / 2) / matches) / 3;
+    
+    // Calculate Jaro-Winkler similarity (gives more weight to common prefix)
+    const prefixLength = Math.min(4, this.getCommonPrefixLength(s1, s2));
+    return jaro + (0.1 * prefixLength * (1 - jaro));
+  }
+  
+  /**
+   * Get common prefix length up to 4 characters
+   */
+  private getCommonPrefixLength(str1: string, str2: string): number {
+    let prefixLength = 0;
+    const maxLength = Math.min(str1.length, str2.length, 4);
+    
+    for (let i = 0; i < maxLength; i++) {
+      if (str1[i] === str2[i]) {
+        prefixLength++;
+      } else {
+        break;
+      }
+    }
+    
+    return prefixLength;
+  }
+
+  /**
+   * Find matching table in parsed tables using percentage-based similarity matching
    */
   private findMatchingTable(codemasterTableName: string, parsedTables: ParsedTable[]): ParsedTable | null {
     // First try exact match
-    let match = parsedTables.find(table => 
+    const exactMatch = parsedTables.find(table => 
       table.name.toLowerCase() === codemasterTableName.toLowerCase()
     );
     
-    if (match) return match;
+    if (exactMatch) return exactMatch;
     
-    // Try case-insensitive partial match
-    match = parsedTables.find(table => 
-      table.name.toLowerCase().includes(codemasterTableName.toLowerCase()) ||
-      codemasterTableName.toLowerCase().includes(table.name.toLowerCase())
-    );
+    // Calculate similarity scores for all tables
+    const similarities = parsedTables.map(table => ({
+      table,
+      similarity: this.calculateSimilarity(codemasterTableName, table.name)
+    }));
     
-    return match || null;
+    // Sort by similarity score (highest first)
+    similarities.sort((a, b) => b.similarity - a.similarity);
+    
+    // Return the best match if it meets the minimum threshold (70%)
+    const bestMatch = similarities[0];
+    const SIMILARITY_THRESHOLD = 0.7;
+    
+    if (bestMatch && bestMatch.similarity >= SIMILARITY_THRESHOLD) {
+      return bestMatch.table;
+    }
+    
+    return null;
   }
 
   /**
