@@ -507,8 +507,24 @@ export class FlexibleExcelParser {
     const codemasterTableNames = this.extractTableNamesFromCodemaster(config, codeValues);
     console.log('🔍 [CODEMASTER DEBUG] Codemaster table names found:', codemasterTableNames);
     
+    // Fallback strategy: If no table names were extracted, try to infer from sheet name
+    let tablesToProcess = codemasterTableNames;
+    if (tablesToProcess.length === 0) {
+      console.log('🔍 [CODEMASTER DEBUG] No table names extracted, attempting fallback with sheet name');
+      const sheetName = config.selectedSheet;
+      
+      // Try to match the sheet name against available tables using similarity matching
+      const bestTableMatch = this.findMatchingTable(sheetName, parsedTables);
+      if (bestTableMatch) {
+        tablesToProcess = [sheetName]; // Use the original sheet name for matching
+        console.log(`🔍 [CODEMASTER DEBUG] Fallback: Using sheet name "${sheetName}" for table matching`);
+      } else {
+        console.log('🔍 [CODEMASTER DEBUG] Fallback failed: No similar table found for sheet name');
+      }
+    }
+    
     // Match each codemaster table name to existing parsed tables
-    for (const codemasterTableName of codemasterTableNames) {
+    for (const codemasterTableName of tablesToProcess) {
       const matchingTable = this.findMatchingTable(codemasterTableName, parsedTables);
       
       if (matchingTable) {
@@ -545,6 +561,8 @@ export class FlexibleExcelParser {
    * Extract table names from codemaster data based on configuration type
    */
   private extractTableNamesFromCodemaster(config: CodemasterConfiguration, codeValues: CodeValue[]): string[] {
+    console.log(`🔍 [CODEMASTER DEBUG] Extracting table names for type: ${config.type}`);
+    
     // For entity_tables type, the entity column contains table names
     if (config.type === 'entity_tables' && config.entityColumn) {
       // Extract unique table names from the entity column values
@@ -557,11 +575,50 @@ export class FlexibleExcelParser {
           }
         }
       });
+      console.log(`🔍 [CODEMASTER DEBUG] Entity tables found: ${Array.from(tableNames)}`);
       return Array.from(tableNames);
     }
     
-    // For other types, we might need different extraction logic
-    // For now, return empty array as fallback
+    // For field_enums type, extract table names from targetFields configuration
+    if (config.type === 'field_enums' && config.targetFields && config.targetFields.length > 0) {
+      const tableNames = new Set<string>();
+      config.targetFields.forEach(target => {
+        if (target.tableName) {
+          tableNames.add(target.tableName);
+        }
+      });
+      console.log(`🔍 [CODEMASTER DEBUG] Field enum tables found: ${Array.from(tableNames)}`);
+      return Array.from(tableNames);
+    }
+    
+    // For mixed type, extract table names from category notes or targetFields
+    if (config.type === 'mixed') {
+      const tableNames = new Set<string>();
+      
+      // First try to extract from targetFields if available
+      if (config.targetFields && config.targetFields.length > 0) {
+        config.targetFields.forEach(target => {
+          if (target.tableName) {
+            tableNames.add(target.tableName);
+          }
+        });
+      }
+      
+      // Also try to extract from category notes if they contain table-like names
+      codeValues.forEach(value => {
+        if (value.notes && value.notes.includes('Category:')) {
+          const categoryName = value.notes.replace('Category:', '').trim();
+          if (categoryName && categoryName.length > 2) {
+            tableNames.add(categoryName);
+          }
+        }
+      });
+      
+      console.log(`🔍 [CODEMASTER DEBUG] Mixed type tables found: ${Array.from(tableNames)}`);
+      return Array.from(tableNames);
+    }
+    
+    console.log(`🔍 [CODEMASTER DEBUG] No table names extracted for type: ${config.type}`);
     return [];
   }
 
@@ -669,15 +726,65 @@ export class FlexibleExcelParser {
    * Get codemaster values specific to a table
    */
   private getValuesForTable(tableName: string, config: CodemasterConfiguration, allValues: CodeValue[]): CodeValue[] {
-    // For entity_tables type, filter by entity name in notes
+    console.log(`🔍 [CODEMASTER DEBUG] getValuesForTable called for table: "${tableName}", config type: "${config.type}"`);
+    console.log(`🔍 [CODEMASTER DEBUG] Total available values: ${allValues.length}`);
+    
+    // For entity_tables type, filter by exact entity name match in notes
     if (config.type === 'entity_tables') {
-      return allValues.filter(value => 
-        value.notes && value.notes.includes(`Entity: ${tableName}`)
-      );
+      const filteredValues = allValues.filter(value => {
+        const hasExactEntityNote = value.notes === `Entity: ${tableName}`;
+        if (hasExactEntityNote) {
+          console.log(`✅ [CODEMASTER DEBUG] Value matches table "${tableName}": ${value.code} - ${value.description} (notes: ${value.notes})`);
+        }
+        return hasExactEntityNote;
+      });
+      console.log(`🔍 [CODEMASTER DEBUG] Filtered values for table "${tableName}": ${filteredValues.length} values`);
+      return filteredValues;
     }
     
-    // For other types, return all values (can be refined later)
-    return allValues;
+    // For field_enums type, check if this table has specific target field configurations
+    if (config.type === 'field_enums' && config.targetFields && config.targetFields.length > 0) {
+      const hasTargetForThisTable = config.targetFields.some(target => 
+        target.tableName.toLowerCase() === tableName.toLowerCase()
+      );
+      if (hasTargetForThisTable) {
+        console.log(`🔍 [CODEMASTER DEBUG] field_enums type - table "${tableName}" has explicit target fields, returning all values`);
+        return allValues;
+      } else {
+        console.log(`🔍 [CODEMASTER DEBUG] field_enums type - table "${tableName}" has no explicit target fields, returning empty array`);
+        return [];
+      }
+    }
+    
+    // For mixed type, try to filter by category or return values for configured tables only
+    if (config.type === 'mixed') {
+      // If target fields are specified, only return values for explicitly configured tables
+      if (config.targetFields && config.targetFields.length > 0) {
+        const hasTargetForThisTable = config.targetFields.some(target => 
+          target.tableName.toLowerCase() === tableName.toLowerCase()
+        );
+        if (hasTargetForThisTable) {
+          return allValues;
+        } else {
+          return [];
+        }
+      }
+      
+      // If no target fields, try to filter by category in notes (fallback behavior)
+      const categoryFilteredValues = allValues.filter(value => 
+        value.notes && value.notes.toLowerCase().includes(tableName.toLowerCase())
+      );
+      
+      if (categoryFilteredValues.length > 0) {
+        console.log(`🔍 [CODEMASTER DEBUG] mixed type - found ${categoryFilteredValues.length} values for table "${tableName}" by category filtering`);
+        return categoryFilteredValues;
+      }
+    }
+    
+    // Safer fallback: instead of returning ALL values, return empty array
+    // This prevents cross-contamination between tables
+    console.log(`⚠️ [CODEMASTER DEBUG] No specific filtering logic for type "${config.type}" and table "${tableName}" - returning empty array to prevent cross-contamination`);
+    return [];
   }
 
   /**

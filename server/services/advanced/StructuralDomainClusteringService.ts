@@ -68,25 +68,33 @@ export class StructuralDomainClusteringService {
       hasMoreHubs: input.hubTables.length > 10
     });
 
-    // Step 1: Identify which domain owns each hub based on structural analysis
-    logger.info('🔍 STEP 1: Identifying Hub Ownership');
-    const hubOwnership = this.identifyHubOwnership(
-      input.hubTables,
-      input.spectralClusters,
-      input.relationships
-    );
-
-    // Step 2: Create domain seeds from spectral clusters (exclude hubs)
-    logger.info('🌱 STEP 2: Creating Domain Seeds');
+    // Step 1: Create domain seeds from spectral clusters (exclude hubs)
+    logger.info('🌱 STEP 1: Creating Domain Seeds');
     const domainSeeds = this.createDomainSeeds(input.spectralClusters, input.hubTables);
 
-    // Step 3: Find which hubs each domain references via foreign keys
-    logger.info('🔗 STEP 3: Assigning Hub References');
+    // Step 2: Find which hubs each domain references via foreign keys & assign master hubs
+    logger.info('🔗 STEP 2: Assigning Hub References');
     let domains = this.assignHubReferences(
       domainSeeds,
       input.hubTables,
       input.relationships,
       input.tables
+    );
+
+    // Step 3: Extract pre-assigned hub mappings to prevent conflicts
+    logger.info('🔍 STEP 3: Identifying Hub Ownership');
+    const preAssignedHubs = new Map<string, string>();
+    for (const [domainId, domain] of domains) {
+      if (domain.masterHub) {
+        preAssignedHubs.set(domainId, domain.masterHub);
+      }
+    }
+    
+    const hubOwnership = this.identifyHubOwnership(
+      input.hubTables,
+      input.spectralClusters,
+      input.relationships,
+      preAssignedHubs
     );
 
     // Step 4: Assign hub ownership (hub + related tables go to owner domain)
@@ -107,17 +115,48 @@ export class StructuralDomainClusteringService {
   }
 
   /**
-   * Identify hub ownership based on structural relationships
+   * Identify hub ownership based on structural relationships, but respect pre-assigned master hubs
    */
   private identifyHubOwnership(
     hubTables: string[],
     spectralClusters: Array<{ id: string; tables: string[] }>,
-    relationships: Relationship[]
+    relationships: Relationship[],
+    preAssignedHubs?: Map<string, string> // domain -> masterHub mappings
   ): Map<string, HubOwnership> {
     
     const hubOwnership = new Map<string, HubOwnership>();
+    const usedHubs = new Set<string>(); // Track hubs already assigned to prevent conflicts
     
+    // First, handle pre-assigned master hubs if provided
+    if (preAssignedHubs) {
+      for (const [domainId, masterHub] of preAssignedHubs) {
+        if (hubTables.includes(masterHub)) {
+          const clusterTables = spectralClusters.find(c => c.id === domainId)?.tables || [];
+          const relatedInfo = this.findStructurallyRelatedTables(masterHub, clusterTables, relationships);
+          
+          hubOwnership.set(masterHub, {
+            hubTable: masterHub,
+            ownerDomain: domainId,
+            relatedTables: relatedInfo.tables,
+            dependencyScore: relatedInfo.avgDependencyScore
+          });
+          
+          usedHubs.add(masterHub);
+          
+          logger.info('Pre-assigned hub ownership preserved', {
+            hub: masterHub,
+            ownerDomain: domainId,
+            relatedTableCount: relatedInfo.tables.length,
+            dependencyScore: relatedInfo.avgDependencyScore.toFixed(3)
+          });
+        }
+      }
+    }
+    
+    // Then handle remaining unassigned hubs
     for (const hub of hubTables) {
+      if (usedHubs.has(hub)) continue; // Skip already assigned hubs
+      
       let bestCluster: string | null = null;
       let maxRelatedTables = 0;
       let bestDependencyScore = 0;
@@ -144,7 +183,7 @@ export class StructuralDomainClusteringService {
           dependencyScore: relatedInfo.avgDependencyScore
         });
 
-        logger.info('Hub ownership identified', {
+        logger.info('Hub ownership identified for unassigned hub', {
           hub,
           ownerDomain: bestCluster,
           relatedTableCount: relatedInfo.tables.length,
