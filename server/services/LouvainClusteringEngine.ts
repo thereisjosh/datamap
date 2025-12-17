@@ -412,6 +412,29 @@ export class LouvainClusteringEngine {
     let remainingOrphans = 0;
     const CLUSTER_ASSIGNMENT_THRESHOLD = 0.3; // Minimum aggregate score for cluster assignment
     
+    // DEBUG: Log edge weights map contents before cluster assignment
+    console.log(`🔍 EDGE WEIGHTS MAP DEBUG:`, {
+      totalEdgeWeights: edgeWeights.size,
+      sampleKeys: Array.from(edgeWeights.keys()).slice(0, 10),
+      sampleEntries: Array.from(edgeWeights.entries()).slice(0, 5).map(([key, value]) => `${key}:${value}`),
+      mapType: edgeWeights.constructor.name
+    });
+    
+    // Log some specific relationship lookups
+    relationships.slice(0, 5).forEach(rel => {
+      const key1 = `${rel.sourceTable}-${rel.targetTable}`;
+      const key2 = `${rel.targetTable}-${rel.sourceTable}`;
+      console.log(`🔍 SAMPLE RELATIONSHIP LOOKUP:`, {
+        relationship: `${rel.sourceTable} → ${rel.targetTable}`,
+        key1: key1,
+        key1Weight: edgeWeights.get(key1),
+        key1Exists: edgeWeights.has(key1),
+        key2: key2,
+        key2Weight: edgeWeights.get(key2),
+        key2Exists: edgeWeights.has(key2)
+      });
+    });
+    
     naturalClusters.forEach((cluster, clusterIndex) => {
       if (cluster.length === 0) return;
       
@@ -446,11 +469,31 @@ export class LouvainClusteringEngine {
               const edgeKey = `${rel.sourceTable}-${rel.targetTable}`;
               connectionStrength = edgeWeights.get(edgeKey) || 0;
               isConnected = true;
+              
+              // DEBUG: Log edge weight lookup details
+              console.log(`🔍 EDGE WEIGHT DEBUG: Forward lookup`, {
+                clusterTable,
+                hubTable: rel.targetTable,
+                edgeKey,
+                foundWeight: connectionStrength,
+                hasKey: edgeWeights.has(edgeKey),
+                relationshipType: `${rel.sourceTable} → ${rel.targetTable}`
+              });
             } else if (rel.targetTable === clusterTable && hubDomainTables.has(rel.sourceTable)) {
               // Hub domain table → Cluster table (reverse relationship)
               const edgeKey = `${rel.sourceTable}-${rel.targetTable}`;
               connectionStrength = edgeWeights.get(edgeKey) || 0;
               isConnected = true;
+              
+              // DEBUG: Log edge weight lookup details
+              console.log(`🔍 EDGE WEIGHT DEBUG: Reverse lookup`, {
+                clusterTable,
+                hubTable: rel.sourceTable,
+                edgeKey,
+                foundWeight: connectionStrength,
+                hasKey: edgeWeights.has(edgeKey),
+                relationshipType: `${rel.sourceTable} → ${rel.targetTable}`
+              });
             }
             
             if (isConnected && connectionStrength > 0) {

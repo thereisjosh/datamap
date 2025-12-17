@@ -393,34 +393,83 @@ function findCriticalExternalReferences(
     });
   });
 
+  // DEBUG: Log domain table names for this domain
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`🐛 [FK DEBUG] Domain has ${domainTables.length} tables:`, Array.from(domainTableNames));
+  }
+
   // Analyze FK relationships from domain tables to external tables
   domainTables.forEach(table => {
     const attributes = table.attributes || table.columns || [];
     
+    if (process.env.NODE_ENV !== 'production') {
+      const fkAttrs = attributes.filter(attr => attr.isForeignKey);
+      console.log(`🐛 [FK DEBUG] Table "${table.name}": ${attributes.length} attrs, ${fkAttrs.length} FKs`);
+      if (fkAttrs.length > 0) {
+        fkAttrs.forEach(attr => {
+          console.log(`  🔗 FK Column "${attr.name}": references =`, attr.references);
+        });
+      }
+    }
+    
     attributes.forEach(attr => {
-      if (attr.isForeignKey && attr.references) {
-        const targetTable = attr.references.table || attr.references.tableName;
+      if (attr.isForeignKey) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`🐛 [FK DEBUG] Processing FK column "${attr.name}" in "${table.name}"`);
+          console.log(`  - attr.references:`, attr.references);
+        }
         
-        // Only include external references (target not in current domain)
-        if (targetTable && !domainTableNames.has(targetTable)) {
-          const targetCluster = tableToClusterMap.get(targetTable);
+        if (attr.references) {
+          const targetTable = attr.references.table || attr.references.tableName;
           
-          if (targetCluster) {
-            // Calculate importance based on connectivity
-            const importance = calculateTableImportance(targetTable, allTables);
-            
-            // Find the domain index for this cluster to match frontend domain IDs
-            const targetClusterIndex = allClusters.findIndex(c => c.clusterId === targetCluster.clusterId);
-            const targetDomainId = targetClusterIndex >= 0 ? `domain_${targetClusterIndex + 1}` : (targetCluster.clusterName || targetCluster.clusterId);
-            
-            criticalRefs.push({
-              sourceTable: table.name,
-              targetTable: targetTable,
-              targetDomain: targetDomainId,
-              fkColumn: attr.name,
-              importance: importance
-            });
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`  - targetTable: "${targetTable}"`);
+            console.log(`  - domainTableNames.has("${targetTable}"): ${domainTableNames.has(targetTable)}`);
           }
+        
+          // Only include external references (target not in current domain)
+          if (targetTable && !domainTableNames.has(targetTable)) {
+            if (process.env.NODE_ENV !== 'production') {
+              console.log(`  ✅ EXTERNAL REFERENCE FOUND: ${table.name}.${attr.name} -> ${targetTable}`);
+            }
+            
+            const targetCluster = tableToClusterMap.get(targetTable);
+            
+            if (targetCluster) {
+              // Calculate importance based on connectivity
+              const importance = calculateTableImportance(targetTable, allTables);
+              
+              // Find the domain index for this cluster to match frontend domain IDs
+              const targetClusterIndex = allClusters.findIndex(c => c.clusterId === targetCluster.clusterId);
+              const targetDomainId = targetClusterIndex >= 0 ? `domain_${targetClusterIndex + 1}` : (targetCluster.clusterName || targetCluster.clusterId);
+              
+              if (process.env.NODE_ENV !== 'production') {
+                console.log(`    → Target cluster: ${targetCluster.clusterName || targetCluster.clusterId}`);
+                console.log(`    → Target domain ID: ${targetDomainId}`);
+                console.log(`    → Importance: ${importance}`);
+              }
+              
+              criticalRefs.push({
+                sourceTable: table.name,
+                targetTable: targetTable,
+                targetDomain: targetDomainId,
+                fkColumn: attr.name,
+                importance: importance
+              });
+            } else {
+              if (process.env.NODE_ENV !== 'production') {
+                console.log(`    ❌ Target table "${targetTable}" not found in cluster map`);
+              }
+            }
+          } else if (process.env.NODE_ENV !== 'production') {
+            if (!targetTable) {
+              console.log(`    ❌ No target table found`);
+            } else {
+              console.log(`    ❌ Target "${targetTable}" is in same domain (internal reference)`);
+            }
+          }
+        } else if (process.env.NODE_ENV !== 'production') {
+          console.log(`    ❌ No references data found for FK column`);
         }
       }
     });

@@ -29,11 +29,48 @@ export interface HubDetectionResult {
 }
 
 export class StatisticalHubDetector {
-  private readonly MIN_HUB_DEGREE = 10;  // Increased from 5 - require 10+ connections for statistical significance
-  private readonly HUB_PERCENTILE = 0.98;  // Top 2% by degree (more selective)
-  private readonly CENTRALITY_PERCENTILE = 0.95;  // Top 5% by centrality (more selective)
-  private readonly PAGERANK_PERCENTILE = 0.90;   // Top 10% by PageRank (more selective)
+  // Default thresholds for large datasets (will be overridden by adaptive logic)
+  private readonly DEFAULT_HUB_PERCENTILE = 0.98;  // Top 2% by degree (more selective)
+  private readonly DEFAULT_CENTRALITY_PERCENTILE = 0.95;  // Top 5% by centrality (more selective)
+  private readonly DEFAULT_PAGERANK_PERCENTILE = 0.90;   // Top 10% by PageRank (more selective)
   private readonly CONFIDENCE_THRESHOLD = 0.8;    // Increased from 0.6 - require higher confidence
+
+  /**
+   * Get adaptive hub detection thresholds based on dataset size
+   * Industry-standard approach: smaller datasets need lower thresholds for meaningful hub detection
+   */
+  private getAdaptiveHubThresholds(tableCount: number): {
+    hubPercentile: number;
+    minDegree: number;
+    centralityPercentile: number;
+    pageRankPercentile: number;
+  } {
+    if (tableCount < 20) {
+      // Small datasets: Liberal thresholds to find 1-2 meaningful hubs
+      return { 
+        hubPercentile: 0.90,        // Top 10%
+        minDegree: 2,               // At least 2 connections
+        centralityPercentile: 0.80, // Top 20% 
+        pageRankPercentile: 0.85    // Top 15%
+      };
+    } else if (tableCount < 100) {
+      // Medium datasets: Moderate thresholds to find 3-5 domain anchors  
+      return { 
+        hubPercentile: 0.85,        // Top 15%
+        minDegree: 3,               // At least 3 connections
+        centralityPercentile: 0.85, // Top 15%
+        pageRankPercentile: 0.88    // Top 12%
+      };
+    } else {
+      // Large datasets: Strict thresholds to prevent hub inflation
+      return { 
+        hubPercentile: this.DEFAULT_HUB_PERCENTILE,        // Top 2%
+        minDegree: 5,                                      // At least 5 connections
+        centralityPercentile: this.DEFAULT_CENTRALITY_PERCENTILE,  // Top 5%
+        pageRankPercentile: this.DEFAULT_PAGERANK_PERCENTILE       // Top 10%
+      };
+    }
+  }
 
   /**
    * Detect hub tables using pure mathematical graph metrics
@@ -52,7 +89,7 @@ export class StatisticalHubDetector {
     const metrics = this.calculateAllMetrics(graph);
     
     // Determine statistical thresholds from data distribution
-    const thresholds = this.calculateDynamicThresholds(metrics);
+    const thresholds = this.calculateDynamicThresholds(metrics, tables.length);
     
     // Classify hubs using multi-metric approach
     const classification = this.classifyHubs(metrics, thresholds);
@@ -311,21 +348,40 @@ export class StatisticalHubDetector {
   }
 
   /**
-   * Calculate dynamic thresholds based on data distribution statistics
+   * Calculate dynamic thresholds based on data distribution statistics with dataset-adaptive parameters
    */
-  private calculateDynamicThresholds(metrics: HubDetectionMetrics[]): ThresholdParameters {
+  private calculateDynamicThresholds(metrics: HubDetectionMetrics[], tableCount: number): ThresholdParameters {
     const degreeScores = metrics.map(m => m.degreeScore).sort((a, b) => a - b);
     const centralityScores = metrics.map(m => m.betweennessCentrality).sort((a, b) => a - b);
     const pageRankScores = metrics.map(m => m.pageRankScore).sort((a, b) => a - b);
 
-    // Calculate percentile-based thresholds
+    // Get adaptive thresholds based on dataset size
+    const adaptiveParams = this.getAdaptiveHubThresholds(tableCount);
+
+    // Calculate percentile-based thresholds using adaptive parameters
     const degreeThreshold = Math.max(
-      this.percentile(degreeScores, this.HUB_PERCENTILE),
-      this.MIN_HUB_DEGREE
+      this.percentile(degreeScores, adaptiveParams.hubPercentile),
+      adaptiveParams.minDegree
     );
     
-    const centralityThreshold = this.percentile(centralityScores, this.CENTRALITY_PERCENTILE);
-    const pageRankThreshold = this.percentile(pageRankScores, this.PAGERANK_PERCENTILE);
+    const centralityThreshold = this.percentile(centralityScores, adaptiveParams.centralityPercentile);
+    const pageRankThreshold = this.percentile(pageRankScores, adaptiveParams.pageRankPercentile);
+
+    logger.info('📊 Dataset-adaptive hub thresholds calculated', {
+      tableCount,
+      datasetCategory: tableCount < 20 ? 'small' : tableCount < 100 ? 'medium' : 'large',
+      adaptiveParams: {
+        hubPercentile: adaptiveParams.hubPercentile,
+        minDegree: adaptiveParams.minDegree,
+        centralityPercentile: adaptiveParams.centralityPercentile,
+        pageRankPercentile: adaptiveParams.pageRankPercentile
+      },
+      calculatedThresholds: {
+        degreeThreshold: degreeThreshold,
+        percentileThreshold: this.percentile(degreeScores, adaptiveParams.hubPercentile).toFixed(2),
+        maxDegreeInDataset: Math.max(...degreeScores)
+      }
+    });
 
     return {
       degreeThreshold,
