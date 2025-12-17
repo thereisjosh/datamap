@@ -791,6 +791,17 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
                       url.searchParams.set('table', tableName);
                       window.history.replaceState({}, '', url.toString());
                     }}
+                    onTableSelectionComplete={(tableName) => {
+                      setSelectedTable(tableName);
+                      // Update URL to reflect selection change
+                      const url = new URL(window.location.href);
+                      if (tableName) {
+                        url.searchParams.set('table', tableName);
+                      } else {
+                        url.searchParams.delete('table');
+                      }
+                      window.history.replaceState({}, '', url.toString());
+                    }}
                   />
                 </div>
               </CardContent>

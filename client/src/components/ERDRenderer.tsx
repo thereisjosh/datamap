@@ -2642,7 +2642,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     setSearchTargetTable(null);
     setIsSearchTriggered(false);
     
-  }, [selectedTable, removeSelectionHandles]);
+    // Notify parent component of selection change
+    if (onTableSelectionComplete) {
+      onTableSelectionComplete(null);
+    }
+    
+  }, [selectedTable, removeSelectionHandles, onTableSelectionComplete]);
 
   // Clear selection with zoom (used for control panel clear button)
   const handleClearSelection = useCallback(() => {
@@ -2709,7 +2714,12 @@ const ERDRenderer: React.FC<ERDRendererProps> = ({
     // Use the enhanced fit function to properly center all tables
     handleFit();
     
-  }, [selectedTable, handleFit, removeSelectionHandles, clearERDRelationshipHighlighting]);
+    // Notify parent component of selection change
+    if (onTableSelectionComplete) {
+      onTableSelectionComplete(null);
+    }
+    
+  }, [selectedTable, handleFit, removeSelectionHandles, clearERDRelationshipHighlighting, onTableSelectionComplete]);
 
   const handleDomainFocus = useCallback(() => {
     // Focus on the current domain by fitting and centering
