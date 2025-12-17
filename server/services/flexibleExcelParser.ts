@@ -980,21 +980,6 @@ export class FlexibleExcelParser {
       }
     }
     
-    // Check optional columns and warn if not found
-    const optionalMappings = [
-      { key: 'tableTypeColumn', name: 'table type column' },
-      { key: 'primaryKeyColumn', name: 'primary key column' },
-      { key: 'foreignKeyTableColumn', name: 'foreign key table column' },
-      { key: 'foreignKeyColumnColumn', name: 'foreign key column column' }
-    ];
-    
-    for (const mapping of optionalMappings) {
-      const columnName = mappings[mapping.key as keyof ColumnMappings] as string;
-      if (columnName && !columnSheet.columns.includes(columnName)) {
-        warnings.push(`Optional column "${columnName}" (${mapping.name}) not found in column sheet "${mappings.columnSheet}"`);
-      }
-    }
-    
     return {
       isValid: errors.length === 0,
       errors,
@@ -1102,6 +1087,14 @@ export class FlexibleExcelParser {
     const primaryKeyIndex = mappings.primaryKeyColumn ? headers.indexOf(mappings.primaryKeyColumn) : -1;
     const foreignKeyTableIndex = mappings.foreignKeyTableColumn ? headers.indexOf(mappings.foreignKeyTableColumn) : -1;
     const foreignKeyColumnIndex = mappings.foreignKeyColumnColumn ? headers.indexOf(mappings.foreignKeyColumnColumn) : -1;
+
+    // DEBUG: Log FK column indices
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔗 [EXCEL DEBUG] FK column mapping analysis:`);
+      console.log(`  - foreignKeyTableColumn: "${mappings.foreignKeyTableColumn}" → index: ${foreignKeyTableIndex}`);
+      console.log(`  - foreignKeyColumnColumn: "${mappings.foreignKeyColumnColumn}" → index: ${foreignKeyColumnIndex}`);
+      console.log(`  - headers:`, headers);
+    }
     
     const columns: any[] = [];
     const relationships: ParseResult['relationships'] = [];
@@ -1148,6 +1141,12 @@ export class FlexibleExcelParser {
         }
       }
       
+      // DEBUG: Log FK column creation
+      if (isForeignKey && process.env.NODE_ENV === 'development') {
+        console.log(`🔗 [EXCEL DEBUG] Creating FK column "${columnName}" in "${tableName}"`);
+        console.log(`  - references:`, references);
+      }
+
       columns.push({
         tableName,
         name: columnName,
@@ -1172,6 +1171,12 @@ export class FlexibleExcelParser {
       if (!columnsByTable.has(column.tableName)) {
         columnsByTable.set(column.tableName, []);
       }
+      // DEBUG: Log column merging for FK columns
+      if (column.isForeignKey && process.env.NODE_ENV === 'development') {
+        console.log(`🔗 [MERGE DEBUG] Merging FK column "${column.name}" into "${column.tableName}"`);
+        console.log(`  - references:`, column.references);
+      }
+
       columnsByTable.get(column.tableName)!.push({
         name: column.name,
         type: column.type,

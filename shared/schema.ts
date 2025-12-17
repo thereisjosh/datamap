@@ -258,6 +258,7 @@ export const generateMermaidRequestSchema = z.object({
   options: z.object({
     theme: z.string().default("default"),
     direction: z.string().default("TB"),
+    forceRefresh: z.boolean().optional(),
   }).optional(),
   projectId: z.string().optional(),
 });

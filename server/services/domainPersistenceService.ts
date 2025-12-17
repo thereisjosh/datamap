@@ -1,6 +1,6 @@
 import { getDb } from '../../lib/db';
 import { projects, projectDomains, projectDomainTables, tableEmbeddings } from '../../shared/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import type { VectorClusteringResult, VectorCluster, TableEmbedding } from './vectorClusteringService';
 
 export interface StoredDomainInfo {
@@ -243,9 +243,26 @@ export class DomainPersistenceService {
     if (!db) throw new Error('Database not available');
     
     try {
+      // First, get all domain IDs for this project to delete related domain tables
+      const domainIds = await db
+        .select({ id: projectDomains.id })
+        .from(projectDomains)
+        .where(eq(projectDomains.projectId, projectId));
+
+      // Delete project_domain_tables entries for this project's domains
+      if (domainIds.length > 0) {
+        await db
+          .delete(projectDomainTables)
+          .where(inArray(projectDomainTables.domainId, domainIds.map(d => d.id)));
+      }
+
+      // Delete project domains
       await db.delete(projectDomains).where(eq(projectDomains.projectId, projectId));
+      
+      // Delete table embeddings
       await db.delete(tableEmbeddings).where(eq(tableEmbeddings.projectId, projectId));
-      console.log(`Invalidated cached domains for project ${projectId}`);
+      
+      console.log(`Invalidated cached domains for project ${projectId} (cleared ${domainIds.length} domains and their associated tables)`);
     } catch (error) {
       console.error('Failed to invalidate project domains:', error);
       throw error;

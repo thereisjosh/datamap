@@ -146,6 +146,16 @@ function sanitizeTableData(tables: any[]): any[] {
     // Check if we have attributes but no columns (frontend sends attributes)
     if (!Array.isArray(columns) && Array.isArray(attributes)) {
       console.log(`   📋 Converting attributes to columns for ${table.name}`);
+      
+      // DEBUG: Check FK attributes before conversion
+      const fkAttrs = attributes.filter((attr: any) => attr.isForeignKey);
+      if (fkAttrs.length > 0 && process.env.NODE_ENV === 'development') {
+        console.log(`🔗 [ROUTES DEBUG] Table "${table.name}" has ${fkAttrs.length} FK attributes:`);
+        fkAttrs.forEach((attr: any) => {
+          console.log(`  - "${attr.name}": references =`, attr.references);
+        });
+      }
+      
       columns = attributes.map((attr: any) => ({
         name: attr.name || '',
         type: attr.type || 'string',
@@ -366,12 +376,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Format response to match frontend expectations
       const formattedTables = parseResult.tables.map(table => ({
         name: table.name,
-        columns: table.attributes.map(attr => ({
-          name: attr.name,
-          type: attr.type,
-          isPrimaryKey: attr.isPrimaryKey,
-          isForeignKey: attr.isForeignKey,
-          references: attr.references
+        columns: table.columns.map(col => ({
+          name: col.name,
+          type: col.type,
+          isPrimaryKey: col.isPrimaryKey,
+          isForeignKey: col.isForeignKey,
+          references: col.references
         }))
       }));
 
@@ -422,8 +432,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`  📊 Tables: ${tables.length}, Relationships: ${relationships.length}`);
       console.log(`  🤖 Features: 1536D Semantic Vectors + Multiplicative Scoring + Dependency Analysis`);
 
+      // DEBUG: Check if references property exists when starting domain generation
+      if (tables && tables.length > 0) {
+        const sampleTable = tables[0];
+        const sampleColumn = sampleTable.columns && sampleTable.columns.length > 0 ? sampleTable.columns[0] : null;
+        console.log('🎯 [DOMAIN DEBUG] Domain generation input data check:', {
+          tableCount: tables.length,
+          sampleTableName: sampleTable?.name,
+          sampleTableHasColumns: !!sampleTable?.columns,
+          sampleColumnName: sampleColumn?.name,
+          sampleColumnHasReferences: !!sampleColumn?.references,
+          sampleColumnRefs: sampleColumn?.references,
+          sampleColumnFK: sampleColumn?.isForeignKey
+        });
+      }
+
       // Sanitize and validate table data early (before cache check)
       const sanitizedTables = sanitizeTableData(tables);
+
+      // DEBUG: Check if references property survives sanitization
+      if (sanitizedTables && sanitizedTables.length > 0) {
+        const sampleTable = sanitizedTables[0];
+        const sampleColumn = sampleTable.columns && sampleTable.columns.length > 0 ? sampleTable.columns[0] : null;
+        console.log('🧹 [SANITIZE DEBUG] Post-sanitization data check:', {
+          tableCount: sanitizedTables.length,
+          sampleTableName: sampleTable?.name,
+          sampleTableHasColumns: !!sampleTable?.columns,
+          sampleColumnName: sampleColumn?.name,
+          sampleColumnHasReferences: !!sampleColumn?.references,
+          sampleColumnRefs: sampleColumn?.references,
+          sampleColumnFK: sampleColumn?.isForeignKey
+        });
+      }
 
       // Convert relationships to the correct format
       const formattedRelationships = relationships.map(rel => ({
@@ -437,10 +477,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         organizationId: null
       }));
 
+      // FIX: Reconstruct missing column references from relationships data
+      // This fixes the ghost table generation issue where FK columns have isForeignKey=true but references=undefined
+      const tablesWithReferences = sanitizedTables.map(table => ({
+        ...table,
+        columns: table.columns?.map(column => {
+          // If this column is marked as FK but has no references, try to find it in relationships
+          if (column.isForeignKey && !column.references) {
+            const relForThisColumn = relationships.find(rel => 
+              rel.sourceTable === table.name && rel.sourceColumn === column.name
+            );
+            if (relForThisColumn) {
+              return {
+                ...column,
+                references: {
+                  table: relForThisColumn.targetTable,
+                  column: relForThisColumn.targetColumn
+                }
+              };
+            }
+          }
+          return column;
+        }) || []
+      }));
+
+      // DEBUG: Log the fix results
+      const tablesWithMissingRefs = sanitizedTables.filter(table => 
+        table.columns?.some(col => col.isForeignKey && !col.references)
+      ).length;
+      const tablesAfterFix = tablesWithReferences.filter(table => 
+        table.columns?.some(col => col.isForeignKey && !col.references)
+      ).length;
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔧 [REFERENCES FIX] Column references reconstruction:');
+        console.log(`  - Tables with missing FK references before fix: ${tablesWithMissingRefs}`);
+        console.log(`  - Tables with missing FK references after fix: ${tablesAfterFix}`);
+        console.log(`  - FK references reconstructed: ${tablesWithMissingRefs - tablesAfterFix} table(s)`);
+      }
+
       // Check for cached domains if projectId provided
       if (projectId) {
         try {
           const domainPersistenceService = new (await import('./services/domainPersistenceService')).DomainPersistenceService();
+          
+          // If forceRefresh is requested, clear cache first
+          if (options.forceRefresh) {
+            await domainPersistenceService.invalidateProjectDomains(projectId);
+            console.log(`🧹 [FORCE REFRESH] Cleared domain cache for project ${projectId}`);
+          }
+          
           const cachedDomains = await domainPersistenceService.getStoredDomains(projectId);
           
           if (cachedDomains && cachedDomains.domains.length > 0 && !options.forceRefresh) {
@@ -470,7 +556,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             const domainResults = transformHybridClustersToDomainsResponse(
               hybridClusters,
-              sanitizedTables,
+              tablesWithReferences,
               formattedRelationships
             );
             
@@ -492,7 +578,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Convert TableData to TableInfo format for hybrid clustering
-      const tableInfoList = coreTableDiscoveryService.convertTableDataToTableInfo(sanitizedTables);
+      const tableInfoList = coreTableDiscoveryService.convertTableDataToTableInfo(tablesWithReferences);
 
       // Call advanced domain boundary service (AI-enhanced approach)
       console.log('🤖 Calling enhanced AI domain boundary service...');
@@ -528,7 +614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`✅ AI-enhanced clustering completed - found ${advancedResult.domains.length} domains`);
       console.log(`   📊 Algorithm selected: ${advancedResult.louvainClustering ? 'Louvain' : advancedResult.dependencyAnalysis ? 'Dependency' : 'Spectral'}`);
-      console.log(`   🎯 Quality score: ${advancedResult.validation.overallQuality.overallScore.toFixed(3)}`);
+      console.log(`   🎯 Quality score: ${advancedResult.validation?.overallQuality?.overallScore?.toFixed(3) || 'N/A'}`);
       console.log(`   🤖 Semantic analysis: ${advancedResult.semanticAnalysis ? `${advancedResult.semanticAnalysis.vectorCount} vectors (${advancedResult.semanticAnalysis.embeddingDimensions}D)` : 'disabled'}`);
       console.log(`   🏗️ Dependency analysis: ${advancedResult.dependencyAnalysis ? `${advancedResult.dependencyAnalysis.domains.length} hub domains` : 'disabled'}`);
       console.log(`   ⚡ Processing time: ${advancedResult.performance?.totalProcessingTime?.toFixed(1) || '0'}ms`);
@@ -558,11 +644,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         }),
         clusteringMetrics: {
-          averageQuality: advancedResult.validation.overallQuality.overallScore,
+          averageQuality: advancedResult.validation?.overallQuality?.overallScore || 0.5,
           totalProcessingTime: advancedResult.performance?.totalProcessingTime || 0,
           algorithmUsed: advancedResult.louvainClustering ? 'Louvain' : advancedResult.dependencyAnalysis ? 'Dependency-Driven' : 'Spectral',
           hubCount: advancedResult.hubDetection.statistics.hubCount,
-          isolatedHubs: advancedResult.hubAssignment.isolatedHubs.length,
+          isolatedHubs: advancedResult.hubAssignment?.isolatedHubs?.length || 0,
           // AI-enhanced metrics
           semanticCoverage: advancedResult.semanticAnalysis?.semanticCoverage || 0,
           embeddingDimensions: advancedResult.semanticAnalysis?.embeddingDimensions || 0,
@@ -595,7 +681,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Transform hybrid clusters to frontend domain format
       const domainResults = transformHybridClustersToDomainsResponse(
         hybridResult.hybridClusters,
-        sanitizedTables,
+        tablesWithReferences,
         formattedRelationships
       );
 
@@ -1003,6 +1089,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mermaidCode: mermaidCode.length
       });
 
+      // DEBUG: Check if references property exists when loading project
+      if (tables && tables.length > 0) {
+        const sampleTable = tables[0];
+        const sampleColumn = sampleTable.columns && sampleTable.columns.length > 0 ? sampleTable.columns[0] : null;
+        console.log('📤 [LOAD DEBUG] Project load data check:', {
+          tableCount: tables.length,
+          sampleTableName: sampleTable?.name,
+          sampleTableHasColumns: !!sampleTable?.columns,
+          sampleColumnName: sampleColumn?.name,
+          sampleColumnHasReferences: !!sampleColumn?.references,
+          sampleColumnRefs: sampleColumn?.references,
+          sampleColumnFK: sampleColumn?.isForeignKey
+        });
+      }
+
       // Debug: Check if codemaster data exists in tables
       console.log('🔍 [CODEMASTER DEBUG] Checking tables for codemaster data...');
       tables.forEach((table, index) => {
@@ -1104,6 +1205,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { tables, relationships, mermaidCode, filename } = req.body;
+
+      // DEBUG: Check if references property exists when saving project
+      if (tables && tables.length > 0) {
+        const sampleTable = tables[0];
+        const sampleColumn = sampleTable.columns && sampleTable.columns.length > 0 ? sampleTable.columns[0] : null;
+        console.log('📝 [SAVE DEBUG] Project save data check:', {
+          tableCount: tables.length,
+          sampleTableName: sampleTable?.name,
+          sampleTableHasColumns: !!sampleTable?.columns,
+          sampleColumnName: sampleColumn?.name,
+          sampleColumnHasReferences: !!sampleColumn?.references,
+          sampleColumnRefs: sampleColumn?.references,
+          sampleColumnFK: sampleColumn?.isForeignKey
+        });
+      }
 
       // Get project to extract organizationId for multi-tenant security
       const project = await storage.getProject(req.params.projectId, userId);
@@ -1218,6 +1334,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } catch (authError) {
         console.log('Auth extraction failed for project delete');
+      }
+
+      // Explicitly clear domain cache before deleting project
+      // This ensures stale cache doesn't persist if cascade deletion fails
+      try {
+        const domainPersistenceService = new (await import('./services/domainPersistenceService')).DomainPersistenceService();
+        await domainPersistenceService.invalidateProjectDomains(req.params.projectId);
+        console.log(`🧹 [DELETE] Cleared domain cache for project ${req.params.projectId}`);
+      } catch (cleanupError) {
+        console.warn('⚠️ Domain cache cleanup failed (non-fatal):', cleanupError);
+        // Continue with deletion even if cache cleanup fails
       }
 
       const success = await storage.deleteProject(req.params.projectId, userId);
