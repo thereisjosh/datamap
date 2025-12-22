@@ -14,6 +14,19 @@ export interface HybridCluster {
   businessDomain?: string;
   junctionTables?: string[];
   containerDetections?: any[];
+  // Hub Detection metadata
+  hubTables?: string[];        // Hub tables detected in this domain
+  masterHub?: string;          // Primary hub if domain owns one  
+  referencedHubs?: string[];   // External hubs this domain references
+  isHubDomain?: boolean;       // Whether this domain is hub-centric
+  hubMetrics?: {               // Hub connectivity metrics
+    [tableName: string]: {
+      confidence: number;        // Hub confidence score (0-1)
+      degree: number;           // Number of connections
+      centrality: number;      // Betweenness centrality
+      pageRank: number;         // PageRank score
+    };
+  };
   // LLM Enhancement metadata
   llmMetadata?: {
     description: string;
@@ -183,7 +196,7 @@ function generateDomainDiagram(
   
   // Add critical cross-domain ghost tables if context is available
   if (allTables && allClusters) {
-    const criticalRefs = findCriticalExternalReferences(tables, allTables, allClusters);
+    const criticalRefs = findCriticalExternalReferences(tables, allTables, allClusters, cluster);
     
     if (process.env.NODE_ENV !== 'production') {
       console.log(`\n👻 Ghost Table Analysis for ${cluster.clusterName || cluster.clusterId}:`);
@@ -262,7 +275,7 @@ function generateDomainDiagram(
   
   // Add relationships to ghost tables (using solid lines for compatibility)
   if (allTables && allClusters) {
-    const criticalRefs = findCriticalExternalReferences(tables, allTables, allClusters);
+    const criticalRefs = findCriticalExternalReferences(tables, allTables, allClusters, cluster);
     if (process.env.NODE_ENV !== 'production') {
       console.log(`🐛 [DEBUG] Adding ${criticalRefs.length} ghost table relationships...`);
     }
@@ -287,7 +300,7 @@ function generateDomainDiagram(
   // Count expected elements
   const expectedTableCount = tables.length;
   const expectedGhostCount = allTables && allClusters ? 
-    findCriticalExternalReferences(tables, allTables, allClusters).reduce((acc, ref) => {
+    findCriticalExternalReferences(tables, allTables, allClusters, cluster).reduce((acc, ref) => {
       if (!acc.has(ref.targetTable)) {
         acc.add(ref.targetTable);
       }
@@ -363,12 +376,13 @@ function generateDomainDiagram(
 }
 
 /**
- * Find critical external references for ghost table generation
+ * Find critical external references for ghost table generation with hub intelligence
  */
 function findCriticalExternalReferences(
   domainTables: TableData[],
   allTables: TableData[],
-  allClusters: HybridCluster[]
+  allClusters: HybridCluster[],
+  currentCluster?: HybridCluster
 ): Array<{
   sourceTable: string;
   targetTable: string;
@@ -436,8 +450,8 @@ function findCriticalExternalReferences(
             const targetCluster = tableToClusterMap.get(targetTable);
             
             if (targetCluster) {
-              // Calculate importance based on connectivity
-              const importance = calculateTableImportance(targetTable, allTables);
+              // Calculate hub-aware importance based on connectivity and hub metrics
+              const importance = calculateHubAwareTableImportance(targetTable, allTables, targetCluster, currentCluster);
               
               // Find the domain index for this cluster to match frontend domain IDs
               const targetClusterIndex = allClusters.findIndex(c => c.clusterId === targetCluster.clusterId);
@@ -506,6 +520,57 @@ function calculateTableImportance(tableName: string, allTables: TableData[]): nu
     const attributes = targetTable.attributes || targetTable.columns || [];
     const outgoingFKs = attributes.filter(attr => attr.isForeignKey).length;
     importance += outgoingFKs * 0.5; // Weight outgoing FKs less than incoming
+  }
+  
+  return importance;
+}
+
+/**
+ * Calculate hub-aware table importance for ghost table generation
+ * Prioritizes hub-to-hub relationships and uses hub detection metrics
+ */
+function calculateHubAwareTableImportance(
+  tableName: string, 
+  allTables: TableData[], 
+  targetCluster: HybridCluster,
+  sourceCluster?: HybridCluster
+): number {
+  let importance = calculateTableImportance(tableName, allTables); // Base importance
+  
+  // Hub-to-Hub relationship boost (highest priority)
+  const isTargetHub = targetCluster.hubTables?.includes(tableName) || false;
+  const isSourceHubDomain = sourceCluster?.isHubDomain || false;
+  
+  if (isTargetHub && isSourceHubDomain) {
+    importance += 10; // Maximum boost for hub-to-hub relationships
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`    🔥 HUB-TO-HUB RELATIONSHIP: ${tableName} gets +10 importance boost`);
+    }
+  } else if (isTargetHub) {
+    importance += 5; // High boost for references to hub tables
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`    ⭐ HUB TABLE: ${tableName} gets +5 importance boost`);
+    }
+  }
+  
+  // Use hub metrics if available
+  const hubMetrics = targetCluster.hubMetrics?.[tableName];
+  if (hubMetrics) {
+    const confidenceBoost = hubMetrics.confidence * 2; // 0-2 boost based on hub confidence
+    const centralityBoost = hubMetrics.centrality * 1.5; // 0-1.5 boost based on centrality
+    importance += confidenceBoost + centralityBoost;
+    
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`    📊 HUB METRICS: ${tableName} gets +${(confidenceBoost + centralityBoost).toFixed(2)} boost (confidence: ${hubMetrics.confidence}, centrality: ${hubMetrics.centrality})`);
+    }
+  }
+  
+  // Master hub boost (domain's primary hub)
+  if (tableName === targetCluster.masterHub) {
+    importance += 3;
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`    👑 MASTER HUB: ${tableName} gets +3 importance boost`);
+    }
   }
   
   return importance;

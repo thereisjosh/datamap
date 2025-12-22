@@ -549,7 +549,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               connectivityScore: 0.5,
               semanticScore: 0.5,
               clusterType: 'cached' as const,
-              coreTables: [],
+              // Restore hub information from cached data
+              hubTables: (domain as any).hubTables || [],
+              masterHub: (domain as any).masterHub,
+              referencedHubs: (domain as any).referencedHubs || [],
+              isHubDomain: (domain as any).isHubDomain || false,
+              hubMetrics: (domain as any).hubMetrics || {},
+              coreTables: (domain as any).hubTables || [],
               supportingTables: [],
               decisionReasons: ['Loaded from cache']
             }));
@@ -636,7 +642,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             coherenceScore: domain.coherenceScore,
             businessDomain: domain.businessContext || domain.name,
             algorithmUsed: domain.algorithmUsed || 'AI-enhanced',
+            // Hub detection metadata
             hubTables: domain.hubTables,
+            masterHub: actualHubTable,
+            referencedHubs: [], // Will be populated during ghost table analysis
+            isHubDomain: domain.hubTables && domain.hubTables.length > 0,
+            hubMetrics: advancedResult.hubDetection?.hubs?.reduce((metrics: any, hub: any) => {
+              if (domain.tables.includes(hub.tableName)) {
+                metrics[hub.tableName] = {
+                  confidence: hub.confidence,
+                  degree: hub.degree,
+                  centrality: hub.centrality,
+                  pageRank: hub.pageRank
+                };
+              }
+              return metrics;
+            }, {}) || {},
             // AI enhancement indicators
             aiEnhanced: true,
             semanticScore: advancedResult.semanticAnalysis?.averageSimilarity || 0,
@@ -707,6 +728,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               coherence: cluster.coherenceScore,
               businessDomain: cluster.businessDomain || cluster.clusterName,
               purpose: cluster.llmMetadata?.description || `Domain containing ${cluster.coreTable} and related entities`,
+              // Store hub information for ghost table generation
+              hubTables: cluster.hubTables || [],
+              masterHub: cluster.masterHub,
+              referencedHubs: cluster.referencedHubs || [],
+              isHubDomain: cluster.isHubDomain || false,
+              hubMetrics: cluster.hubMetrics || {},
               // Store LLM metadata for enhanced domain information
               llmEnhanced: !!cluster.llmMetadata,
               llmConfidence: cluster.llmMetadata?.confidence,
