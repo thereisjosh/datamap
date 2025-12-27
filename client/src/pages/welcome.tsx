@@ -78,8 +78,11 @@ const Welcome = () => {
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-2">
-            <Database className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold text-primary">DataMap</h1>
+            <img 
+              src={isDarkMode ? "/2.svg" : "/1.svg"} 
+              alt="DataMap" 
+              className="h-12 w-auto"
+            />
             <Badge variant="secondary" className="ml-2">Beta</Badge>
           </div>
           
@@ -213,8 +216,11 @@ const Welcome = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center space-x-2 mb-4 md:mb-0">
-              <Database className="h-6 w-6 text-primary" />
-              <span className="text-lg font-semibold">DataMap</span>
+              <img 
+                src={isDarkMode ? "/2.svg" : "/1.svg"} 
+                alt="DataMap" 
+                className="h-12 w-auto"
+              />
             </div>
             
             <div className="flex items-center space-x-6">

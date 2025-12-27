@@ -59,8 +59,8 @@ const MetadataPreview = ({
 
   if (tables.length === 0) {
     return (
-      <div className="bg-white border rounded-lg p-6 shadow-sm w-full">
-        <p className="text-gray-500 text-center">
+      <div className="bg-card border rounded-lg p-6 shadow-sm w-full">
+        <p className="text-muted-foreground text-center">
           No metadata available. Please upload an Excel file.
         </p>
       </div>
@@ -68,8 +68,8 @@ const MetadataPreview = ({
   }
 
   return (
-    <div className="bg-white border rounded-lg p-4 shadow-sm w-full">
-      <h2 className="text-xl font-medium mb-4">Metadata Preview</h2>
+    <div className="bg-card border rounded-lg p-4 shadow-sm w-full">
+      <h2 className="text-xl font-medium mb-4 text-card-foreground">Metadata Preview</h2>
 
       {errors.length > 0 && (
         <Alert variant="destructive" className="mb-4">
@@ -93,7 +93,7 @@ const MetadataPreview = ({
           {tables.reduce((acc, table) => acc + table.columns.length, 0)}
         </Badge>
         {codemasterMappings.length > 0 && (
-          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800">
             <Database className="h-3 w-3 mr-1" />
             Code Values: {codemasterMappings.length}
           </Badge>
@@ -105,10 +105,10 @@ const MetadataPreview = ({
           <AccordionItem key={table.name} value={table.name}>
             <AccordionTrigger
               onClick={() => toggleTable(table.name)}
-              className="hover:bg-gray-50 px-3 rounded-md"
+              className="hover:bg-muted px-3 rounded-md"
             >
               <div className="flex items-center justify-between w-full pr-4">
-                <span className="font-medium">{table.name}</span>
+                <span className="font-medium text-foreground">{table.name}</span>
                 <Badge variant="secondary" className="ml-2">
                   {table.columns.length} columns
                 </Badge>
@@ -118,23 +118,23 @@ const MetadataPreview = ({
               <div className="border rounded-md overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 border-b">
-                      <th className="px-4 py-2 text-left">Column</th>
-                      <th className="px-4 py-2 text-left">Type</th>
-                      <th className="px-4 py-2 text-left">Keys</th>
-                      <th className="px-4 py-2 text-left">References</th>
+                    <tr className="bg-muted border-b">
+                      <th className="px-4 py-2 text-left text-muted-foreground font-medium">Column</th>
+                      <th className="px-4 py-2 text-left text-muted-foreground font-medium">Type</th>
+                      <th className="px-4 py-2 text-left text-muted-foreground font-medium">Keys</th>
+                      <th className="px-4 py-2 text-left text-muted-foreground font-medium">References</th>
                     </tr>
                   </thead>
                   <tbody>
                     {table.columns.map((column) => (
                       <tr
                         key={column.name}
-                        className="border-b last:border-b-0 hover:bg-gray-50"
+                        className="border-b last:border-b-0 hover:bg-muted/50"
                       >
                         <td className="px-4 py-2">
                           <div className="flex items-center gap-2">
                             <span
-                              className={`${column.isPrimaryKey ? "font-medium" : ""}`}
+                              className={`${column.isPrimaryKey ? "font-medium" : ""} text-foreground`}
                             >
                               {column.name}
                             </span>
@@ -146,7 +146,7 @@ const MetadataPreview = ({
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-2 text-gray-600">
+                        <td className="px-4 py-2 text-muted-foreground">
                           {column.type}
                         </td>
                         <td className="px-4 py-2">
@@ -169,7 +169,7 @@ const MetadataPreview = ({
                         </td>
                         <td className="px-4 py-2">
                           {column.isForeignKey && column.references && (
-                            <span className="text-sm text-blue-600">
+                            <span className="text-sm text-blue-600 dark:text-blue-400">
                               {column.references.table}.
                               {column.references.column}
                             </span>

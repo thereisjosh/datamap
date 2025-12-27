@@ -82,54 +82,54 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
 
     // Check required fields
     if (!mappings.tableSheet) {
-      errors.push('Table sheet is required');
+      errors.push('Please select which sheet contains your table information');
     } else {
       const tableSheet = sheets.find(s => s.name === mappings.tableSheet);
       if (!tableSheet) {
-        errors.push('Selected table sheet not found');
+        errors.push('The selected table sheet could not be found in your Excel file');
       } else {
         if (!mappings.tableNameColumn) {
-          errors.push('Table name column is required');
+          errors.push('Please tell us which column has your table names');
         } else if (!tableSheet.columns.includes(mappings.tableNameColumn)) {
-          errors.push(`Column "${mappings.tableNameColumn}" not found in table sheet`);
+          errors.push(`We couldn't find a column named "${mappings.tableNameColumn}" in your table sheet`);
         }
       }
     }
 
     if (!mappings.columnSheet) {
-      errors.push('Column sheet is required');
+      errors.push('Please select which sheet contains your column information');
     } else {
       const columnSheet = sheets.find(s => s.name === mappings.columnSheet);
       if (!columnSheet) {
-        errors.push('Selected column sheet not found');
+        errors.push('The selected column sheet could not be found in your Excel file');
       } else {
         // Check required column mappings
         const requiredMappings = [
-          { key: 'columnTableNameColumn', label: 'Table name column' },
-          { key: 'columnNameColumn', label: 'Column name column' },
-          { key: 'columnTypeColumn', label: 'Column type column' },
+          { key: 'columnTableNameColumn', label: 'Please tell us which column links columns to their tables' },
+          { key: 'columnNameColumn', label: 'Please tell us which column has the column names' },
+          { key: 'columnTypeColumn', label: 'Please tell us which column has the data types' },
         ];
 
         for (const mapping of requiredMappings) {
           const value = mappings[mapping.key as keyof MappingFormState];
           if (!value) {
-            errors.push(`${mapping.label} is required`);
+            errors.push(mapping.label);
           } else if (!columnSheet.columns.includes(value)) {
-            errors.push(`Column "${value}" not found in column sheet`);
+            errors.push(`We couldn't find a column named "${value}" in your column sheet`);
           }
         }
 
         // Check optional mappings
         const optionalMappings = [
-          { key: 'primaryKeyColumn', label: 'Primary key column' },
-          { key: 'foreignKeyTableColumn', label: 'Foreign key table column' },
-          { key: 'foreignKeyColumnColumn', label: 'Foreign key column column' },
+          { key: 'primaryKeyColumn', label: 'primary key indicator' },
+          { key: 'foreignKeyTableColumn', label: 'referenced table name' },
+          { key: 'foreignKeyColumnColumn', label: 'referenced column name' },
         ];
 
         for (const mapping of optionalMappings) {
           const value = mappings[mapping.key as keyof MappingFormState];
           if (value && !columnSheet.columns.includes(value)) {
-            warnings.push(`Optional column "${value}" not found in column sheet`);
+            warnings.push(`The optional ${mapping.label} column "${value}" wasn't found in your column sheet. You can leave this blank if you don't have this information.`);
           }
         }
       }
@@ -236,15 +236,15 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
         </Alert>
       )}
 
-      {/* Table Mapping */}
+      {/* Table Setup */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Table className="h-5 w-5 text-blue-600" />
-            Table Mapping
+            Tables
           </CardTitle>
           <CardDescription>
-            Configure which sheet contains your table definitions and which column contains table names.
+            Tell us where to find your table names in the Excel file. This sheet should list all the database tables you want in your ERD.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -252,7 +252,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
             "Table Sheet",
             mappings.tableSheet,
             (value) => handleMappingChange('tableSheet', value),
-            "The sheet that contains table definitions"
+            "Select the sheet that lists all your database tables. Examples: 'Tables', 'Table_List', 'Entities'"
           )}
 
           {mappings.tableSheet && (
@@ -263,7 +263,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                 (value) => handleMappingChange('tableNameColumn', value),
                 mappings.tableSheet,
                 true,
-                "Column containing table names"
+                "Column containing your table names. Examples: 'Table_Name', 'Entity', 'TableName'"
               )}
 
               {renderColumnSelector(
@@ -272,7 +272,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                 (value) => handleMappingChange('tableTypeColumn', value),
                 mappings.tableSheet,
                 false,
-                "Column indicating table types (e.g., 'entity', 'table')"
+                "Column indicating table types or categories, if you have one"
               )}
             </>
           )}
@@ -280,21 +280,21 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
           {mappings.tableSheet && mappings.tableNameColumn && (
             <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
               <CheckCircle className="h-4 w-4 text-green-600" />
-              <span className="text-sm text-green-700">Table mapping configured</span>
+              <span className="text-sm text-green-700">✓ Table information configured successfully</span>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Column Mapping */}
+      {/* Column Setup */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Columns className="h-5 w-5 text-green-600" />
-            Column Mapping
+            Columns
           </CardTitle>
           <CardDescription>
-            Configure which sheet contains your column definitions and map the required fields.
+            Tell us where to find your column details. This sheet should list all table columns with their names, data types, and which table they belong to.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -302,37 +302,37 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
             "Column Sheet",
             mappings.columnSheet,
             (value) => handleMappingChange('columnSheet', value),
-            "The sheet that contains column/attribute definitions"
+            "Sheet that details all your columns. Examples: 'Columns', 'Fields', 'Attributes'"
           )}
 
           {mappings.columnSheet && (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {renderColumnSelector(
-                  "Table Name Column",
+                  "Parent Table Column",
                   mappings.columnTableNameColumn,
                   (value) => handleMappingChange('columnTableNameColumn', value),
                   mappings.columnSheet,
                   true,
-                  "Column linking columns to their parent tables"
+                  "Links each column back to its table. Examples: 'Table_Name', 'Entity', 'Parent_Table'"
                 )}
 
                 {renderColumnSelector(
-                  "Column Name Column",
+                  "Column Name",
                   mappings.columnNameColumn,
                   (value) => handleMappingChange('columnNameColumn', value),
                   mappings.columnSheet,
                   true,
-                  "Column containing column/attribute names"
+                  "Contains the actual field names. Examples: 'Column_Name', 'Field_Name', 'Attribute'"
                 )}
 
                 {renderColumnSelector(
-                  "Column Type Column",
+                  "Data Type Column",
                   mappings.columnTypeColumn,
                   (value) => handleMappingChange('columnTypeColumn', value),
                   mappings.columnSheet,
                   true,
-                  "Column containing data types (varchar, int, etc.)"
+                  "Contains data types like VARCHAR, INT, DATE, etc. Examples: 'Data_Type', 'Type', 'Format'"
                 )}
               </div>
 
@@ -340,8 +340,11 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
               <div className="border-t pt-4">
                 <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
                   <Key className="h-4 w-4 text-yellow-600" />
-                  Optional: Key Mappings
+                  Keys & Relationships (Optional)
                 </h4>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Help create better table structures and connected diagrams. Skip if your Excel doesn't have this information.
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {renderColumnSelector(
                     "Primary Key Column",
@@ -349,25 +352,25 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                     (value) => handleMappingChange('primaryKeyColumn', value),
                     mappings.columnSheet,
                     false,
-                    "Column indicating primary keys"
+                    "Column with TRUE/FALSE values indicating primary keys. Examples: 'Is_Primary_Key', 'PK' (values: TRUE/FALSE, Yes/No, 1/0)"
                   )}
 
                   {renderColumnSelector(
-                    "Foreign Key Table Column",
+                    "Foreign Key Table",
                     mappings.foreignKeyTableColumn,
                     (value) => handleMappingChange('foreignKeyTableColumn', value),
                     mappings.columnSheet,
                     false,
-                    "Column containing foreign key target tables"
+                    "For foreign keys, which table they point to. Examples: 'Referenced_Table', 'FK_Table'"
                   )}
 
                   {renderColumnSelector(
-                    "Foreign Key Column Column",
+                    "Foreign Key Column",
                     mappings.foreignKeyColumnColumn,
                     (value) => handleMappingChange('foreignKeyColumnColumn', value),
                     mappings.columnSheet,
                     false,
-                    "Column containing foreign key target columns"
+                    "For foreign keys, which column in the other table. Examples: 'Referenced_Column', 'FK_Column'"
                   )}
                 </div>
               </div>
@@ -376,21 +379,24 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
         </CardContent>
       </Card>
 
-      {/* Codemaster Mapping */}
+      {/* Lookup Tables */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Database className="h-5 w-5 text-purple-600" />
-            Configure Codemaster Sheets
+            Lookup Data (Optional)
           </CardTitle>
           <CardDescription>
-            Map lookup tables, enums, and code values to your data fields
+            If your Excel has lookup tables with dropdown values or reference data (like status codes, categories, etc.), configure them here to enhance your ERD.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Add New Codemaster Configuration */}
+          {/* Add New Lookup Table Configuration */}
           <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium">Codemaster Configurations</Label>
+            <div>
+              <Label className="text-sm font-medium">Reference Data Configurations</Label>
+              <p className="text-xs text-muted-foreground">Configure sheets that contain lookup values, dropdown options, or reference codes.</p>
+            </div>
             <Button
               type="button"
               variant="outline"
@@ -409,7 +415,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
               className="h-8"
             >
               <Plus className="h-4 w-4 mr-1" />
-              Add Codemaster
+              Add Lookup Table
             </Button>
           </div>
 
@@ -436,7 +442,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Database className="h-4 w-4 text-purple-600" />
-                      Codemaster {index + 1}
+                      Lookup Table {index + 1}
                     </CardTitle>
                     <Button
                       type="button"
@@ -452,13 +458,13 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                 <CardContent className="space-y-3">
                   {/* Sheet Selection */}
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Codemaster Sheet</Label>
+                    <Label className="text-sm font-medium">Lookup Sheet</Label>
                     <Select
                       value={config.selectedSheet}
                       onValueChange={(value) => updateConfig({ selectedSheet: value })}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a sheet containing lookup values" />
+                        <SelectValue placeholder="Select a sheet containing reference data or dropdown values" />
                       </SelectTrigger>
                       <SelectContent>
                         {sheets.map((sheet) => (
@@ -476,10 +482,10 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                     </Select>
                   </div>
 
-                  {/* Codemaster Type Selection */}
+                  {/* Lookup Type Selection */}
                   {config.selectedSheet && (
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium">Codemaster Type</Label>
+                      <Label className="text-sm font-medium">Lookup Table Type</Label>
                       <Select
                         value={config.type}
                         onValueChange={(value: CodemasterType) => updateConfig({ type: value })}
@@ -490,25 +496,25 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                         <SelectContent>
                           <SelectItem value="field_enums">
                             <div className="space-y-1">
-                              <div className="font-medium">Field Enums</div>
+                              <div className="font-medium">Field Dropdown Values</div>
                               <div className="text-xs text-muted-foreground">
-                                Simple code-description pairs for specific fields
+                                Values for specific fields (e.g., Status: Active/Inactive)
                               </div>
                             </div>
                           </SelectItem>
                           <SelectItem value="entity_tables">
                             <div className="space-y-1">
-                              <div className="font-medium">Entity Tables</div>
+                              <div className="font-medium">Table-Based Lookups</div>
                               <div className="text-xs text-muted-foreground">
-                                Codes organized by entity/table categories
+                                Reference values organized by table categories
                               </div>
                             </div>
                           </SelectItem>
                           <SelectItem value="mixed">
                             <div className="space-y-1">
-                              <div className="font-medium">Mixed Categories</div>
+                              <div className="font-medium">Mixed Reference Data</div>
                               <div className="text-xs text-muted-foreground">
-                                Multiple code types in one sheet with category column
+                                Multiple types of lookup values in one sheet
                               </div>
                             </div>
                           </SelectItem>
@@ -527,7 +533,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                           (value) => updateConfig({ codeColumn: value }),
                           config.selectedSheet,
                           true,
-                          "Column containing the lookup codes/keys"
+                          "Contains the actual values/codes. Examples: 'A', 'ACTIVE', '01'"
                         )}
 
                         {renderColumnSelector(
@@ -536,7 +542,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                           (value) => updateConfig({ descriptionColumn: value }),
                           config.selectedSheet,
                           true,
-                          "Column containing human-readable descriptions"
+                          "Contains readable descriptions. Examples: 'Active', 'Pending', 'Completed'"
                         )}
 
                         {renderColumnSelector(
@@ -545,7 +551,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                           (value) => updateConfig({ statusColumn: value }),
                           config.selectedSheet,
                           false,
-                          "Column indicating if code is active/inactive"
+                          "Shows if the value is still active/valid"
                         )}
 
                         {/* Type-specific columns */}
@@ -555,7 +561,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                           (value) => updateConfig({ entityColumn: value }),
                           config.selectedSheet,
                           true,
-                          "Column containing table/entity names"
+                          "Shows which table these values belong to"
                         )}
 
                         {config.type === 'field_enums' && renderColumnSelector(
@@ -564,7 +570,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                           (value) => updateConfig({ fieldColumn: value }),
                           config.selectedSheet,
                           true,
-                          "Column containing field names"
+                          "Shows which field these values are for"
                         )}
 
                         {config.type === 'mixed' && renderColumnSelector(
@@ -573,7 +579,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                           (value) => updateConfig({ categoryColumn: value }),
                           config.selectedSheet,
                           true,
-                          "Column containing category/grouping information"
+                          "Shows the category or type of lookup data"
                         )}
                       </div>
 
@@ -582,7 +588,7 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
                         <div className="flex items-center gap-2 p-2 bg-purple-100 border border-purple-200 rounded-md">
                           <CheckCircle className="h-4 w-4 text-purple-600" />
                           <span className="text-sm text-purple-700">
-                            Codemaster configuration ready for "{config.selectedSheet}"
+                            ✓ Lookup table configured for "{config.selectedSheet}"
                           </span>
                         </div>
                       )}
@@ -597,8 +603,8 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
           {(mappings.codemasterConfigurations ?? []).length === 0 && (
             <div className="text-center py-6 text-muted-foreground border-2 border-dashed border-gray-200 rounded-lg">
               <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No codemaster configurations</p>
-              <p className="text-xs">Click "Add Codemaster" to configure lookup value mappings</p>
+              <p className="text-sm">No lookup tables configured</p>
+              <p className="text-xs">This is optional - only add if you have reference data sheets</p>
             </div>
           )}
         </CardContent>
@@ -629,10 +635,10 @@ const ColumnMapper: React.FC<ColumnMapperProps> = ({
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
-              <span className="text-green-700 font-medium">Mapping configuration complete!</span>
+              <span className="text-green-700 font-medium">✓ Configuration complete!</span>
             </div>
             <p className="text-sm text-green-600 mt-1">
-              Ready to parse Excel file with your custom mappings.
+              All required fields are mapped. Ready to generate your ERD!
             </p>
           </CardContent>
         </Card>

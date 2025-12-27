@@ -455,7 +455,11 @@ const ProjectUpload = ({}: ProjectUploadProps) => {
                 disabled={isSaving || !parseResult}
                 className="flex items-center gap-2"
               >
-                <Save className="h-4 w-4" />
+                {isSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
                 {isSaving ? 'Saving...' : 'Save Project'}
               </Button>
               <Button variant="outline" onClick={handleStartOver}>
@@ -502,8 +506,8 @@ const ProjectUpload = ({}: ProjectUploadProps) => {
   }
 
   return (
-    <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-      <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+    <div className="min-h-screen bg-background">
+      <AppHeader />
       
       <main className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -540,7 +544,11 @@ const ProjectUpload = ({}: ProjectUploadProps) => {
                   disabled={isSaving}
                   className="flex items-center gap-2"
                 >
-                  <Save className="h-4 w-4" />
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
                   {isSaving ? 'Saving...' : 'Save Project'}
                 </Button>
               </>

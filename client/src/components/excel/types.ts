@@ -193,4 +193,5 @@ export interface LoadingStates {
   analyzing: boolean;
   parsing: boolean;
   uploading: boolean;
+  saving: boolean;
 }

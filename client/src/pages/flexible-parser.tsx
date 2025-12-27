@@ -17,7 +17,8 @@ import {
   ArrowLeft,
   Sparkles,
   AlertCircle,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-react';
 
 // Import our custom components
@@ -25,6 +26,7 @@ import SheetExplorer from '@/components/excel/SheetExplorer';
 import ColumnMapper from '@/components/excel/ColumnMapper';
 import MappingPreview from '@/components/excel/MappingPreview';
 import MetadataPreview from '@/components/MetadataPreview';
+import PrerequisitesGuide from '@/components/excel/PrerequisitesGuide';
 
 // Import types
 import type { 
@@ -87,7 +89,8 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
   const [loading, setLoading] = useState<LoadingStates>({
     analyzing: false,
     parsing: false,
-    uploading: false
+    uploading: false,
+    saving: false
   });
 
   // Helper function to determine if a step is completed
@@ -112,36 +115,36 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
   const steps: FlexibleParserStep[] = [
     {
       id: 'upload',
-      title: 'Upload Excel',
-      description: 'Upload your Excel data dictionary file',
+      title: 'Upload File',
+      description: 'Choose your Excel data dictionary',
       completed: isStepCompleted('upload'),
       current: currentStepId === 'upload'
     },
     {
       id: 'analyze',
-      title: 'Explore Structure',
-      description: 'Review your Excel file structure',
+      title: 'Explore Sheets',
+      description: 'Review what we found in your Excel',
       completed: isStepCompleted('analyze'),
       current: currentStepId === 'analyze'
     },
     {
       id: 'map',
-      title: 'Map Columns',
-      description: 'Configure column mappings',
+      title: 'Connect Data',
+      description: 'Tell us where to find tables and columns',
       completed: isStepCompleted('map'),
       current: currentStepId === 'map'
     },
     {
       id: 'preview',
-      title: 'Preview & Confirm',
-      description: 'Review detected tables and relationships',
+      title: 'Review Results',
+      description: 'Check detected tables and relationships',
       completed: isStepCompleted('preview'),
       current: currentStepId === 'preview'
     },
     {
       id: 'result',
-      title: 'View ERD',
-      description: 'Explore your generated ERD',
+      title: 'Your ERD',
+      description: 'View and export your diagram',
       completed: isStepCompleted('result'),
       current: currentStepId === 'result'
     }
@@ -288,6 +291,8 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
   const handleSaveToProject = useCallback(async () => {
     if (!parseResult) return;
     
+    setLoading(prev => ({ ...prev, saving: true }));
+    
     try {
       // For now, create a new project with the parsed data
       const projectData = {
@@ -296,6 +301,9 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
         tables: parseResult.tables,
         relationships: parseResult.relationships || []
       };
+      
+      // Simulate processing time for larger datasets
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Save as a new project (this would need to integrate with the project creation API)
       toast({
@@ -314,6 +322,8 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
         description: "Failed to save project. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setLoading(prev => ({ ...prev, saving: false }));
     }
   }, [parseResult, fileUpload.file, toast]);
 
@@ -471,16 +481,19 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
 
   // Render file upload component
   const renderFileUpload = () => (
-    <Card className="max-w-lg mx-auto">
-      <CardHeader className="text-center">
-        <CardTitle className="flex items-center justify-center gap-2">
-          <FileSpreadsheet className="h-6 w-6 text-blue-600" />
-          Upload Excel File
-        </CardTitle>
-        <CardDescription>
-          Upload your Excel data dictionary to get started
-        </CardDescription>
-      </CardHeader>
+    <div className="space-y-6">
+      <PrerequisitesGuide />
+      
+      <Card className="max-w-lg mx-auto">
+        <CardHeader className="text-center">
+          <CardTitle className="flex items-center justify-center gap-2">
+            <FileSpreadsheet className="h-6 w-6 text-blue-600" />
+            Upload Your Excel File
+          </CardTitle>
+          <CardDescription>
+            Ready? Upload your data dictionary and we'll get started!
+          </CardDescription>
+        </CardHeader>
       <CardContent>
         <div className="space-y-4">
           <div
@@ -489,10 +502,10 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
           >
             <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-sm text-muted-foreground mb-2">
-              Click to upload or drag and drop
+              Click here to select your Excel file
             </p>
             <p className="text-xs text-muted-foreground">
-              Excel files (.xlsx, .xls) up to 10MB
+              Supports .xlsx and .xls files up to 10MB
             </p>
           </div>
           
@@ -525,6 +538,7 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 
   return (
@@ -536,13 +550,13 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-4">
             <Sparkles className="h-6 w-6 text-purple-600" />
-            <h1 className="text-3xl font-bold">Flexible Excel Parser</h1>
+            <h1 className="text-3xl font-bold">Smart Excel to ERD Generator</h1>
             <span className="text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
-              MVP
+              Beta
             </span>
           </div>
           <p className="text-muted-foreground">
-            Parse any Excel data dictionary format with our intelligent column mapping system
+            Transform your Excel data dictionary into a professional ERD diagram. Works with any Excel format - just tell us where to find your tables and columns.
           </p>
           
           {/* Keyboard shortcuts hint */}
@@ -623,7 +637,7 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
           {currentStepId === 'analyze' && excelAnalysis && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-medium">Excel Structure Analysis</h2>
+                <h2 className="text-xl font-medium">What We Found in Your Excel</h2>
                 <Button variant="outline" onClick={handleStartOver}>
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Upload Different File
@@ -639,7 +653,7 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
           {currentStepId === 'map' && excelAnalysis && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-medium">Column Mapping</h2>
+                <h2 className="text-xl font-medium">Tell Us Where to Find Your Data</h2>
               </div>
               
               <ColumnMapper
@@ -657,7 +671,7 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
           {currentStepId === 'preview' && parseResult && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-medium">Preview & Confirm</h2>
+                <h2 className="text-xl font-medium">Does This Look Right?</h2>
               </div>
               
               <MappingPreview
@@ -687,8 +701,8 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
                     </span>
                   </div>
                   <p className="text-sm text-green-600 mb-4">
-                    Your Excel data dictionary has been parsed using custom mappings. 
-                    You can now view the full ERD visualization or integrate this with your project.
+                    We've successfully converted your Excel file into an ERD with {parseResult.summary.tablesFound} tables 
+                    and {parseResult.summary.relationshipsFound} relationships. Ready to explore your diagram!
                   </p>
                   
                   <div className="flex gap-2">
@@ -696,8 +710,20 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
                       <Eye className="h-4 w-4 mr-2" />
                       View Full ERD
                     </Button>
-                    <Button variant="outline" size="sm" onClick={handleSaveToProject}>
-                      Save to Project
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={loading.saving ? undefined : handleSaveToProject}
+                      className={loading.saving ? "pointer-events-none" : ""}
+                    >
+                      {loading.saving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save to Project"
+                      )}
                     </Button>
                   </div>
                 </CardContent>

@@ -48,17 +48,18 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
-      <div className="container mx-auto px-4 py-3">
+      <div className="container mx-auto px-4 py-3 max-h-20">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <button 
             onClick={() => navigate('/projects')}
-            className="flex items-center space-x-3 hover:opacity-80 transition-opacity"
+            className="hover:opacity-80 transition-opacity"
           >
-            <Database className="h-7 w-7 text-primary" />
-            <div>
-              <h1 className="text-xl font-bold text-primary">DataMap</h1>
-            </div>
+            <img 
+              src={isDarkMode ? "/2.svg" : "/1.svg"} 
+              alt="DataMap" 
+              className="h-12 w-auto"
+            />
           </button>
 
           {/* Organization Selector - Center */}
