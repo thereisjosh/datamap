@@ -1562,7 +1562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .limit(1);
           
         if (orgResult.length > 0) {
-          let inviterName = 'ERDify Team';
+          let inviterName = 'DataMap Team';
           try {
             const auth = await getAuth();
             const sessionData = await auth.api.getSession({ headers: req.headers });
@@ -1686,7 +1686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Send invitation email
       try {
-        let inviterName = 'ERDify Team';
+        let inviterName = 'DataMap Team';
         try {
           const auth = await getAuth();
           const sessionData = await auth.api.getSession({ headers: req.headers });
@@ -1701,7 +1701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Get organization name for email
         const org = await db.select().from(organization).where(eq(organization.id, organizationId)).limit(1);
-        const organizationName = org[0]?.name || 'ERDify';
+        const organizationName = org[0]?.name || 'DataMap';
         
         const emailResult = await emailService.sendInvitationEmail({
           email: invitation.email,

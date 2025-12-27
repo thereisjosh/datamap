@@ -31,7 +31,7 @@ export interface EmailTemplateConfig {
 
 export const defaultEmailConfig: EmailTemplateConfig = {
   // Branding
-  appName: 'ERDify',
+  appName: 'DataMap',
   appUrl: 'http://localhost:3000',
   
   // Colors and Styling (Tailwind-compatible)
@@ -54,7 +54,7 @@ export const defaultEmailConfig: EmailTemplateConfig = {
   
   // Personalization  
   fromEmail: 'onboarding@resend.dev', // Resend's default domain for development
-  fromName: 'ERDify Team'
+  fromName: 'DataMap Team'
 };
 
 export interface InvitationTemplateData {

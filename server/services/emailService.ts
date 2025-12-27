@@ -38,9 +38,9 @@ export class EmailService {
 
   constructor(config?: Partial<EmailServiceConfig>) {
     this.config = {
-      fromEmail: config?.fromEmail || process.env.RESEND_FROM_EMAIL || 'invitations@di-erdify.work',
+      fromEmail: config?.fromEmail || process.env.RESEND_FROM_EMAIL || 'invitations@datamap.work',
       appUrl: config?.appUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-      appName: config?.appName || process.env.NEXT_PUBLIC_APP_NAME || 'ERDify',
+      appName: config?.appName || process.env.NEXT_PUBLIC_APP_NAME || 'DataMap',
       ...config
     };
 

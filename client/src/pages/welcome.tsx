@@ -82,7 +82,7 @@ const Welcome = () => {
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-2">
             <Database className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold text-primary">ERDify</h1>
+            <h1 className="text-2xl font-bold text-primary">DataMap</h1>
             <Badge variant="secondary" className="ml-2">Beta</Badge>
           </div>
           
@@ -199,7 +199,7 @@ const Welcome = () => {
               Ready to visualize your database?
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Join teams using ERDify to understand their data better. 
+              Join teams using DataMap to understand their data better. 
               Start with your email domain and invite your colleagues.
             </p>
             
@@ -225,7 +225,7 @@ const Welcome = () => {
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center space-x-2 mb-4 md:mb-0">
               <Database className="h-6 w-6 text-primary" />
-              <span className="text-lg font-semibold">ERDify</span>
+              <span className="text-lg font-semibold">DataMap</span>
             </div>
             
             <div className="flex items-center space-x-6">
@@ -238,7 +238,7 @@ const Welcome = () => {
                 <Github className="h-5 w-5" />
               </a>
               <span className="text-sm text-muted-foreground">
-                &copy; 2025 ERDify. All rights reserved.
+                &copy; 2025 DataMap. All rights reserved.
               </span>
             </div>
           </div>

@@ -542,7 +542,7 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <p className="text-sm text-muted-foreground">
-              &copy; {new Date().getFullYear()} ERDify. All rights reserved.
+              &copy; {new Date().getFullYear()} DataMap. All rights reserved.
             </p>
             <div className="flex items-center space-x-4 mt-2 md:mt-0">
               <span className="text-xs text-muted-foreground">

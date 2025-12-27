@@ -88,7 +88,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full mx-4">
         <Card className="border-0 shadow-none">
           <CardHeader>
-            <CardTitle>Welcome to ERDify</CardTitle>
+            <CardTitle>Welcome to DataMap</CardTitle>
             <CardDescription>
               Sign in to your account or create a new one to get started
             </CardDescription>

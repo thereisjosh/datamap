@@ -18,7 +18,7 @@ app.use(helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // unsafe-eval needed for Vite
       imgSrc: ["'self'", "data:", "blob:", "https:"],
-      connectSrc: ["'self'", "https://*.di-erdify.work", "https://api.openai.com", "https://api.anthropic.com", "wss:", "ws:"],
+      connectSrc: ["'self'", "https://*.datamap.work", "https://api.openai.com", "https://api.anthropic.com", "wss:", "ws:"],
       frameSrc: ["'none'"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],

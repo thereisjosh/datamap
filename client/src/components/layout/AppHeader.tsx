@@ -66,7 +66,7 @@ export function AppHeader({ isDarkMode = false, setIsDarkMode }: AppHeaderProps)
           >
             <Database className="h-7 w-7 text-primary" />
             <div>
-              <h1 className="text-xl font-bold text-primary">ERDify</h1>
+              <h1 className="text-xl font-bold text-primary">DataMap</h1>
             </div>
           </button>
 
