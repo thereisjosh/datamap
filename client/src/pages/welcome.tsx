@@ -290,14 +290,22 @@ const Welcome = () => {
             </div>
             
             <div className="flex items-center space-x-6">
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Github className="h-5 w-5" />
-              </a>
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => setLocation('/privacy-policy')}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline-offset-4 hover:underline"
+                >
+                  Privacy Policy
+                </button>
+                <a
+                  href="https://github.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Github className="h-5 w-5" />
+                </a>
+              </div>
               <span className="text-sm text-muted-foreground">
                 &copy; 2025 DataMap. All rights reserved.
               </span>
