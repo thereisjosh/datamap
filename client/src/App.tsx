@@ -20,7 +20,6 @@ import JoinPage from "@/pages/join";
 import SignupPage from "@/pages/auth/signup";
 import SigninPage from "@/pages/auth/signin";
 import Onboarding from "@/pages/onboarding";
-import FlexibleParser from "@/pages/flexible-parser";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 function Router() {
   return (
@@ -73,11 +72,6 @@ function Router() {
       <Route path="/settings/organization">
         <AuthGuard>
           <OrganizationSettings />
-        </AuthGuard>
-      </Route>
-      <Route path="/flexible-parser">
-        <AuthGuard>
-          <FlexibleParser />
         </AuthGuard>
       </Route>
       

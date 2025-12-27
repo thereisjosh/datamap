@@ -28,6 +28,7 @@ import SheetExplorer from '@/components/excel/SheetExplorer';
 import ColumnMapper from '@/components/excel/ColumnMapper';
 import MappingPreview from '@/components/excel/MappingPreview';
 import MetadataPreview from '@/components/MetadataPreview';
+import PrerequisitesGuide from '@/components/excel/PrerequisitesGuide';
 
 // Import types
 import type { 
@@ -624,7 +625,10 @@ const ProjectUpload = ({}: ProjectUploadProps) => {
         {/* Step Content */}
         <div className="space-y-6">
           {currentStepId === 'upload' && (
-            <Card className="max-w-lg mx-auto">
+            <div className="space-y-6">
+              <PrerequisitesGuide />
+              
+              <Card className="max-w-lg mx-auto">
               <CardHeader className="text-center">
                 <CardTitle className="flex items-center justify-center gap-2">
                   <FileSpreadsheet className="h-6 w-6 text-blue-600" />
@@ -678,6 +682,7 @@ const ProjectUpload = ({}: ProjectUploadProps) => {
                 </div>
               </CardContent>
             </Card>
+            </div>
           )}
 
           {currentStepId === 'analyze' && excelAnalysis && (

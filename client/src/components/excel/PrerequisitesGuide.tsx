@@ -24,7 +24,7 @@ export const PrerequisitesGuide: React.FC<PrerequisitesGuideProps> = ({ classNam
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <Card className={`border-blue-200 bg-blue-50/50 ${className}`}>
+    <Card className={`border-blue-200/50 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-900/20 ${className}`}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <BookOpen className="h-5 w-5 text-blue-600" />
@@ -66,7 +66,7 @@ export const PrerequisitesGuide: React.FC<PrerequisitesGuideProps> = ({ classNam
             Minimum Data Needed
           </h3>
           
-          <div className="bg-white p-3 rounded-md border space-y-2">
+          <div className="bg-card p-3 rounded-md border space-y-2">
             <div className="text-sm">
               <strong>For Tables Sheet:</strong>
               <ul className="list-disc list-inside ml-2 text-muted-foreground">
@@ -140,7 +140,7 @@ export const PrerequisitesGuide: React.FC<PrerequisitesGuideProps> = ({ classNam
                 Best Practices
               </h3>
               
-              <div className="bg-orange-50 p-3 rounded-md border border-orange-200">
+              <div className="bg-orange-50/50 dark:bg-orange-900/20 p-3 rounded-md border border-orange-200/50 dark:border-orange-800/50">
                 <ul className="text-sm space-y-1">
                   <li className="flex items-start gap-2">
                     <CheckCircle className="h-3 w-3 mt-1 text-green-600 shrink-0" />
@@ -169,7 +169,7 @@ export const PrerequisitesGuide: React.FC<PrerequisitesGuideProps> = ({ classNam
                 Common Mistakes to Avoid
               </h3>
               
-              <div className="bg-red-50 p-3 rounded-md border border-red-200">
+              <div className="bg-red-50/50 dark:bg-red-900/20 p-3 rounded-md border border-red-200/50 dark:border-red-800/50">
                 <ul className="text-sm space-y-1">
                   <li className="flex items-start gap-2">
                     <AlertTriangle className="h-3 w-3 mt-1 text-red-600 shrink-0" />
@@ -198,10 +198,10 @@ export const PrerequisitesGuide: React.FC<PrerequisitesGuideProps> = ({ classNam
                 Example Excel Structure
               </h3>
               
-              <div className="bg-blue-50 p-3 rounded-md border border-blue-200 space-y-3">
+              <div className="bg-blue-50/50 dark:bg-blue-900/20 p-3 rounded-md border border-blue-200/50 dark:border-blue-800/50 space-y-3">
                 <div>
                   <p className="text-sm font-medium">Sheet 1: "Tables" or "Table_List"</p>
-                  <div className="mt-1 text-xs font-mono bg-white p-2 rounded border">
+                  <div className="mt-1 text-xs font-mono bg-card p-2 rounded border">
                     | Table_Name | Table_Type |<br/>
                     | Customer   | Entity     |<br/>
                     | Order      | Entity     |<br/>
@@ -211,7 +211,7 @@ export const PrerequisitesGuide: React.FC<PrerequisitesGuideProps> = ({ classNam
                 
                 <div>
                   <p className="text-sm font-medium">Sheet 2: "Columns" or "Field_Details"</p>
-                  <div className="mt-1 text-xs font-mono bg-white p-2 rounded border">
+                  <div className="mt-1 text-xs font-mono bg-card p-2 rounded border">
                     | Table_Name | Column_Name | Data_Type    | Primary_Key |<br/>
                     | Customer   | CustomerID  | INT          | Yes         |<br/>
                     | Customer   | Name        | VARCHAR(100) | No          |<br/>
@@ -226,7 +226,7 @@ export const PrerequisitesGuide: React.FC<PrerequisitesGuideProps> = ({ classNam
         </div>
 
         {/* Quick Start */}
-        <Alert className="bg-green-50 border-green-200">
+        <Alert className="bg-green-50/50 dark:bg-green-900/20 border-green-200/50 dark:border-green-800/50">
           <CheckCircle className="h-4 w-4 text-green-600" />
           <AlertDescription>
             <strong>Quick Start:</strong> Have your tables and columns in separate sheets with clear names? You're ready to upload! 
