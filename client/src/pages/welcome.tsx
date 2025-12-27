@@ -151,6 +151,72 @@ const Welcome = () => {
         </div>
       </section>
 
+      {/* Data Privacy Notice */}
+      <section className="bg-blue-50/50 dark:bg-blue-900/20 border-y border-blue-200/50 dark:border-blue-800/50">
+        <div className="container mx-auto px-4 py-12">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="flex items-center justify-center gap-3 mb-6">
+              <div className="p-3 bg-blue-600/10 dark:bg-blue-400/10 rounded-full">
+                <Shield className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-foreground">Your Data Stays Private</h2>
+            </div>
+            
+            <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
+              Built with privacy by design. Your sensitive data never leaves your control.
+            </p>
+            
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-green-600/10 rounded-lg mt-1">
+                  <Shield className="h-4 w-4 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground mb-1">Browser Processing</h3>
+                  <p className="text-sm text-muted-foreground">All processing happens in your browser's memory</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-green-600/10 rounded-lg mt-1">
+                  <Shield className="h-4 w-4 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground mb-1">No File Storage</h3>
+                  <p className="text-sm text-muted-foreground">Excel files are never stored on our servers</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-green-600/10 rounded-lg mt-1">
+                  <Shield className="h-4 w-4 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground mb-1">Metadata Only</h3>
+                  <p className="text-sm text-muted-foreground">Only basic metadata like filename and table count is saved</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-green-600/10 rounded-lg mt-1">
+                  <Shield className="h-4 w-4 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground mb-1">Content Protected</h3>
+                  <p className="text-sm text-muted-foreground">No sensitive schema content leaves your device</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-8 p-4 bg-card rounded-lg border">
+              <p className="text-sm text-muted-foreground">
+                <strong className="text-foreground">Enterprise Ready:</strong> GDPR compliant, SOC2 aligned, with comprehensive audit logging for enterprise security requirements.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features Grid */}
       <section className="container mx-auto px-4 py-16">
         <div className="text-center mb-12">
