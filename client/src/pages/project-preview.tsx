@@ -539,7 +539,7 @@ const ProjectPreview = ({}: ProjectPreviewProps) => {
   }
 
   return (
-    <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
+    <div className="min-h-screen bg-background">
       {/* Floating Header */}
       <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 transition-all duration-300 ${showControls ? 'translate-y-0' : '-translate-y-full'}`}>
         <div className="bg-background/90 backdrop-blur-md border border-border rounded-lg shadow-lg px-4 py-2">

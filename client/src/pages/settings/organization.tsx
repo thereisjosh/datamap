@@ -580,8 +580,8 @@ const OrganizationSettings = ({}: OrganizationSettingsProps) => {
   }
 
   return (
-    <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-      <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+    <div className="min-h-screen bg-background">
+      <AppHeader />
       
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Header */}

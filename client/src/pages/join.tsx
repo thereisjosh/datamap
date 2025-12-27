@@ -266,7 +266,7 @@ const JoinPage: React.FC<JoinPageProps> = ({}) => {
   // User is authenticated, show the invitation acceptance page
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      <AppHeader />
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         <Card>
           <CardHeader className="text-center">
