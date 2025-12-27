@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { api, type ProjectResponse } from '@/lib/api';
+import { useTheme } from '@/contexts/ThemeContext';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { OrganizationInfo } from '@/components/organizations/OrganizationSelector';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,10 +56,7 @@ import {
 } from 'lucide-react';
 import { useLocation } from 'wouter';
 
-interface ProjectsProps {
-  isDarkMode?: boolean;
-  setIsDarkMode?: (isDark: boolean) => void;
-}
+interface ProjectsProps {}
 
 // Use ProjectResponse from API, but extend it for UI display
 interface Project extends ProjectResponse {
@@ -72,7 +70,8 @@ interface Project extends ProjectResponse {
   preview_image?: string;
 }
 
-const Projects = ({ isDarkMode = false, setIsDarkMode }: ProjectsProps) => {
+const Projects = ({}: ProjectsProps) => {
+  const { isDarkMode } = useTheme();
   const [, navigate] = useLocation();
   const { user, activeOrganization } = useAuth();
   const { toast } = useToast();
@@ -315,8 +314,8 @@ const Projects = ({ isDarkMode = false, setIsDarkMode }: ProjectsProps) => {
   };
 
   return (
-    <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-      <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+    <div className="min-h-screen bg-background">
+      <AppHeader />
       
       <main className="container mx-auto px-4 py-8">
         {/* Organization Info */}

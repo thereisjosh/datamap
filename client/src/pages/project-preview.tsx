@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useTheme } from '@/contexts/ThemeContext';
 import ERDRenderer from '@/components/ERDRenderer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,12 +22,10 @@ import {
 } from 'lucide-react';
 import { useLocation, useRoute } from 'wouter';
 
-interface ProjectPreviewProps {
-  isDarkMode?: boolean;
-  setIsDarkMode?: (isDark: boolean) => void;
-}
+interface ProjectPreviewProps {}
 
-const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewProps) => {
+const ProjectPreview = ({}: ProjectPreviewProps) => {
+  const { isDarkMode } = useTheme();
   const [, navigate] = useLocation();
   const [, params] = useRoute('/projects/:projectId/preview');
   const { toast } = useToast();
@@ -510,7 +509,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
   // Loading state
   if (isLoading) {
     return (
-      <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
+      <div className="min-h-screen bg-background">
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -524,7 +523,7 @@ const ProjectPreview = ({ isDarkMode = false, setIsDarkMode }: ProjectPreviewPro
   // Error state
   if (error || !project) {
     return (
-      <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
+      <div className="min-h-screen bg-background">
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <h2 className="text-2xl font-bold mb-4">Error Loading Project</h2>

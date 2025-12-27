@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useLocation } from 'wouter'
 import { useAuth } from '@/components/auth/AuthProvider'
+import { useTheme } from '@/contexts/ThemeContext'
 import { AuthModal } from '@/components/auth/AuthModal'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,9 +23,9 @@ import {
 
 const Welcome = () => {
   const { user, loading } = useAuth()
+  const { isDarkMode, toggleTheme } = useTheme()
   const [, setLocation] = useLocation()
   const [showAuthModal, setShowAuthModal] = useState(false)
-  const [isDarkMode, setIsDarkMode] = useState(false)
 
   // Redirect authenticated users to dashboard
   useEffect(() => {
@@ -36,10 +37,6 @@ const Welcome = () => {
   // Don't render if user is authenticated (redirect will happen)
   if (!loading && user) {
     return null
-  }
-
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode)
   }
 
   const features = [
@@ -76,7 +73,7 @@ const Welcome = () => {
   ]
 
   return (
-    <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
+    <div className="min-h-screen bg-background">
       {/* Navigation */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
@@ -90,7 +87,7 @@ const Welcome = () => {
             <Button
               variant="ghost"
               size="icon"
-              onClick={toggleDarkMode}
+              onClick={toggleTheme}
               aria-label={`Switch to ${isDarkMode ? "light" : "dark"} mode`}
             >
               {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
@@ -123,7 +120,7 @@ const Welcome = () => {
             Organize by business domains and collaborate with your team.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <div className="flex justify-center">
             <Button 
               size="lg" 
               onClick={() => setShowAuthModal(true)}
@@ -131,14 +128,6 @@ const Welcome = () => {
             >
               <span>Start Building ERDs</span>
               <ArrowRight className="h-5 w-5" />
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              size="lg"
-              onClick={() => setShowAuthModal(true)}
-            >
-              View Demo
             </Button>
           </div>
           

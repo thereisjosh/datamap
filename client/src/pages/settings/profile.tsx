@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useTheme } from '@/contexts/ThemeContext';
 import { authClient } from '@/lib/auth.client';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,12 +14,10 @@ import { useToast } from '@/hooks/use-toast';
 import { User, Mail, Lock, Trash2, Upload, ArrowLeft } from 'lucide-react';
 import { useLocation } from 'wouter';
 
-interface ProfileSettingsProps {
-  isDarkMode?: boolean;
-  setIsDarkMode?: (isDark: boolean) => void;
-}
+interface ProfileSettingsProps {}
 
-const ProfileSettings = ({ isDarkMode = false, setIsDarkMode }: ProfileSettingsProps) => {
+const ProfileSettings = ({}: ProfileSettingsProps) => {
+  const { isDarkMode } = useTheme();
   const [, navigate] = useLocation();
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
@@ -215,8 +214,8 @@ const ProfileSettings = ({ isDarkMode = false, setIsDarkMode }: ProfileSettingsP
   };
 
   return (
-    <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-      <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+    <div className="min-h-screen bg-background">
+      <AppHeader />
       
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Header */}

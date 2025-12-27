@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
+import { useTheme } from '@/contexts/ThemeContext'
 import { OrganizationSelector } from '../organizations/OrganizationSelector'
 import { Button } from '../ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
@@ -14,13 +15,9 @@ import { Badge } from '../ui/badge'
 import { Database, User, Settings, LogOut, Moon, Sun, HelpCircle } from 'lucide-react'
 import { useLocation } from 'wouter'
 
-interface AppHeaderProps {
-  isDarkMode?: boolean
-  setIsDarkMode?: (isDark: boolean) => void
-}
-
-export function AppHeader({ isDarkMode = false, setIsDarkMode }: AppHeaderProps) {
+export function AppHeader() {
   const { user, profile, signOut, activeOrganization } = useAuth()
+  const { isDarkMode, toggleTheme } = useTheme()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [, navigate] = useLocation()
 
@@ -29,12 +26,6 @@ export function AppHeader({ isDarkMode = false, setIsDarkMode }: AppHeaderProps)
       await signOut()
     } catch (error) {
       console.error('Sign out error:', error)
-    }
-  }
-
-  const toggleDarkMode = () => {
-    if (setIsDarkMode) {
-      setIsDarkMode(!isDarkMode)
     }
   }
 
@@ -78,16 +69,14 @@ export function AppHeader({ isDarkMode = false, setIsDarkMode }: AppHeaderProps)
           {/* User Menu */}
           <div className="flex items-center space-x-3">
             {/* Dark Mode Toggle */}
-            {setIsDarkMode && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleDarkMode}
-                aria-label={`Switch to ${isDarkMode ? "light" : "dark"} mode`}
-              >
-                {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${isDarkMode ? "light" : "dark"} mode`}
+            >
+              {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </Button>
 
             {/* Help */}
             <Button variant="ghost" size="icon" aria-label="Help">

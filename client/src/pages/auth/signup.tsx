@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useTheme } from '@/contexts/ThemeContext';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,12 +11,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, Loader2, UserPlus, ArrowLeft } from 'lucide-react';
 
-interface SignupPageProps {
-  isDarkMode?: boolean;
-  setIsDarkMode?: (isDark: boolean) => void;
-}
+interface SignupPageProps {}
 
-const SignupPage: React.FC<SignupPageProps> = ({ isDarkMode = false, setIsDarkMode }) => {
+const SignupPage: React.FC<SignupPageProps> = ({}) => {
+  const { isDarkMode } = useTheme();
   const [, navigate] = useLocation();
   const { signUp, user } = useAuth();
   const { toast } = useToast();
@@ -112,7 +111,7 @@ const SignupPage: React.FC<SignupPageProps> = ({ isDarkMode = false, setIsDarkMo
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      <AppHeader />
       
       <main className="container mx-auto px-4 py-8 max-w-md">
         <div className="mb-6">

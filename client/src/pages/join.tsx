@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useTheme } from '@/contexts/ThemeContext';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,10 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Link, Users, CheckCircle, AlertCircle, Loader2, Building2 } from 'lucide-react';
 
-interface JoinPageProps {
-  isDarkMode?: boolean;
-  setIsDarkMode?: (isDark: boolean) => void;
-}
+interface JoinPageProps {}
 
 interface InvitationDetails {
   organizationId: string;
@@ -20,7 +18,8 @@ interface InvitationDetails {
   description: string;
 }
 
-const JoinPage: React.FC<JoinPageProps> = ({ isDarkMode = false, setIsDarkMode }) => {
+const JoinPage: React.FC<JoinPageProps> = ({}) => {
+  const { isDarkMode } = useTheme();
   const [, params] = useRoute('/join/:token');
   const [, navigate] = useLocation();
   const { user, refreshProfile } = useAuth();
@@ -143,7 +142,7 @@ const JoinPage: React.FC<JoinPageProps> = ({ isDarkMode = false, setIsDarkMode }
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+        <AppHeader />
         <main className="container mx-auto px-4 py-8 max-w-2xl">
           <div className="flex items-center justify-center py-12">
             <div className="text-center space-y-4">
@@ -159,7 +158,7 @@ const JoinPage: React.FC<JoinPageProps> = ({ isDarkMode = false, setIsDarkMode }
   if (error) {
     return (
       <div className="min-h-screen bg-background">
-        <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+        <AppHeader />
         <main className="container mx-auto px-4 py-8 max-w-2xl">
           <Card>
             <CardHeader className="text-center">
@@ -185,7 +184,7 @@ const JoinPage: React.FC<JoinPageProps> = ({ isDarkMode = false, setIsDarkMode }
   if (success) {
     return (
       <div className="min-h-screen bg-background">
-        <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+        <AppHeader />
         <main className="container mx-auto px-4 py-8 max-w-2xl">
           <Card>
             <CardHeader className="text-center">
@@ -214,7 +213,7 @@ const JoinPage: React.FC<JoinPageProps> = ({ isDarkMode = false, setIsDarkMode }
   if (!user) {
     return (
       <div className="min-h-screen bg-background">
-        <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+        <AppHeader />
         <main className="container mx-auto px-4 py-8 max-w-2xl">
           <Card>
             <CardHeader className="text-center">

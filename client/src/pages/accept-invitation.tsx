@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRoute } from 'wouter';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useTheme } from '@/contexts/ThemeContext';
 import { authClient } from '@/lib/auth.client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,11 +18,10 @@ interface InvitationData {
   role: string;
 }
 
-interface AcceptInvitationProps {
-  isDarkMode?: boolean;
-}
+interface AcceptInvitationProps {}
 
-const AcceptInvitation = ({ isDarkMode = false }: AcceptInvitationProps) => {
+const AcceptInvitation = ({}: AcceptInvitationProps) => {
+  const { isDarkMode } = useTheme();
   const [, params] = useRoute('/accept-invitation/:token');
   const { user, signIn, signUp, signOut } = useAuth();
   const { toast } = useToast();
@@ -190,7 +190,7 @@ const AcceptInvitation = ({ isDarkMode = false }: AcceptInvitationProps) => {
   // Render loading state
   if (loading) {
     return (
-      <div className={`min-h-screen bg-background flex items-center justify-center ${isDarkMode ? 'dark' : ''}`}>
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
@@ -204,7 +204,7 @@ const AcceptInvitation = ({ isDarkMode = false }: AcceptInvitationProps) => {
   // Render error state
   if (error) {
     return (
-      <div className={`min-h-screen bg-background flex items-center justify-center ${isDarkMode ? 'dark' : ''}`}>
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <XCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
@@ -227,7 +227,7 @@ const AcceptInvitation = ({ isDarkMode = false }: AcceptInvitationProps) => {
   // Render success state
   if (success) {
     return (
-      <div className={`min-h-screen bg-background flex items-center justify-center ${isDarkMode ? 'dark' : ''}`}>
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
@@ -252,7 +252,7 @@ const AcceptInvitation = ({ isDarkMode = false }: AcceptInvitationProps) => {
   }
 
   return (
-    <div className={`min-h-screen bg-background flex items-center justify-center p-4 ${isDarkMode ? 'dark' : ''}`}>
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex items-center justify-center mb-4">

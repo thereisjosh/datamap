@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useTheme } from "@/contexts/ThemeContext";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { OrganizationInfo } from "@/components/organizations/OrganizationSelector";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,12 +14,10 @@ import MetadataPreview from "@/components/MetadataPreview";
 import ERDRenderer from "@/components/ERDRenderer";
 import { api, type ParseExcelResponse, type Table } from "@/lib/api";
 
-interface HomeProps {
-  isDarkMode?: boolean;
-  setIsDarkMode?: (isDark: boolean) => void;
-}
+interface HomeProps {}
 
-const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
+const Home = ({}: HomeProps) => {
+  const { isDarkMode } = useTheme();
   const [, navigate] = useLocation();
   const { user, profile, activeOrganization } = useAuth();
   const [tables, setTables] = useState<Table[]>([]);
@@ -277,9 +276,9 @@ const Home = ({ isDarkMode = false, setIsDarkMode }: HomeProps) => {
   };
 
   return (
-    <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
+    <div className="min-h-screen bg-background">
       {/* App Header */}
-      <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      <AppHeader />
       
       {/* Dashboard Header */}
       <div className="bg-muted/30 border-b">

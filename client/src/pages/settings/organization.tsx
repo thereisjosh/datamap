@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useTheme } from '@/contexts/ThemeContext';
 import { authClient } from '@/lib/auth.client';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,12 +18,10 @@ import { Building2, Users, Mail, Crown, Shield, Trash2, UserPlus, ArrowLeft, Cre
 import { useLocation } from 'wouter';
 import InviteLinkGenerator from '@/components/InviteLinkGenerator';
 
-interface OrganizationSettingsProps {
-  isDarkMode?: boolean;
-  setIsDarkMode?: (isDark: boolean) => void;
-}
+interface OrganizationSettingsProps {}
 
-const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: OrganizationSettingsProps) => {
+const OrganizationSettings = ({}: OrganizationSettingsProps) => {
+  const { isDarkMode } = useTheme();
   const [, navigate] = useLocation();
   const { user, activeOrganization, organizations, refreshProfile } = useAuth();
   const { toast } = useToast();
@@ -567,8 +566,8 @@ const OrganizationSettings = ({ isDarkMode = false, setIsDarkMode }: Organizatio
 
   if (!activeOrganization) {
     return (
-      <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-        <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      <div className="min-h-screen bg-background">
+        <AppHeader />
         <main className="container mx-auto px-4 py-8">
           <Card>
             <CardContent className="pt-6 text-center">

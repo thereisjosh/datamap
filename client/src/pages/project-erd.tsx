@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useTheme } from '@/contexts/ThemeContext';
 import { AppHeader } from '@/components/layout/AppHeader';
 import ERDRenderer from '@/components/ERDRenderer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,12 +26,10 @@ import {
 } from 'lucide-react';
 import { useLocation, useRoute } from 'wouter';
 
-interface ProjectERDProps {
-  isDarkMode?: boolean;
-  setIsDarkMode?: (isDark: boolean) => void;
-}
+interface ProjectERDProps {}
 
-const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
+const ProjectERD = ({}: ProjectERDProps) => {
+  const { isDarkMode } = useTheme();
   const [, navigate] = useLocation();
   const [, params] = useRoute('/projects/:projectId/erd');
   const { toast } = useToast();
@@ -600,8 +599,8 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
   // Loading state
   if (isLoading) {
     return (
-      <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-        <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      <div className="min-h-screen bg-background">
+        <AppHeader />
         <main className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
@@ -617,8 +616,8 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
   // Error state
   if (error || !project) {
     return (
-      <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-        <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      <div className="min-h-screen bg-background">
+        <AppHeader />
         <main className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
@@ -636,8 +635,8 @@ const ProjectERD = ({ isDarkMode = false, setIsDarkMode }: ProjectERDProps) => {
   }
 
   return (
-    <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-      <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+    <div className="min-h-screen bg-background">
+      <AppHeader />
       
       <main className="container mx-auto px-4 py-8">
         {/* Project Header */}

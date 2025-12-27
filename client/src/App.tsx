@@ -21,54 +21,43 @@ import SignupPage from "@/pages/auth/signup";
 import SigninPage from "@/pages/auth/signin";
 import Onboarding from "@/pages/onboarding";
 import FlexibleParser from "@/pages/flexible-parser";
-import { useState } from "react";
-
+import { ThemeProvider } from "@/contexts/ThemeContext";
 function Router() {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-
   return (
     <Switch>
       {/* Public routes */}
       <Route path="/" component={Welcome} />
       <Route path="/welcome" component={Welcome} />
-      <Route path="/accept-invitation/:token">
-        <AcceptInvitation isDarkMode={isDarkMode} />
-      </Route>
-      <Route path="/join/:token">
-        <JoinPage isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
-      </Route>
-      <Route path="/auth/signup">
-        <SignupPage isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
-      </Route>
-      <Route path="/auth/signin">
-        <SigninPage isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
-      </Route>
+      <Route path="/accept-invitation/:token" component={AcceptInvitation} />
+      <Route path="/join/:token" component={JoinPage} />
+      <Route path="/auth/signup" component={SignupPage} />
+      <Route path="/auth/signin" component={SigninPage} />
       <Route path="/onboarding" component={Onboarding} />
       
       {/* Protected routes */}
       <Route path="/projects">
         <AuthGuard>
-          <Projects isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+          <Projects />
         </AuthGuard>
       </Route>
       <Route path="/projects/:projectId/upload">
         <AuthGuard>
-          <ProjectUpload isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+          <ProjectUpload />
         </AuthGuard>
       </Route>
       <Route path="/projects/:projectId/erd">
         <AuthGuard>
-          <ProjectERD isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+          <ProjectERD />
         </AuthGuard>
       </Route>
       <Route path="/projects/:projectId/preview">
         <AuthGuard>
-          <ProjectPreview isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+          <ProjectPreview />
         </AuthGuard>
       </Route>
       <Route path="/dashboard">
         <AuthGuard>
-          <Home isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+          <Home />
         </AuthGuard>
       </Route>
       <Route path="/erd-preview">
@@ -78,17 +67,17 @@ function Router() {
       </Route>
       <Route path="/settings/profile">
         <AuthGuard>
-          <ProfileSettings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+          <ProfileSettings />
         </AuthGuard>
       </Route>
       <Route path="/settings/organization">
         <AuthGuard>
-          <OrganizationSettings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+          <OrganizationSettings />
         </AuthGuard>
       </Route>
       <Route path="/flexible-parser">
         <AuthGuard>
-          <FlexibleParser isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+          <FlexibleParser />
         </AuthGuard>
       </Route>
       
@@ -102,10 +91,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
-          <Toaster />
-          <Router />
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <Toaster />
+            <Router />
+          </AuthProvider>
+        </ThemeProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useTheme } from '@/contexts/ThemeContext';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { api, type ParseExcelResponse, type Table } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,12 +40,10 @@ import type {
   LoadingStates
 } from '@/components/excel/types';
 
-interface ProjectUploadProps {
-  isDarkMode?: boolean;
-  setIsDarkMode?: (isDark: boolean) => void;
-}
+interface ProjectUploadProps {}
 
-const ProjectUpload = ({ isDarkMode = false, setIsDarkMode }: ProjectUploadProps) => {
+const ProjectUpload = ({}: ProjectUploadProps) => {
+  const { isDarkMode } = useTheme();
   const [, navigate] = useLocation();
   const [, params] = useRoute('/projects/:projectId/upload');
   const { toast } = useToast();
@@ -474,8 +473,8 @@ const ProjectUpload = ({ isDarkMode = false, setIsDarkMode }: ProjectUploadProps
   // Show loading state while project is being loaded
   if (isLoadingProject) {
     return (
-      <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-        <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      <div className="min-h-screen bg-background">
+        <AppHeader />
         <main className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center h-64">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -488,8 +487,8 @@ const ProjectUpload = ({ isDarkMode = false, setIsDarkMode }: ProjectUploadProps
   // If no project loaded, don't render the main content
   if (!project) {
     return (
-      <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-        <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+      <div className="min-h-screen bg-background">
+        <AppHeader />
         <main className="container mx-auto px-4 py-8">
           <div className="text-center">
             <p className="text-muted-foreground">Project not found</p>

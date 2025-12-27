@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useTheme } from '@/contexts/ThemeContext';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,15 +37,10 @@ import type {
   LoadingStates
 } from '@/components/excel/types';
 
-interface FlexibleParserProps {
-  isDarkMode?: boolean;
-  setIsDarkMode?: (isDark: boolean) => void;
-}
+interface FlexibleParserProps {}
 
-const FlexibleParser: React.FC<FlexibleParserProps> = ({ 
-  isDarkMode = false, 
-  setIsDarkMode 
-}) => {
+const FlexibleParser: React.FC<FlexibleParserProps> = ({}) => {
+  const { isDarkMode } = useTheme();
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -532,8 +528,8 @@ const FlexibleParser: React.FC<FlexibleParserProps> = ({
   );
 
   return (
-    <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
-      <AppHeader isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+    <div className="min-h-screen bg-background">
+      <AppHeader />
       
       <main className="container mx-auto px-4 py-8">
         {/* Header */}
