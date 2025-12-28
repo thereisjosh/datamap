@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, Loader2, UserPlus, ArrowLeft } from 'lucide-react';
 
@@ -27,7 +28,8 @@ const SignupPage: React.FC<SignupPageProps> = ({}) => {
     name: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    termsAccepted: false
   });
 
   // Check if user is already authenticated
@@ -49,6 +51,11 @@ const SignupPage: React.FC<SignupPageProps> = ({}) => {
     if (error) setError(''); // Clear error when user starts typing
   };
 
+  const handleCheckboxChange = (name: string, checked: boolean) => {
+    setFormData(prev => ({ ...prev, [name]: checked }));
+    if (error) setError(''); // Clear error when user changes checkbox
+  };
+
   const validateForm = () => {
     if (!formData.name.trim()) {
       setError('Name is required');
@@ -60,6 +67,10 @@ const SignupPage: React.FC<SignupPageProps> = ({}) => {
     }
     if (!formData.email.includes('@')) {
       setError('Please enter a valid email address');
+      return false;
+    }
+    if (!formData.termsAccepted) {
+      setError('You must accept the Terms of Service and Privacy Policy to create an account');
       return false;
     }
     if (formData.password.length < 6) {
@@ -225,6 +236,37 @@ const SignupPage: React.FC<SignupPageProps> = ({}) => {
                       <Eye className="h-4 w-4 text-muted-foreground" />
                     )}
                   </Button>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id="terms-checkbox"
+                  checked={formData.termsAccepted}
+                  onCheckedChange={(checked) => handleCheckboxChange('termsAccepted', checked as boolean)}
+                  className="mt-1"
+                />
+                <div className="text-sm text-muted-foreground leading-relaxed">
+                  <label htmlFor="terms-checkbox" className="cursor-pointer">
+                    I agree to the{' '}
+                    <a 
+                      href="/terms-of-service" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline"
+                    >
+                      Terms of Service
+                    </a>
+                    {' '}and{' '}
+                    <a 
+                      href="/privacy-policy" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline"
+                    >
+                      Privacy Policy
+                    </a>
+                  </label>
                 </div>
               </div>
 

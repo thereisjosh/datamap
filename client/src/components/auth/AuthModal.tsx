@@ -6,6 +6,7 @@ import { Label } from '../ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
+import { Checkbox } from '../ui/checkbox'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 interface AuthModalProps {
@@ -22,12 +23,18 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     email: '',
     password: '',
     name: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    termsAccepted: false
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
+    setError(null)
+  }
+
+  const handleCheckboxChange = (name: string, checked: boolean) => {
+    setFormData(prev => ({ ...prev, [name]: checked }))
     setError(null)
   }
 
@@ -55,6 +62,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     e.preventDefault()
     if (!formData.email || !formData.password || !formData.name || !formData.confirmPassword) {
       setError('Please fill in all fields')
+      return
+    }
+
+    if (!formData.termsAccepted) {
+      setError('You must accept the Terms of Service and Privacy Policy to create an account')
       return
     }
 
@@ -235,6 +247,37 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       onChange={handleInputChange}
                       required
                     />
+                  </div>
+
+                  <div className="flex items-start space-x-2">
+                    <Checkbox
+                      id="terms-checkbox"
+                      checked={formData.termsAccepted}
+                      onCheckedChange={(checked) => handleCheckboxChange('termsAccepted', checked as boolean)}
+                      className="mt-1"
+                    />
+                    <div className="text-xs text-muted-foreground leading-relaxed">
+                      <label htmlFor="terms-checkbox" className="cursor-pointer">
+                        I agree to the{' '}
+                        <a 
+                          href="/terms-of-service" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 underline"
+                        >
+                          Terms of Service
+                        </a>
+                        {' '}and{' '}
+                        <a 
+                          href="/privacy-policy" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 underline"
+                        >
+                          Privacy Policy
+                        </a>
+                      </label>
+                    </div>
                   </div>
 
                   {error && (

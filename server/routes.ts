@@ -37,6 +37,7 @@ import {
   logFileUploadSecurity,
   securityLogger 
 } from "./middleware/securityLogger";
+import { dataRetentionService } from "./services/dataRetentionService";
 import { 
   parseExcelRequestSchema,
   projectCreateSchema,
@@ -2100,6 +2101,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         error: "Failed to update profile",
         details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Data retention monitoring and management endpoints
+  app.get("/api/data-retention/status", [
+    logSecurityEvent('data_retention_status_access', 'low')
+  ], async (req, res) => {
+    try {
+      const { user, session } = await getAuth(req);
+      
+      // Only allow authenticated users to view retention status
+      if (!user || !session) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication required',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const healthStatus = dataRetentionService.getHealthStatus();
+      const lastStats = dataRetentionService.getLastCleanupStats();
+      const oldUploadSessions = await dataRetentionService.getUploadSessionsOlderThan(30);
+      const oldSecurityEvents = await dataRetentionService.getSecurityEventsOlderThan(365 * 3);
+
+      res.json({
+        success: true,
+        data: {
+          health: healthStatus,
+          lastCleanup: lastStats,
+          pendingCleanup: {
+            uploadSessionsOlderThan30Days: oldUploadSessions,
+            securityEventsOlderThan2Years: oldSecurityEvents
+          }
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('❌ Data retention status error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get data retention status',
+        details: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/data-retention/cleanup", [
+    logSecurityEvent('manual_data_retention_cleanup', 'medium')
+  ], async (req, res) => {
+    try {
+      const { user, session } = await getAuth(req);
+      
+      // Only allow authenticated users to trigger manual cleanup
+      if (!user || !session) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication required',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Log the manual cleanup request
+      await securityLogger.logEvent({
+        eventType: 'manual_data_retention_cleanup',
+        severity: 'medium',
+        userId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        path: req.path,
+        method: req.method,
+        details: { triggeredBy: user.email }
+      });
+
+      const result = await dataRetentionService.manualCleanup();
+
+      res.json({
+        success: true,
+        data: result,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('❌ Manual data retention cleanup error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to run manual cleanup',
+        details: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
       });
     }
   });

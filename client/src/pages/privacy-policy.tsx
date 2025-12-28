@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppHeader } from '@/components/layout/AppHeader';
+import { PublicHeader } from '@/components/layout/PublicHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Shield, FileText, Clock, Trash2, Eye, Mail } from 'lucide-react';
 
@@ -8,7 +8,7 @@ const PrivacyPolicy = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader />
+      <PublicHeader />
       
       <main className="container mx-auto px-4 py-12 max-w-4xl">
         {/* Header */}
@@ -89,7 +89,8 @@ const PrivacyPolicy = () => {
                 <h3 className="font-semibold text-foreground mb-2">Legal Basis for Processing</h3>
                 <p className="text-muted-foreground">
                   We process your data based on <strong>legitimate interest</strong> (GDPR Article 6(1)(f)) 
-                  to provide our ERD generation service. Processing is limited to what's necessary for service functionality.
+                  to provide our ERD generation service. When you create an account and use DataMap, 
+                  this processing is necessary for service functionality and reasonably expected by users.
                 </p>
               </div>
             </CardContent>
@@ -107,9 +108,9 @@ const PrivacyPolicy = () => {
               <div>
                 <h3 className="font-semibold text-foreground mb-2">Upload Session Data</h3>
                 <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-4">
-                  <li>Upload metadata is retained for <strong>30 days</strong> for troubleshooting purposes</li>
-                  <li>Data is automatically purged after this period</li>
-                  <li>You can request earlier deletion through account deletion</li>
+                  <li>Upload metadata is automatically deleted after <strong>30 days</strong> for privacy compliance</li>
+                  <li>Daily automated cleanup removes old session data</li>
+                  <li>You can request immediate deletion through account deletion</li>
                 </ul>
               </div>
               
@@ -118,7 +119,7 @@ const PrivacyPolicy = () => {
                 <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-4">
                   <li>Account information is retained until you delete your account</li>
                   <li>Organization data is retained for active team collaboration</li>
-                  <li>Audit logs are retained for 2 years for security purposes</li>
+                  <li>Security audit logs are automatically deleted after <strong>3 years</strong> for compliance</li>
                 </ul>
               </div>
             </CardContent>
@@ -213,7 +214,7 @@ const PrivacyPolicy = () => {
                 
                 <div className="bg-card p-4 rounded-lg border space-y-2">
                   <p className="text-sm">
-                    <strong className="text-foreground">Email:</strong> privacy@datamap.work
+                    <strong className="text-foreground">Email:</strong> joshua.datamap@gmail.com
                   </p>
                   <p className="text-sm">
                     <strong className="text-foreground">Response Time:</strong> We will respond within 72 hours

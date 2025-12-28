@@ -21,6 +21,7 @@ import SignupPage from "@/pages/auth/signup";
 import SigninPage from "@/pages/auth/signin";
 import Onboarding from "@/pages/onboarding";
 import PrivacyPolicy from "@/pages/privacy-policy";
+import TermsOfService from "@/pages/terms-of-service";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 function Router() {
   return (
@@ -34,6 +35,7 @@ function Router() {
       <Route path="/auth/signin" component={SigninPage} />
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/terms-of-service" component={TermsOfService} />
       
       {/* Protected routes */}
       <Route path="/projects">

@@ -292,6 +292,12 @@ const Welcome = () => {
             <div className="flex items-center space-x-6">
               <div className="flex items-center space-x-4">
                 <button
+                  onClick={() => setLocation('/terms-of-service')}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline-offset-4 hover:underline"
+                >
+                  Terms of Service
+                </button>
+                <button
                   onClick={() => setLocation('/privacy-policy')}
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors underline-offset-4 hover:underline"
                 >
